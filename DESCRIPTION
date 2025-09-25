@@ -1,8 +1,8 @@
 Package: spicy
 Title: Descriptive Statistics and Data Management Tools
-Version: 0.1.0
+Version: 0.2.0
 Authors@R: 
-    person("Amal", "Tawfik", , "amal.tawfik@hesav.ch", role = c("aut", "cre", "cph"), comment = c(ORCID = "0009-0006-2422-1555"))
+    person("Amal", "Tawfik", , "amal.tawfik@hesav.ch", role = c("aut", "cre", "cph"), comment = c(ORCID = "0009-0006-2422-1555", ROR = "04j47fz63"))
 Description: Extracts and summarizes metadata from data frames, including variable names, labels, types, and missing values. Computes compact descriptive statistics, frequency tables, and cross-tabulations to assist with efficient data exploration. Facilitates the identification of missing data patterns and structural issues in datasets. Designed to streamline initial data management and exploratory analysis workflows within 'R'.
 License: MIT + file LICENSE
 URL: https://github.com/amaltawfik/spicy/,
@@ -10,16 +10,17 @@ URL: https://github.com/amaltawfik/spicy/,
 BugReports: https://github.com/amaltawfik/spicy/issues
 Encoding: UTF-8
 Language: en-US
-RoxygenNote: 7.3.2
+RoxygenNote: 7.3.3
 Imports: clipr, collapse, dplyr, haven, labelled, rlang, stats,
         stringi, stringr, tibble, tidyselect, utils
 Suggests: testthat (>= 3.0.0)
 Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2025-04-30 15:48:25 UTC; at
+Packaged: 2025-09-25 00:45:00 UTC; at
 Author: Amal Tawfik [aut, cre, cph] (ORCID:
-    <https://orcid.org/0009-0006-2422-1555>)
+    <https://orcid.org/0009-0006-2422-1555>, ROR:
+    <https://ror.org/04j47fz63>)
 Maintainer: Amal Tawfik <amal.tawfik@hesav.ch>
 Repository: CRAN
-Date/Publication: 2025-05-05 08:10:02 UTC
+Date/Publication: 2025-09-25 04:40:02 UTC
