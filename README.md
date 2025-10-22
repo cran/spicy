@@ -10,6 +10,7 @@ downloads](https://cranlogs.r-pkg.org/badges/grand-total/spicy)](https://cranlog
 [![GitHub
 release](https://img.shields.io/github/v/release/amaltawfik/spicy?include_prereleases&label=GitHub%20release)](https://github.com/amaltawfik/spicy/releases)
 [![R-CMD-check](https://github.com/amaltawfik/spicy/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/amaltawfik/spicy/actions/workflows/R-CMD-check.yaml)
+[![R-hub](https://github.com/amaltawfik/spicy/actions/workflows/rhub.yaml/badge.svg)](https://github.com/amaltawfik/spicy/actions/workflows/rhub.yaml)
 [![Project Status: Active - The project has reached a stable, usable
 state and is being actively
 developed.](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
@@ -18,8 +19,8 @@ License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://
 [![DOI](https://zenodo.org/badge/947229863.svg)](https://doi.org/10.5281/zenodo.15397865)
 <!-- badges: end -->
 
-spicy is designed to make variable exploration and descriptive
-statistics fast, expressive, and easy to use.
+spicy is designed to make variable exploration, documentation, and
+descriptive statistics fast, expressive, and easy to use.
 
 ## What is spicy?
 
@@ -32,6 +33,10 @@ data frames. It helps you:
   non-missing values, number of valid observations, number of missing
   observations. Similar to the “Variable View” in SPSS or the “Variables
   Manager” in Stata.
+- Generate an interactive codebook generator `code_book()` that extends
+  `varlist()` with searchable summaries and built-in export options
+  (Copy, CSV, Excel, PDF, Print) via `DT::datatable`. Ideal for
+  documenting all the variables present in a data frame.
 - Compute frequency tables with `freq()`, row-wise means with
   `mean_n()`, row-wise sums with `sum_n()`, and counts of specific
   values using `count_n()` — all with automatic handling of missing

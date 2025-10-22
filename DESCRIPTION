@@ -1,9 +1,9 @@
 Package: spicy
 Title: Descriptive Statistics and Data Management Tools
-Version: 0.2.1
+Version: 0.3.0
 Authors@R: 
     person("Amal", "Tawfik", , "amal.tawfik@hesav.ch", role = c("aut", "cre", "cph"), comment = c(ORCID = "0009-0006-2422-1555", ROR = "04j47fz63"))
-Description: Extracts and summarizes metadata from data frames, including variable names, labels, types, and missing values. Computes compact descriptive statistics, frequency tables, and cross-tabulations to assist with efficient data exploration. Facilitates the identification of missing data patterns and structural issues in datasets. Designed to streamline initial data management and exploratory analysis workflows within 'R'.
+Description: Extracts and summarizes metadata from data frames, including variable names, labels, types, and missing values. Computes compact descriptive statistics, frequency tables, and cross-tabulations to assist with efficient data exploration. Includes an interactive and exportable codebook generator for documenting variable metadata. Facilitates the identification of missing data patterns and structural issues in datasets. Designed to streamline initial data management and exploratory analysis workflows within 'R'.
 License: MIT + file LICENSE
 URL: https://github.com/amaltawfik/spicy/,
         https://amaltawfik.github.io/spicy/
@@ -11,16 +11,16 @@ BugReports: https://github.com/amaltawfik/spicy/issues
 Encoding: UTF-8
 Language: en-US
 RoxygenNote: 7.3.3
-Imports: clipr, collapse, dplyr, haven, labelled, rlang, stats,
-        stringi, stringr, tibble, tidyselect, utils
+Imports: cli, clipr, collapse, dplyr, DT, haven, labelled, rlang,
+        stats, stringi, stringr, tibble, tidyselect, utils
 Suggests: testthat (>= 3.0.0)
 Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2025-10-04 09:22:43 UTC; at
+Packaged: 2025-10-22 16:39:37 UTC; at
 Author: Amal Tawfik [aut, cre, cph] (ORCID:
     <https://orcid.org/0009-0006-2422-1555>, ROR:
     <https://ror.org/04j47fz63>)
 Maintainer: Amal Tawfik <amal.tawfik@hesav.ch>
 Repository: CRAN
-Date/Publication: 2025-10-04 09:40:02 UTC
+Date/Publication: 2025-10-22 23:20:02 UTC
