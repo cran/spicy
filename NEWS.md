@@ -1,3 +1,34 @@
+# spicy 0.4.1
+
+* Fixed CRAN incoming check notes by removing non-standard top-level files.
+
+# spicy 0.4.0
+
+* `print.spicy()` has been fully redesigned to produce clean, aligned ASCII
+  tables inspired by Stata’s layout. The new implementation improves formatting,
+  adds optional color support, and provides more consistent handling of totals
+  and column spacing.
+  
+* Output from `freq()` and `cross_tab()` now benefits from the enhanced
+  `print.spicy()` formatting, offering clearer, more readable summary tables.
+
+* Documentation and internal tests were updated for clarity and consistency.
+
+* `cross_tab()` gains an explicit `correct` argument to control the use of
+  Yates’ continuity correction for Chi-squared tests in 2x2 tables. The default
+  behavior remains unchanged.
+
+* The documentation of `cross_tab()` was refined and harmonized, with a clearer
+  high-level description, improved parameter wording, and expanded examples.
+
+* Minor cosmetic improvements were made to `varlist()` output: the title prefix
+  now uses `vl:` instead of `VARLIST`, and the column name `Ndist_val` was renamed
+  to `N_distinct` for improved readability and consistency.
+  
+* Minor cosmetic improvement: ASCII table output no longer includes a closing
+  bottom rule by default.
+
+
 # spicy 0.3.0
 
 * New function `code_book()`, which generates a comprehensive variable
