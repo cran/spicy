@@ -1,7 +1,28 @@
-﻿# spicy 0.4.2
+# spicy 0.5.0
+
+## New features
+
+* New `table_apa()` helper to build APA-ready cross-tab reports with multiple output formats (`wide`, `long`, `tinytable`, `flextable`, `excel`, `clipboard`, `word`).
+* `table_apa()` exposes key `cross_tab()` controls for weighting and inference (`weights`, `rescale`, `correct`, `simulate_p`, `simulate_B`) and now handles missing values explicitly when `drop_na = FALSE`.
+
+## Bug fixes
+
+* `count_n()` no longer crashes when `special = "NaN"` is used with non-numeric columns. Passing `count = NA` now errors with a message directing to `special = "NA"`.
+* `cross_tab()` fixes a spurious rescale warning for explicit all-ones weights and aligns the Cramer's V formula with `cramer_v()`.
+* `table_apa()` no longer leaks global options on error. The `simulate_p` default is aligned to `FALSE`.
+* `varlist()` title generation no longer crashes on unrecognizable expressions.
+
+## Minor improvements
+
+* `copy_clipboard()` parameter `message` renamed to `show_message`.
+* `freq()` now dispatches printing correctly via S3.
+* Removed unused `collapse` and `stringi` from `Imports`.
+
+
+# spicy 0.4.2
 
 * `cross_tab()` hardening: improved vector-mode detection (including labelled vectors), stricter weight validation, safer rescaling, and clearer early errors (e.g., explicit `y = NULL`).
-* `cross_tab()` statistics are now computed on non-empty margins in grouped tables, avoiding spurious `NA` results; internal core path refactored to remove `dplyr`/`tibble` from computation while preserving API.
+* `cross_tab()` statistics are now computed on non-empty margins in grouped tables, avoiding spurious `NA` results; internal core path refactored to remove `dplyr`/`tibble` from computation while preserving user-facing behavior.
 * `freq()` now errors clearly when `x` is missing for data.frame input and validates rescaling when weight sums are zero/non-finite.
 * `count_n()`, `mean_n()`, and `sum_n()` regex mode is hardened (`regex = TRUE` now validates/defaults `select` safely).
 * `mean_n()` and `sum_n()` now return `NA` (with warning) when no numeric columns are selected.
@@ -17,10 +38,7 @@
 
 # spicy 0.4.0
 
-* `print.spicy()` has been fully redesigned to produce clean, aligned ASCII
-  tables inspired by Stata's layout. The new implementation improves formatting,
-  adds optional color support, and provides more consistent handling of totals
-  and column spacing.
+* Print methods have been fully redesigned to produce clean, aligned ASCII tables inspired by Stata's layout. The new implementation improves formatting, adds optional color support, and provides more consistent handling of totals and column spacing.
 
 * Output from `freq()` and `cross_tab()` now benefits from the enhanced
   `print.spicy()` formatting, offering clearer, more readable summary tables.

@@ -1,9 +1,16 @@
 Package: spicy
 Title: Descriptive Statistics and Data Management Tools
-Version: 0.4.2
+Version: 0.5.0
 Authors@R: 
     person("Amal", "Tawfik", , "amal.tawfik@hesav.ch", role = c("aut", "cre", "cph"), comment = c(ORCID = "0009-0006-2422-1555", ROR = "04j47fz63"))
-Description: Extracts and summarizes metadata from data frames, including variable names, labels, types, and missing values. Computes compact descriptive statistics, frequency tables, and cross-tabulations to assist with efficient data exploration. Includes an interactive and exportable codebook generator for documenting variable metadata. Facilitates the identification of missing data patterns and structural issues in datasets. Designed to streamline initial data management and exploratory analysis workflows within 'R'.
+Description: Provides tools for early data exploration,
+    variable inspection, and quick tabulation workflows in 'R'. Summarizes
+    variable metadata, labels, classes, missing values, and representative
+    values, with support for readable frequency tables, cross-tabulations,
+    and APA-style reporting tables. Includes helpers for interactive
+    codebooks, variable label extraction, clipboard export, and row-wise
+    descriptive summaries. Designed to make initial data analysis faster,
+    clearer, and easier to work with in practice.
 License: MIT + file LICENSE
 URL: https://github.com/amaltawfik/spicy/,
         https://amaltawfik.github.io/spicy/
@@ -11,16 +18,17 @@ BugReports: https://github.com/amaltawfik/spicy/issues
 Encoding: UTF-8
 Language: en-US
 RoxygenNote: 7.3.3
-Imports: collapse, crayon, dplyr, haven, labelled, rlang, stats,
-        stringi, stringr, tibble, tidyselect, utils
-Suggests: clipr, DT, testthat (>= 3.0.0)
+Imports: crayon, dplyr, haven, labelled, rlang, stats, stringr, tibble,
+        tidyselect, utils
+Suggests: clipr, DT, flextable, officer, openxlsx, testthat (>= 3.0.0),
+        tinytable
 Depends: R (>= 4.1.0)
 Config/testthat/edition: 3
 NeedsCompilation: no
-Packaged: 2026-03-06 02:10:02 UTC; at
+Packaged: 2026-03-13 23:39:38 UTC; at
 Author: Amal Tawfik [aut, cre, cph] (ORCID:
     <https://orcid.org/0009-0006-2422-1555>, ROR:
     <https://ror.org/04j47fz63>)
 Maintainer: Amal Tawfik <amal.tawfik@hesav.ch>
 Repository: CRAN
-Date/Publication: 2026-03-06 03:20:02 UTC
+Date/Publication: 2026-03-14 16:40:02 UTC
