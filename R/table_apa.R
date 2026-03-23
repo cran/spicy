@@ -1,4 +1,4 @@
-#' Build APA-Style Cross-Tabulation Tables From Multiple Row Variables
+#' Build APA-Style Cross-Tabulation Tables
 #'
 #' `table_apa()` builds a publication-ready table by crossing one grouping
 #' variable (`group_var`) with one or many row variables (`row_vars`), using
@@ -6,7 +6,7 @@
 #'
 #' It supports raw data outputs (`wide`, `long`) and report-oriented outputs
 #' (`tinytable`, `flextable`, `excel`, `clipboard`, `word`) with multi-level
-#' headers, p-values, and Cramer's V.
+#' headers, p-values, and an association measure.
 #'
 #' @param data A data frame.
 #' @param row_vars Character vector of variable names to place in rows.
@@ -35,10 +35,21 @@
 #'   Defaults to `1`.
 #' @param p_digits Number of digits for p-values (except `< .001`).
 #'   Defaults to `3`.
-#' @param v_digits Number of digits for Cramer's V. Defaults to `2`.
+#' @param v_digits Number of digits for the association measure. Defaults
+#'   to `2`.
+#' @param assoc_measure Passed to [cross_tab()]. Which association measure
+#'   to report (`"auto"`, `"cramer_v"`, `"phi"`, `"gamma"`, `"tau_b"`,
+#'   `"tau_c"`, `"somers_d"`, `"lambda"`, `"none"`). Defaults to `"auto"`.
+#' @param assoc_ci Passed to [cross_tab()]. If `TRUE`, includes the
+#'   confidence interval. In data/export formats (`wide`, `long`, `excel`,
+#'   `clipboard`), two extra columns `CI lower` and `CI upper` are added.
+#'   In rendered formats (`gt`, `tinytable`, `flextable`, `word`), the CI
+#'   is shown inline as `.14 [.08, .19]` in the association measure column.
+#'   Defaults to `FALSE`.
 #' @param decimal_mark Decimal separator (`"."` or `","`). Defaults to `"."`.
-#' @param output Output format: `"wide"` (the default), `"long"`, `"tinytable"`,
-#'   `"flextable"`, `"excel"`, `"clipboard"`, `"word"`.
+#' @param output Output format: `"wide"` (the default), `"long"`,
+#'   `"tinytable"`, `"gt"`, `"flextable"`, `"excel"`, `"clipboard"`,
+#'   `"word"`.
 #' @param style `"auto"` (the default) to select by output type, `"raw"` for
 #'   machine-friendly outputs, `"report"` for formatted outputs.
 #' @param indent_text Prefix used for modality labels in report table building.
@@ -61,52 +72,46 @@
 #' - `"long"` + `"report"`: long formatted character data frame.
 #' - `"wide"` + `"report"`: wide formatted character data frame.
 #' - `"tinytable"`: a `tinytable` object.
+#' - `"gt"`: a `gt_tbl` object.
 #' - `"flextable"`: a `flextable` object.
-#' - `"excel"` / `"clipboard"` / `"word"`: invisibly returns written object/path.
+#' - `"excel"` / `"clipboard"` / `"word"`: invisibly returns written
+#'   object/path.
 #'
 #' @details Optional output engines require suggested packages:
 #' - `tinytable` for `output = "tinytable"`
+#' - `gt` for `output = "gt"`
 #' - `flextable` + `officer` for `output = "flextable"`/`"word"`
 #' - `openxlsx` for `output = "excel"`
 #' - `clipr` for `output = "clipboard"`
 #'
 #' @examples
-#' # Build a minimal reproducible dataset
-#' d_ex <- transform(
-#'   mtcars,
-#'   hes = factor(gear, labels = c("BFH", "HEdS-Geneve", "HESAV")),
-#'   emploi_sf = ifelse(vs == 1, "Oui", "Non"),
-#'   role_prof_recherche = ifelse(am == 1, "Oui", "Non"),
-#'   w = mpg
-#' )
-#'
 #' # Raw long output (machine-friendly)
 #' table_apa(
-#'   data = d_ex,
-#'   row_vars = c("emploi_sf", "role_prof_recherche"),
-#'   group_var = "hes",
-#'   labels = c("Emploi SF", "Role recherche"),
+#'   data = sochealth,
+#'   row_vars = c("smoking", "physical_activity"),
+#'   group_var = "education",
+#'   labels = c("Current smoker", "Physical activity"),
 #'   output = "long",
 #'   style = "raw"
 #' )
 #'
 #' # Raw wide output
 #' table_apa(
-#'   data = d_ex,
-#'   row_vars = c("emploi_sf", "role_prof_recherche"),
-#'   group_var = "hes",
-#'   labels = c("Emploi SF", "Role recherche"),
+#'   data = sochealth,
+#'   row_vars = c("smoking", "physical_activity"),
+#'   group_var = "education",
+#'   labels = c("Current smoker", "Physical activity"),
 #'   output = "wide",
 #'   style = "raw"
 #' )
 #'
 #' # Weighted example
 #' table_apa(
-#'   data = d_ex,
-#'   row_vars = c("emploi_sf", "role_prof_recherche"),
-#'   group_var = "hes",
-#'   labels = c("Emploi SF", "Role recherche"),
-#'   weights = "w",
+#'   data = sochealth,
+#'   row_vars = c("smoking", "physical_activity"),
+#'   group_var = "education",
+#'   labels = c("Current smoker", "Physical activity"),
+#'   weights = "weight",
 #'   rescale = TRUE,
 #'   simulate_p = FALSE,
 #'   output = "long",
@@ -116,11 +121,11 @@
 #' \donttest{
 #' # Optional output: tinytable
 #' if (requireNamespace("tinytable", quietly = TRUE)) {
-#'   tt_ex <- table_apa(
-#'     data = d_ex,
-#'     row_vars = c("emploi_sf", "role_prof_recherche"),
-#'     group_var = "hes",
-#'     labels = c("Emploi SF", "Role recherche"),
+#'   table_apa(
+#'     data = sochealth,
+#'     row_vars = c("smoking", "physical_activity"),
+#'     group_var = "education",
+#'     labels = c("Current smoker", "Physical activity"),
 #'     output = "tinytable"
 #'   )
 #' }
@@ -128,10 +133,10 @@
 #' # Optional output: Excel
 #' if (requireNamespace("openxlsx", quietly = TRUE)) {
 #'   table_apa(
-#'     data = d_ex,
-#'     row_vars = c("emploi_sf", "role_prof_recherche"),
-#'     group_var = "hes",
-#'     labels = c("Emploi SF", "Role recherche"),
+#'     data = sochealth,
+#'     row_vars = c("smoking", "physical_activity"),
+#'     group_var = "education",
+#'     labels = c("Current smoker", "Physical activity"),
 #'     output = "excel",
 #'     excel_path = tempfile(fileext = ".xlsx")
 #'   )
@@ -154,11 +159,14 @@ table_apa <- function(
   percent_digits = 1,
   p_digits = 3,
   v_digits = 2,
+  assoc_measure = "auto",
+  assoc_ci = FALSE,
   decimal_mark = ".",
   output = c(
     "wide",
     "long",
     "tinytable",
+    "gt",
     "flextable",
     "excel",
     "clipboard",
@@ -250,6 +258,20 @@ table_apa <- function(
   if (!identical(decimal_mark, ".") && !identical(decimal_mark, ",")) {
     stop("`decimal_mark` must be either '.' or ','.", call. = FALSE)
   }
+  for (.dname in c("percent_digits", "p_digits", "v_digits")) {
+    .dval <- get(.dname)
+    if (
+      !is.numeric(.dval) || length(.dval) != 1L || is.na(.dval) || .dval < 0
+    ) {
+      stop(
+        paste0("`", .dname, "` must be a single non-negative number."),
+        call. = FALSE
+      )
+    }
+  }
+  percent_digits <- as.integer(percent_digits)
+  p_digits <- as.integer(p_digits)
+  v_digits <- as.integer(v_digits)
 
   weights_vec <- NULL
   if (!is.null(weights)) {
@@ -276,7 +298,8 @@ table_apa <- function(
 
   if (isTRUE(rescale) && is.null(weights_vec)) {
     warning(
-      "`rescale = TRUE` has no effect without `weights`; using `rescale = FALSE`."
+      "`rescale = TRUE` has no effect without `weights`; using `rescale = FALSE`.",
+      call. = FALSE
     )
     rescale <- FALSE
   }
@@ -298,9 +321,29 @@ table_apa <- function(
     }
   }
 
-  `%||%` <- function(x, y) if (is.null(x)) y else x
+  parse_stats <- function(ct_obj) {
+    # Read numeric attributes set by cross_tab()
+    p_val <- attr(ct_obj, "p_value")
+    v_val <- attr(ct_obj, "assoc_value")
+    m_name <- attr(ct_obj, "assoc_measure")
+    ar <- attr(ct_obj, "assoc_result")
+    ci_lo <- if (!is.null(ar)) ar[["ci_lower"]] else NA_real_
+    ci_hi <- if (!is.null(ar)) ar[["ci_upper"]] else NA_real_
 
-  parse_note <- function(note_txt) {
+    if (!is.null(p_val) && !is.null(v_val)) {
+      p_op <- if (!is.na(p_val) && p_val < 0.001) "<" else "="
+      return(list(
+        p = p_val,
+        p_op = p_op,
+        v = v_val,
+        measure = m_name %||% "Cramer's V",
+        ci_lower = ci_lo,
+        ci_upper = ci_hi
+      ))
+    }
+
+    # Fallback: parse note text
+    note_txt <- attr(ct_obj, "note")
     txt <- paste(note_txt %||% "", collapse = " ")
 
     pm <- regmatches(
@@ -314,9 +357,14 @@ table_apa <- function(
       NA_real_
     }
 
+    # Try to match any "Measure = value" pattern
     vm <- regmatches(
       txt,
-      regexec("Cramer's V:\\s*([0-9.]+(?:e[-+]?\\d+)?)", txt, perl = TRUE)
+      regexec(
+        "(?:Cramer's V|Phi|Goodman-Kruskal(?:'s)? (?:Gamma|Tau)|Kendall's Tau-b|Kendall's Tau-c|Somers' D|Lambda)\\s*=\\s*([0-9.eE+-]+)",
+        txt,
+        perl = TRUE
+      )
     )[[1]]
     v_val <- if (length(vm) >= 2) {
       suppressWarnings(as.numeric(vm[2]))
@@ -324,7 +372,14 @@ table_apa <- function(
       NA_real_
     }
 
-    list(p = p_val, p_op = p_op, v = v_val)
+    list(
+      p = p_val,
+      p_op = p_op,
+      v = v_val,
+      measure = "Cramer's V",
+      ci_lower = NA_real_,
+      ci_upper = NA_real_
+    )
   }
 
   fmt_num <- function(x, digits = 1, na = "") {
@@ -357,7 +412,7 @@ table_apa <- function(
       return("")
     }
     if ((!is.na(op) && op == "<" && p <= 0.001) || p < 0.001) {
-      return(if (decimal_mark == ".") "< .001" else "< ,001")
+      return(if (decimal_mark == ".") "<\u00A0.001" else "<\u00A0,001")
     }
     s <- formatC(p, format = "f", digits = p_digits)
     s <- sub("^0\\.", ".", s)
@@ -405,11 +460,20 @@ table_apa <- function(
   # ---------------- LONG RAW ----------------
   rows <- list()
   rr <- 1L
+  measure_col <- NULL
+  all_level_order <- character(0)
 
   for (i in seq_along(row_vars)) {
     x <- data[[row_vars[i]]]
     g <- data[[group_var]]
     w <- weights_vec
+
+    # Capture original level order before any filtering/conversion
+    if (is.factor(x)) {
+      var_level_order <- levels(x)
+    } else {
+      var_level_order <- unique(as.character(x[!is.na(x)]))
+    }
 
     keep <- rep(TRUE, length(x))
     if (drop_na) {
@@ -439,7 +503,9 @@ table_apa <- function(
       rescale = rescale,
       correct = correct,
       simulate_p = simulate_p,
-      simulate_B = simulate_B
+      simulate_B = simulate_B,
+      assoc_measure = assoc_measure,
+      assoc_ci = assoc_ci
     )
     ct_n <- spicy::cross_tab(
       x,
@@ -448,9 +514,13 @@ table_apa <- function(
       rescale = rescale,
       correct = correct,
       simulate_p = simulate_p,
-      simulate_B = simulate_B
+      simulate_B = simulate_B,
+      assoc_measure = "none"
     )
-    st <- parse_note(attr(ct_pct, "note"))
+    st <- parse_stats(ct_pct)
+    if (is.null(measure_col)) {
+      measure_col <- st$measure %||% "Cramer's V"
+    }
 
     groups_present <- setdiff(names(ct_n), "Values")
     groups_use <- intersect(group_levels, groups_present)
@@ -462,10 +532,16 @@ table_apa <- function(
     vals_p <- as.character(ct_pct$Values)
 
     lv_use <- if (is.null(levels_keep)) {
-      setdiff(unique(vals_n), c("Total", "N"))
+      raw_levels <- setdiff(unique(vals_n), c("Total", "N"))
+      # Reorder to match original factor/occurrence order
+      known <- intersect(var_level_order, raw_levels)
+      extra <- setdiff(raw_levels, c(var_level_order, missing_label))
+      missing_end <- intersect(raw_levels, missing_label)
+      c(known, extra, missing_end)
     } else {
       intersect(as.character(levels_keep), vals_n)
     }
+    all_level_order <- c(all_level_order, lv_use)
 
     for (lv in lv_use) {
       in_n <- match(lv, vals_n)
@@ -475,7 +551,7 @@ table_apa <- function(
       }
 
       for (gr in groups_use) {
-        rows[[rr]] <- data.frame(
+        row_df <- data.frame(
           variable = labels[i],
           level = lv,
           group = gr,
@@ -483,13 +559,21 @@ table_apa <- function(
           pct = suppressWarnings(as.numeric(ct_pct[in_p, gr])),
           p = st$p,
           p_op = st$p_op,
-          `Cramer's V` = st$v,
+          .assoc = st$v,
+          ci_lower = st$ci_lower,
+          ci_upper = st$ci_upper,
           stringsAsFactors = FALSE,
           check.names = FALSE
         )
+        names(row_df)[names(row_df) == ".assoc"] <- measure_col
+        rows[[rr]] <- row_df
         rr <- rr + 1L
       }
     }
+  }
+
+  if (is.null(measure_col)) {
+    measure_col <- "Cramer's V"
   }
 
   if (length(rows) == 0) {
@@ -501,10 +585,13 @@ table_apa <- function(
       pct = numeric(0),
       p = numeric(0),
       p_op = character(0),
-      `Cramer's V` = numeric(0),
+      .assoc = numeric(0),
+      ci_lower = numeric(0),
+      ci_upper = numeric(0),
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
+    names(long_raw)[names(long_raw) == ".assoc"] <- measure_col
   } else {
     long_raw <- do.call(rbind, rows)
   }
@@ -516,10 +603,16 @@ table_apa <- function(
         long_raw$level,
         levels = as.character(levels_keep)
       )
+    } else {
+      long_raw$level <- factor(
+        long_raw$level,
+        levels = unique(all_level_order)
+      )
     }
     long_raw$group <- factor(long_raw$group, levels = group_levels)
     long_raw <- long_raw[
-      order(long_raw$variable, long_raw$level, long_raw$group), ,
+      order(long_raw$variable, long_raw$level, long_raw$group),
+      ,
       drop = FALSE
     ]
     long_raw$variable <- as.character(long_raw$variable)
@@ -531,6 +624,10 @@ table_apa <- function(
   if (output == "long" && style == "raw") {
     out <- long_raw
     out$p_op <- NULL
+    if (!assoc_ci) {
+      out$ci_lower <- NULL
+      out$ci_upper <- NULL
+    }
     return(out)
   }
 
@@ -541,8 +638,11 @@ table_apa <- function(
       "Level",
       as.vector(rbind(paste0(group_levels, " n"), paste0(group_levels, " %"))),
       "p",
-      "Cramer's V"
+      measure_col
     )
+    if (assoc_ci) {
+      cols <- c(cols, "CI lower", "CI upper")
+    }
     if (nrow(ldf) == 0) {
       return(as.data.frame(
         setNames(replicate(length(cols), logical(0), simplify = FALSE), cols),
@@ -555,7 +655,8 @@ table_apa <- function(
 
     for (k in seq_len(nrow(key))) {
       sv <- ldf[
-        ldf$variable == key$variable[k] & ldf$level == key$level[k], ,
+        ldf$variable == key$variable[k] & ldf$level == key$level[k],
+        ,
         drop = FALSE
       ]
       r <- as.list(setNames(rep(NA, length(cols)), cols))
@@ -569,7 +670,11 @@ table_apa <- function(
       }
 
       r$p <- if (nrow(sv)) sv$p[1] else NA_real_
-      r[["Cramer's V"]] <- if (nrow(sv)) sv[["Cramer's V"]][1] else NA_real_
+      r[[measure_col]] <- if (nrow(sv)) sv[[measure_col]][1] else NA_real_
+      if (assoc_ci) {
+        r[["CI lower"]] <- if (nrow(sv)) sv$ci_lower[1] else NA_real_
+        r[["CI upper"]] <- if (nrow(sv)) sv$ci_upper[1] else NA_real_
+      }
 
       out[[k]] <- as.data.frame(
         r,
@@ -598,12 +703,19 @@ table_apa <- function(
     long_rep$n <- fmt_n(long_rep$n)
     long_rep$pct <- fmt_num(long_rep$pct, percent_digits)
     long_rep$p <- mapply(fmt_p, long_rep$p, long_rep$p_op, USE.NAMES = FALSE)
-    long_rep[["Cramer's V"]] <- vapply(
-      long_rep[["Cramer's V"]],
+    long_rep[[measure_col]] <- vapply(
+      long_rep[[measure_col]],
       fmt_v,
       character(1)
     )
     long_rep$p_op <- NULL
+    if (assoc_ci) {
+      long_rep$ci_lower <- vapply(long_rep$ci_lower, fmt_v, character(1))
+      long_rep$ci_upper <- vapply(long_rep$ci_upper, fmt_v, character(1))
+    } else {
+      long_rep$ci_lower <- NULL
+      long_rep$ci_upper <- NULL
+    }
     return(long_rep)
   }
 
@@ -612,8 +724,11 @@ table_apa <- function(
     "Variable",
     as.vector(rbind(paste0(group_levels, " n"), paste0(group_levels, " %"))),
     "p",
-    "Cramer's V"
+    measure_col
   )
+  if (assoc_ci) {
+    report_cols <- c(report_cols, "CI lower", "CI upper")
+  }
 
   make_report_wide <- function(ldf, mode = c("char", "excel")) {
     mode <- match.arg(mode)
@@ -637,7 +752,7 @@ table_apa <- function(
         )
         out$Variable <- character(0)
         out$p <- character(0)
-        out[["Cramer's V"]] <- character(0)
+        out[[measure_col]] <- character(0)
         return(out[, report_cols, drop = FALSE])
       }
     }
@@ -665,7 +780,16 @@ table_apa <- function(
       }
       r0$Variable <- lab
       r0$p <- fmt_p(sv$p[1], sv$p_op[1])
-      r0[["Cramer's V"]] <- fmt_v(sv[["Cramer's V"]][1])
+      r0[[measure_col]] <- fmt_v(sv[[measure_col]][1])
+      if (assoc_ci) {
+        if (mode == "char") {
+          r0[["CI lower"]] <- fmt_v(sv$ci_lower[1])
+          r0[["CI upper"]] <- fmt_v(sv$ci_upper[1])
+        } else {
+          r0[["CI lower"]] <- sv$ci_lower[1]
+          r0[["CI upper"]] <- sv$ci_upper[1]
+        }
+      }
       out[[z]] <- as.data.frame(
         r0,
         stringsAsFactors = FALSE,
@@ -698,7 +822,7 @@ table_apa <- function(
         }
 
         r1$p <- ""
-        r1[["Cramer's V"]] <- ""
+        r1[[measure_col]] <- ""
         out[[z]] <- as.data.frame(
           r1,
           stringsAsFactors = FALSE,
@@ -717,18 +841,37 @@ table_apa <- function(
     return(report_wide_char)
   }
 
-  # Headers
+  # For rendered formats: merge CI inline into measure column, drop CI cols
+  merge_ci_inline <- function(df) {
+    if (!assoc_ci || !("CI lower" %in% names(df))) {
+      return(df)
+    }
+    has_val <- nzchar(df[[measure_col]]) & nzchar(df[["CI lower"]])
+    df[[measure_col]][has_val] <- paste0(
+      df[[measure_col]][has_val],
+      " [",
+      df[["CI lower"]][has_val],
+      ", ",
+      df[["CI upper"]][has_val],
+      "]"
+    )
+    df[["CI lower"]] <- NULL
+    df[["CI upper"]] <- NULL
+    df
+  }
+
+  # Headers (base: without CI — used by rendered formats)
   top_header_span <- c(
     "Variable",
     rep(group_levels, each = 2),
     "p",
-    "Cramer's V"
+    measure_col
   )
   top_header_flat <- c(
     "Variable",
     as.vector(rbind(group_levels, rep("", length(group_levels)))),
     "p",
-    "Cramer's V"
+    measure_col
   )
   bot_header <- c("", rep(c("n", "%"), times = length(group_levels)), "", "")
   grp_j <- 2:(1 + 2 * length(group_levels))
@@ -743,9 +886,9 @@ table_apa <- function(
     options(tinytable_print_output = "html") # RStudio Viewer
     on.exit(options(tinytable_print_output = old_tt_opt), add = TRUE)
 
-    dat_tt <- report_wide_char
+    dat_tt <- merge_ci_inline(report_wide_char)
 
-    # Detect modality rows before header rename (p / Cramer's V still named)
+    # Detect modality rows before header rename
     mod_rows <- which(
       dat_tt[[ncol(dat_tt) - 1]] == "" &
         dat_tt[[ncol(dat_tt)]] == "" &
@@ -772,16 +915,22 @@ table_apa <- function(
         lapply(seq_along(group_levels), function(i) c(2 * i, 2 * i + 1)),
         group_levels
       ),
-      list("p" = ncol(dat_tt) - 1, "Cramer's V" = ncol(dat_tt))
+      setNames(list(ncol(dat_tt) - 1, ncol(dat_tt)), c("p", measure_col))
     )
 
     tt <- tinytable::tt(dat_tt, escape = FALSE)
     tt <- tinytable::group_tt(tt, j = gspec)
     tt <- tinytable::theme_empty(tt)
 
-    # Alignement
+    # Alignment
     tt <- tinytable::style_tt(tt, j = 1, align = "l")
-    tt <- tinytable::style_tt(tt, j = 2:ncol(dat_tt), align = "r")
+    data_j <- 2:(1 + 2 * length(group_levels))
+    stat_j <- (ncol(dat_tt) - 1):ncol(dat_tt)
+    tt <- tinytable::style_tt(tt, j = c(data_j, stat_j), align = "r")
+    # Centre n/% labels (row 0 = column labels row)
+    tt <- tinytable::style_tt(tt, i = 0, j = data_j, align = "c")
+    # Centre spanner labels (row -1 = spanner row)
+    tt <- tinytable::style_tt(tt, i = -1, j = 2:ncol(dat_tt), align = "c")
     if (length(mod_rows)) {
       tt <- tinytable::style_tt(tt, i = mod_rows, j = 1, indent = 1)
       tt <- tinytable::style_tt(
@@ -792,10 +941,10 @@ table_apa <- function(
       )
     }
 
-    # Lignes
+    # Lines
     grp_j <- 2:(1 + 2 * length(group_levels))
 
-    # Haut du tableau
+    # Top of table
     tt <- tinytable::style_tt(
       tt,
       i = -1,
@@ -803,7 +952,7 @@ table_apa <- function(
       line = "t",
       line_width = 0.06
     )
-    # Ligne intermédiaire sous spanner: seulement colonnes groupes
+    # Intermediate line under spanner: group columns only
     tt <- tinytable::style_tt(
       tt,
       i = -1,
@@ -811,7 +960,7 @@ table_apa <- function(
       line = "b",
       line_width = 0.06
     )
-    # Ligne sous header n/%: toute la largeur
+    # Line under n/% header: full width
     tt <- tinytable::style_tt(
       tt,
       i = 0,
@@ -819,7 +968,7 @@ table_apa <- function(
       line = "b",
       line_width = 0.06
     )
-    # Ligne de fermeture bas tableau
+    # Bottom closing line
     tt <- tinytable::style_tt(
       tt,
       i = nrow(dat_tt),
@@ -827,8 +976,208 @@ table_apa <- function(
       line = "b",
       line_width = 0.06
     )
+    # Prevent p-value and measure columns from wrapping
+    tt <- tinytable::style_tt(
+      tt,
+      j = stat_j,
+      html_css = "white-space: nowrap;"
+    )
 
     return(tt)
+  }
+
+  # ---------------- gt ----------------
+  if (output == "gt") {
+    if (!requireNamespace("gt", quietly = TRUE)) {
+      stop("Install package 'gt'.", call. = FALSE)
+    }
+
+    dat_gt <- merge_ci_inline(report_wide_char)
+
+    # Indent modality rows with non-breaking spaces
+    mod_rows <- which(
+      dat_gt[["p"]] == "" &
+        dat_gt[[measure_col]] == "" &
+        nzchar(dat_gt[[1]])
+    )
+    if (length(mod_rows)) {
+      dat_gt[[1]][mod_rows] <- paste0(
+        strrep("\u00A0", 4),
+        dat_gt[[1]][mod_rows]
+      )
+    }
+
+    # Rename n/% columns to unique names for gt, then relabel
+    col_ids <- character(ncol(dat_gt))
+    col_ids[1] <- "Variable"
+    for (gi in seq_along(group_levels)) {
+      col_ids[2 * gi] <- paste0(group_levels[gi], "_n")
+      col_ids[2 * gi + 1] <- paste0(group_levels[gi], "_pct")
+    }
+    col_ids[ncol(dat_gt) - 1] <- "p"
+    col_ids[ncol(dat_gt)] <- "assoc_col"
+    names(dat_gt) <- col_ids
+
+    tbl <- gt::gt(dat_gt)
+
+    # Column labels: n / % under each group; empty for single-col spanners
+    label_list <- list()
+    label_list[["Variable"]] <- ""
+    for (gi in seq_along(group_levels)) {
+      label_list[[paste0(group_levels[gi], "_n")]] <- "n"
+      label_list[[paste0(group_levels[gi], "_pct")]] <- "%"
+    }
+    label_list[["p"]] <- ""
+    label_list[["assoc_col"]] <- ""
+    tbl <- gt::cols_label(tbl, .list = label_list)
+
+    # Spanners: group names over n/% pairs, single-col for Variable/p/V
+    tbl <- gt::tab_spanner(
+      tbl,
+      label = "Variable",
+      columns = "Variable",
+      id = "spn_variable"
+    )
+    for (gi in seq_along(group_levels)) {
+      tbl <- gt::tab_spanner(
+        tbl,
+        label = group_levels[gi],
+        columns = c(
+          paste0(group_levels[gi], "_n"),
+          paste0(group_levels[gi], "_pct")
+        )
+      )
+    }
+    tbl <- gt::tab_spanner(
+      tbl,
+      label = "p",
+      columns = "p",
+      id = "spn_p"
+    )
+    tbl <- gt::tab_spanner(
+      tbl,
+      label = measure_col,
+      columns = "assoc_col",
+      id = "spn_v"
+    )
+
+    # Alignment
+    tbl <- gt::cols_align(tbl, align = "left", columns = "Variable")
+    grp_cols <- unlist(lapply(group_levels, function(g) {
+      c(paste0(g, "_n"), paste0(g, "_pct"))
+    }))
+    tbl <- gt::cols_align(tbl, align = "center", columns = grp_cols)
+    tbl <- gt::cols_align(
+      tbl,
+      align = "right",
+      columns = c("p", "assoc_col")
+    )
+    # Left-align the Variable spanner label
+    tbl <- gt::tab_style(
+      tbl,
+      style = gt::cell_text(align = "left"),
+      locations = gt::cells_column_spanners(spanners = "spn_variable")
+    )
+
+    # APA-style borders ------------------------------------------------
+    # gt emits "border-bottom-style: hidden" on the spanner <tr>,
+    # which wins in border-collapse:collapse and blocks tab_style().
+    # We use opt_css(!important) for full control, plus tab_style()
+    # so inline-CSS renderers (as_raw_html) also get the rules.
+    rule <- gt::cell_borders(
+      sides = "bottom",
+      color = "currentColor",
+      weight = gt::px(1)
+    )
+    rule_top <- gt::cell_borders(
+      sides = "top",
+      color = "currentColor",
+      weight = gt::px(1)
+    )
+
+    # 1) Silence every default border.  Setting width to 0 is
+    #    critical: gt defaults to 2px, and in border-collapse the
+    #    wider border wins regardless of colour.
+    tbl <- gt::tab_options(
+      tbl,
+      table.border.top.width = gt::px(0),
+      table.border.bottom.width = gt::px(0),
+      table_body.border.top.width = gt::px(0),
+      table_body.border.bottom.width = gt::px(0),
+      table_body.hlines.color = "transparent",
+      column_labels.border.top.width = gt::px(0),
+      column_labels.border.bottom.width = gt::px(0),
+      column_labels.border.lr.color = "transparent"
+    )
+
+    # 2) tab_style rules (work in inline-CSS renderers)
+    # Rule 1: top of spanners (full width)
+    tbl <- gt::tab_style(
+      tbl,
+      style = rule_top,
+      locations = gt::cells_column_spanners()
+    )
+    # Rule 2: intermediate line below spanners (group columns only)
+    tbl <- gt::tab_style(
+      tbl,
+      style = rule_top,
+      locations = gt::cells_column_labels(columns = grp_cols)
+    )
+    # Rule 3: below column labels (full width)
+    tbl <- gt::tab_style(
+      tbl,
+      style = rule,
+      locations = gt::cells_column_labels()
+    )
+    # Rule 4: bottom of last body row
+    tbl <- gt::tab_style(
+      tbl,
+      style = rule,
+      locations = gt::cells_body(rows = nrow(dat_gt))
+    )
+
+    # 3) opt_css rules (override gt's hidden borders in normal
+    #    renderers: RStudio viewer, Quarto, pkgdown)
+    # Build CSS selector for group-column <th> elements
+    grp_css_sel <- paste(
+      vapply(
+        grp_cols,
+        function(id) {
+          sprintf('.gt_table thead tr:last-child th[id="%s"]', id)
+        },
+        character(1)
+      ),
+      collapse = ",\n"
+    )
+    apa_css <- paste(
+      ".gt_table thead tr:first-child {",
+      "  border-top: 1px solid currentColor !important;",
+      "}",
+      ".gt_table thead tr.gt_spanner_row {",
+      "  border-bottom-style: none !important;",
+      "}",
+      ".gt_table thead th, .gt_table thead td {",
+      "  background-color: transparent !important;",
+      "}",
+      # Intermediate line: only group columns
+      paste0(grp_css_sel, " {"),
+      "  border-top: 1px solid currentColor !important;",
+      "}",
+      ".gt_table thead tr:last-child {",
+      "  border-bottom: 1px solid currentColor !important;",
+      "}",
+      ".gt_table tbody tr:last-child {",
+      "  border-bottom: 1px solid currentColor !important;",
+      "}",
+      ".gt_table tbody tr {",
+      "  border-top-style: none !important;",
+      "  border-bottom-style: none !important;",
+      "}",
+      sep = "\n"
+    )
+    tbl <- gt::opt_css(tbl, css = apa_css)
+
+    return(tbl)
   }
 
   # ---------------- flextable / word ----------------
@@ -854,16 +1203,20 @@ table_apa <- function(
 
     bd <- officer::fp_border(color = "black", width = 1)
 
-    ft <- flextable::align(ft, part = "header", align = "center")
     ft <- flextable::align(ft, j = 1, part = "all", align = "left")
-    ft <- flextable::align(ft, j = 2:ncol(df), part = "all", align = "right")
+    ft <- flextable::align(ft, j = 2:ncol(df), part = "body", align = "right")
+    # Centre n/% labels and spanner labels in header
+    ft <- flextable::align(ft, j = grp_j, part = "header", align = "center")
+    # Right-align p and association measure in header
+    stat_j <- (ncol(df) - 1):ncol(df)
+    ft <- flextable::align(ft, j = stat_j, part = "header", align = "right")
 
     ft <- flextable::hline_top(ft, part = "header", border = bd)
     ft <- flextable::hline(ft, i = 1, j = grp_j, part = "header", border = bd)
     ft <- flextable::hline_bottom(ft, part = "header", border = bd)
     ft <- flextable::hline_bottom(ft, part = "body", border = bd)
 
-    id_mod <- which(df$p == "" & df[["Cramer's V"]] == "" & nzchar(df[[1]]))
+    id_mod <- which(df$p == "" & df[[measure_col]] == "" & nzchar(df[[1]]))
     if (length(id_mod)) {
       ft <- flextable::padding(
         ft,
@@ -878,7 +1231,7 @@ table_apa <- function(
   }
 
   if (output == "flextable") {
-    ft <- build_flextable(report_wide_char)
+    ft <- build_flextable(merge_ci_inline(report_wide_char))
     if (!is.null(word_path) && nzchar(word_path)) {
       flextable::save_as_docx(ft, path = word_path)
     }
@@ -889,9 +1242,20 @@ table_apa <- function(
     if (is.null(word_path) || !nzchar(word_path)) {
       stop("Provide `word_path` for output='word'.", call. = FALSE)
     }
-    ft <- build_flextable(report_wide_char)
+    ft <- build_flextable(merge_ci_inline(report_wide_char))
     flextable::save_as_docx(ft, path = word_path)
     return(invisible(word_path))
+  }
+
+  # Extend headers with CI columns for data/export formats
+  if (assoc_ci) {
+    top_header_flat_ex <- c(top_header_flat, "CI lower", "CI upper")
+    bot_header_ex <- c(bot_header, "", "")
+    top_header_span_ex <- c(top_header_span, "CI lower", "CI upper")
+  } else {
+    top_header_flat_ex <- top_header_flat
+    bot_header_ex <- bot_header
+    top_header_span_ex <- top_header_span
   }
 
   # ---------------- clipboard matrix ----------------
@@ -903,9 +1267,13 @@ table_apa <- function(
   )
   to_excel_text <- function(x) ifelse(x == "", "", paste0("=\"", x, "\""))
   clip_body$p <- to_excel_text(clip_body$p)
-  clip_body[["Cramer's V"]] <- to_excel_text(clip_body[["Cramer's V"]])
+  clip_body[[measure_col]] <- to_excel_text(clip_body[[measure_col]])
+  if (assoc_ci) {
+    clip_body[["CI lower"]] <- to_excel_text(clip_body[["CI lower"]])
+    clip_body[["CI upper"]] <- to_excel_text(clip_body[["CI upper"]])
+  }
 
-  clip_mat <- rbind(top_header_flat, bot_header, as.matrix(clip_body))
+  clip_mat <- rbind(top_header_flat_ex, bot_header_ex, as.matrix(clip_body))
 
   # ---------------- excel ----------------
   if (output == "excel") {
@@ -922,14 +1290,14 @@ table_apa <- function(
     openxlsx::writeData(
       wb,
       excel_sheet,
-      x = as.data.frame(t(top_header_flat), stringsAsFactors = FALSE),
+      x = as.data.frame(t(top_header_flat_ex), stringsAsFactors = FALSE),
       startRow = 1,
       colNames = FALSE
     )
     openxlsx::writeData(
       wb,
       excel_sheet,
-      x = as.data.frame(t(bot_header), stringsAsFactors = FALSE),
+      x = as.data.frame(t(bot_header_ex), stringsAsFactors = FALSE),
       startRow = 2,
       colNames = FALSE
     )
@@ -941,7 +1309,11 @@ table_apa <- function(
       indent_text_excel_clipboard
     )
     body_xl$p <- report_wide_char$p
-    body_xl[["Cramer's V"]] <- report_wide_char[["Cramer's V"]]
+    body_xl[[measure_col]] <- report_wide_char[[measure_col]]
+    if (assoc_ci) {
+      body_xl[["CI lower"]] <- report_wide_char[["CI lower"]]
+      body_xl[["CI upper"]] <- report_wide_char[["CI upper"]]
+    }
 
     openxlsx::writeData(
       wb,
@@ -998,12 +1370,13 @@ table_apa <- function(
         gridExpand = TRUE,
         stack = TRUE
       )
+      text_cols <- if (assoc_ci) (nc - 3):nc else c(nc - 1, nc)
       openxlsx::addStyle(
         wb,
         excel_sheet,
         st_text,
         rows = 3:last_row,
-        cols = c(nc - 1, nc),
+        cols = text_cols,
         gridExpand = TRUE,
         stack = TRUE
       )
@@ -1092,6 +1465,4 @@ table_apa <- function(
     clipr::write_clip(txt)
     return(invisible(txt))
   }
-
-  stop("Unsupported `output`.", call. = FALSE)
 }

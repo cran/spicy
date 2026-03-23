@@ -119,6 +119,23 @@ mean_n <- function(
   regex = FALSE,
   verbose = FALSE
 ) {
+  if (!is.null(min_valid)) {
+    if (
+      !is.numeric(min_valid) ||
+        length(min_valid) != 1L ||
+        is.na(min_valid) ||
+        min_valid < 0
+    ) {
+      stop("`min_valid` must be a single non-negative number.", call. = FALSE)
+    }
+  }
+
+  if (!is.null(digits)) {
+    if (!is.numeric(digits) || length(digits) != 1L || digits < 0) {
+      stop("`digits` must be a single non-negative number.", call. = FALSE)
+    }
+  }
+
   if (is.matrix(data)) {
     data <- as.data.frame(data)
   }
@@ -141,7 +158,16 @@ mean_n <- function(
     matched <- grep(select, col_names, value = TRUE)
     data <- data[, matched, drop = FALSE]
   } else {
-    data <- dplyr::select(data, {{ select }})
+    sel_quo <- rlang::enquo(select)
+    sel_val <- tryCatch(
+      rlang::eval_tidy(sel_quo, env = rlang::quo_get_env(sel_quo)),
+      error = function(e) NULL
+    )
+    if (is.character(sel_val)) {
+      data <- dplyr::select(data, dplyr::all_of(sel_val))
+    } else {
+      data <- dplyr::select(data, !!sel_quo)
+    }
   }
 
   data <- dplyr::select(data, -dplyr::any_of(exclude))
@@ -195,5 +221,5 @@ mean_n <- function(
     )
   }
 
-  return(result)
+  result
 }

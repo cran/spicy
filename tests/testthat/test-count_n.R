@@ -169,6 +169,14 @@ test_that("count_n ignores incompatible columns safely", {
   expect_equal(count_n(df, count = "b"), c(0, 1))
 })
 
+test_that("count_n verbose reports list columns", {
+  df <- tibble::tibble(x = c("a", "b"), z = list(1, 2))
+  expect_message(
+    count_n(df, count = "a", verbose = TRUE),
+    "Ignored list columns: z"
+  )
+})
+
 test_that("count_n returns 0 for empty or incompatible selection", {
   df <- tibble::tibble(x = 1:3, y = letters[1:3])
   expect_equal(count_n(df, count = "z", select = "x"), c(0, 0, 0))
@@ -193,4 +201,34 @@ test_that("count_n throws error when count = NA", {
     'Use `special = "NA"`',
     fixed = TRUE
   )
+})
+
+test_that("count_n throws error for invalid special values", {
+  df <- tibble::tibble(x = c(1, 2, 3))
+  expect_error(count_n(df, special = "bogus"), "Invalid `special`")
+})
+
+test_that("count_n warns and strips NA from count vector", {
+  df <- tibble::tibble(x = c(1, 2, NA), y = c(NA, 2, 3))
+  expect_warning(
+    res <- count_n(df, count = c(NA, 2)),
+    "NA values in `count` are ignored"
+  )
+  expect_equal(res, c(0, 2, 0))
+})
+
+test_that("count_n warns when both special and count are supplied", {
+  df <- tibble::tibble(x = c(1, NA, 3))
+  expect_warning(
+    res <- count_n(df, count = 1, special = "NA"),
+    "count.*ignored"
+  )
+  expect_equal(res, c(0, 1, 0))
+})
+
+test_that("count_n strict mode uses fast path for same-type atomics", {
+  df <- tibble::tibble(x = c(1, 2, 3), y = c(2, 2, 1))
+  expect_equal(count_n(df, count = 2, allow_coercion = FALSE), c(1, 2, 0))
+  df2 <- tibble::tibble(x = c("a", "b"), y = c("b", "a"))
+  expect_equal(count_n(df2, count = "b", allow_coercion = FALSE), c(1, 1))
 })

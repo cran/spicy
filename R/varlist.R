@@ -4,7 +4,7 @@
 #'
 #' The function can also apply tidyselect-style variable selectors to filter columns dynamically.
 #'
-#' If used interactively (e.g. in RStudio), the summary is displayed in the Viewer pane with a contextual title like `vl: iris`. If the data frame has been transformed or subsetted, the title will display an asterisk (`*`), e.g. `vl: iris*`.
+#' If used interactively (e.g. in RStudio), the summary is displayed in the Viewer pane with a contextual title like `vl: sochealth`. If the data frame has been transformed or subsetted, the title will display an asterisk (`*`), e.g. `vl: sochealth*`.
 #'
 #' @aliases vl
 #'
@@ -52,14 +52,11 @@
 #' @export
 #'
 #' @examples
-#' varlist(iris)
-#' iris |> varlist()
-#' iris |> varlist(starts_with("Sepal"), tbl = TRUE)
-#' varlist(mtcars, where(is.numeric), values = TRUE, tbl = TRUE)
-#' varlist(head(mtcars), tbl = TRUE)
-#' varlist(mtcars, tbl = TRUE)
-#' varlist(iris[, 1:3], tbl = TRUE)
-#' varlist(mtcars[1:10, ], tbl = TRUE)
+#' varlist(sochealth)
+#' sochealth |> varlist()
+#' varlist(sochealth, where(is.numeric), values = TRUE, tbl = TRUE)
+#' varlist(sochealth, tbl = TRUE)
+#' varlist(sochealth, starts_with("bmi"), tbl = TRUE)
 #'
 # .raw_expr is used internally by `vl()` to capture the original expression
 # passed as `x`, so it can be used to generate the display title (e.g. "vl: df").
@@ -88,7 +85,7 @@ varlist <- function(
   }
 
   if (length(selectors) == 0) {
-    warning("No columns selected.")
+    warning("No columns selected.", call. = FALSE)
     res <- tibble::tibble(
       Variable = character(),
       Label = character(),
@@ -129,9 +126,9 @@ varlist <- function(
         lbl <- attributes(col)[["label"]]
 
         if (is.null(lbl)) {
-          return(NA_character_)
+          NA_character_
         } else {
-          return(as.character(lbl))
+          as.character(lbl)
         }
       },
       character(1)
@@ -186,7 +183,7 @@ varlist <- function(
       }
     )
   } else {
-    message("Non-interactive session: use `tbl = TRUE` to return the table.")
+    message("Non-interactive session: use `tbl = TRUE` to return a tibble.")
   }
 
   invisible(NULL)
@@ -260,7 +257,7 @@ summarize_values_minmax <- function(col, include_na = FALSE) {
 
       unique_vals <- as.character(unique_vals)
 
-      # On filtre les "NA" ou "" déjà encodés
+      # Filter out "NA" or "" already encoded as text
       already_present <- unique_vals %in% c("NA", "", NA_character_)
       vals_chr_clean <- unique_vals[!already_present]
 
@@ -275,10 +272,12 @@ summarize_values_minmax <- function(col, include_na = FALSE) {
         )
       }
 
-      # Ajouter NA ou NaN si demandé (basé sur les flags calculés en amont)
+      # Add NA or NaN if requested (based on flags computed above)
       extras <- c()
       if (include_na) {
-        if (has_na) extras <- c(extras, "NA")
+        if (has_na) {
+          extras <- c(extras, "NA")
+        }
         if (has_nan) extras <- c(extras, "NaN")
       }
 
@@ -290,14 +289,14 @@ summarize_values_minmax <- function(col, include_na = FALSE) {
         }
       }
 
-      return(val_str)
+      val_str
     },
     error = function(e) {
-      return("Invalid or unsupported format")
+      "Invalid or unsupported format"
     }
   )
 
-  return(vals)
+  vals
 }
 
 
@@ -312,19 +311,21 @@ summarize_values_all <- function(col, include_na = FALSE) {
         sort(unique(v))
       },
       error = function(e) {
-        return("Error: invalid values")
+        "Error: invalid values"
       }
     )
 
     vals_chr <- as.character(vals)
 
-    # Supprime les valeurs textuelles de NA déjà encodées
+    # Remove textual NA values already encoded
     vals_chr_clean <- vals_chr[!vals_chr %in% c("NA", "", NA_character_)]
 
-    # Ajouter NA ou NaN si demandé (basé sur les flags calculés en amont)
+    # Add NA or NaN if requested (based on flags computed above)
     extras <- c()
     if (include_na) {
-      if (has_na) extras <- c(extras, "NA")
+      if (has_na) {
+        extras <- c(extras, "NA")
+      }
       if (has_nan) extras <- c(extras, "NaN")
     }
 
@@ -355,7 +356,7 @@ summarize_values_all <- function(col, include_na = FALSE) {
     ))
   }
 
-  return(show_vals(na_omit_col))
+  show_vals(na_omit_col)
 }
 
 
@@ -380,11 +381,10 @@ summarize_values_all <- function(col, include_na = FALSE) {
 #' @export
 #'
 #' @examples
-#' vl(iris)
-#' iris |> vl()
-#' vl(mtcars, starts_with("d"))
-#' vl(head(iris), include_na = TRUE)
-#' vl(iris[, 1:3], values = TRUE, tbl = TRUE)
+#' vl(sochealth)
+#' sochealth |> vl()
+#' vl(sochealth, starts_with("bmi"))
+#' vl(sochealth, where(is.numeric), values = TRUE, tbl = TRUE)
 vl <- function(x, ..., values = FALSE, tbl = FALSE, include_na = FALSE) {
   raw_expr <- substitute(x)
   varlist(

@@ -14,6 +14,9 @@ cross_tab(
   rescale = FALSE,
   percent = c("none", "column", "row"),
   include_stats = TRUE,
+  assoc_measure = c("auto", "cramer_v", "phi", "gamma", "tau_b", "tau_c", "somers_d",
+    "lambda", "none"),
+  assoc_ci = FALSE,
   correct = FALSE,
   simulate_p = FALSE,
   simulate_B = 2000,
@@ -44,7 +47,16 @@ If \code{TRUE}, rescales weights so total weighted N matches raw N.}
 Unique abbreviations are accepted (e.g. \code{"n"}, \code{"r"}, \code{"c"}).}
 
 \item{include_stats}{Logical. If \code{TRUE} (the default), computes Chi-squared
-and Cramer's V.}
+and an association measure (see \code{assoc_measure}).}
+
+\item{assoc_measure}{Character. Which association measure to report.
+\code{"auto"} (default) selects Kendall's Tau-b when both variables are
+ordered factors and Cramer's V otherwise. Other choices:
+\code{"cramer_v"}, \code{"phi"}, \code{"gamma"}, \code{"tau_b"}, \code{"tau_c"},
+\code{"somers_d"}, \code{"lambda"}, \code{"none"}.}
+
+\item{assoc_ci}{Logical. If \code{TRUE}, includes the 95 percent confidence
+interval of the association measure in the note. Defaults to \code{FALSE}.}
 
 \item{correct}{Logical. If \code{FALSE} (the default), no continuity correction is
 applied. If \code{TRUE}, applies Yates correction (only for 2x2 tables).}
@@ -76,7 +88,7 @@ and inferential statistics.
 
 \code{cross_tab()} produces weighted or unweighted contingency tables with
 row or column percentages, optional grouping via \code{by}, and associated
-Chi-squared tests with Cramer's V and diagnostic information.
+Chi-squared tests with an association measure and diagnostic information.
 
 Both \code{x} and \code{y} variables are required. For one-way frequency tables,
 use \code{\link[=freq]{freq()}} instead.
@@ -106,36 +118,30 @@ They can be disabled or reset by setting them to \code{NULL}:
 Example:
 
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{options(spicy.simulate_p = TRUE, spicy.rescale = TRUE)
-cross_tab(mtcars, cyl, gear, weights = mtcars$mpg)
+cross_tab(sochealth, smoking, education, weights = weight)
 }\if{html}{\out{</div>}}
 }
 
 \examples{
 # Basic crosstab
-cross_tab(mtcars, cyl, gear)
+cross_tab(sochealth, smoking, education)
+
+# Column percentages
+cross_tab(sochealth, smoking, education, percent = "column")
 
 # Weighted (rescaled)
-cross_tab(mtcars, cyl, gear, weights = mtcars$mpg, rescale = TRUE)
+cross_tab(sochealth, smoking, education, weights = weight, rescale = TRUE)
 
-# Grouped
-cross_tab(mtcars, cyl, gear, by = am)
+# Grouped by sex
+cross_tab(sochealth, smoking, education, by = sex)
 
-# Grouped by an interaction
-cross_tab(mtcars, cyl, gear, by = interaction(vs, am))
+# Grouped by combination of variables
+cross_tab(sochealth, smoking, education, by = interaction(sex, age_group))
 
-# Vector interface
-cross_tab(mtcars$cyl, mtcars$gear, percent = "c")
-
-# Set default percent mode globally
-options(spicy.percent = "column")
-
-# Now this will display column percentages by default
-cross_tab(mtcars, cyl, gear)
-
-# Reset to default behavior
-options(spicy.percent = NULL)
+# Ordinal variables: auto-selects Kendall's Tau-b
+cross_tab(sochealth, education, self_rated_health)
 
 # 2x2 table with Yates correction
-cross_tab(mtcars, vs, am, correct = TRUE)
+cross_tab(sochealth, smoking, physical_activity, correct = TRUE)
 
 }

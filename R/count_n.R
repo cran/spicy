@@ -205,7 +205,16 @@ count_n <- function(
     }
     grep(select, names(data), value = TRUE)
   } else {
-    names(tidyselect::eval_select(rlang::enquo(select), data))
+    sel_quo <- rlang::enquo(select)
+    sel_val <- tryCatch(
+      rlang::eval_tidy(sel_quo, env = rlang::quo_get_env(sel_quo)),
+      error = function(e) NULL
+    )
+    if (is.character(sel_val)) {
+      sel_val
+    } else {
+      names(tidyselect::eval_select(sel_quo, data))
+    }
   }
 
   if (!is.null(exclude)) {
@@ -237,15 +246,38 @@ base_count_n <- function(
     stop("You must specify either `count` or `special`.", call. = FALSE)
   }
 
-  if (!is.null(count) && length(count) == 1 && is.na(count)) {
-    stop(
-      "Use `special = \"NA\"` to count missing values, not `count = NA`.",
+  if (!is.null(count)) {
+    if (length(count) == 1L && is.na(count)) {
+      stop(
+        "Use `special = \"NA\"` to count missing values, not `count = NA`.",
+        call. = FALSE
+      )
+    }
+    has_na <- vapply(count, is.na, logical(1))
+    if (any(has_na)) {
+      warning(
+        "NA values in `count` are ignored. Use `special = \"NA\"` to count missing values.",
+        call. = FALSE
+      )
+      count <- count[!has_na]
+    }
+  }
+
+  if (!is.null(special) && !is.null(count)) {
+    warning(
+      "Both `special` and `count` supplied; `count` is ignored.",
       call. = FALSE
     )
   }
 
   data <- data[, select, drop = FALSE]
-  data <- data[!vapply(data, is.list, logical(1))]
+  is_list_col <- vapply(data, is.list, logical(1))
+  list_cols <- names(data)[is_list_col]
+  data <- data[!is_list_col]
+
+  if (verbose && length(list_cols) > 0) {
+    message("Ignored list columns: ", paste(list_cols, collapse = ", "))
+  }
 
   if (!is.null(special)) {
     allowed <- c("NA", "NaN", "Inf", "-Inf")
@@ -253,7 +285,10 @@ base_count_n <- function(
       special <- allowed
     }
     if (!all(special %in% allowed)) {
-      stop("Invalid `special`. Use 'NA', 'NaN', 'Inf', '-Inf', or 'all'.")
+      stop(
+        "Invalid `special`. Use 'NA', 'NaN', 'Inf', '-Inf', or 'all'.",
+        call. = FALSE
+      )
     }
 
     checkers <- list(
@@ -295,11 +330,15 @@ base_count_n <- function(
     }
 
     if (!allow_coercion) {
-      vapply(
-        seq_along(x),
-        function(i) any(mapply(identical, x[i], values)),
-        logical(1)
-      )
+      if (identical(class(x), class(values)) && !is.factor(x)) {
+        x %in% values
+      } else {
+        vapply(
+          seq_along(x),
+          function(i) any(vapply(values, identical, logical(1), x[i])),
+          logical(1)
+        )
+      }
     } else {
       x %in% values
     }
@@ -327,5 +366,5 @@ base_count_n <- function(
 
   result <- rowSums(as.data.frame(results), na.rm = TRUE)
   names(result) <- NULL
-  return(result)
+  result
 }

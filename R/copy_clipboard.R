@@ -26,17 +26,17 @@
 #' \donttest{
 #' if (clipr::clipr_available()) {
 #'   # Data frame
-#'   copy_clipboard(mtcars)
+#'   copy_clipboard(sochealth)
 #'
 #'   # Data frame with row names as column
-#'   copy_clipboard(mtcars, row.names.as.col = "car")
+#'   copy_clipboard(head(sochealth), row.names.as.col = "id")
 #'
 #'   # Matrix
 #'   mat <- matrix(1:6, nrow = 2)
 #'   copy_clipboard(mat)
 #'
 #'   # Table
-#'   tbl <- table(iris$Species)
+#'   tbl <- table(sochealth$education)
 #'   copy_clipboard(tbl)
 #'
 #'   # Array (3D) — flattened to character
@@ -53,7 +53,7 @@
 #'   copy_clipboard(c("apple", "banana", "cherry"))
 #'
 #'   # Quiet mode (no messages shown)
-#'   copy_clipboard(mtcars, quiet = TRUE)
+#'   copy_clipboard(sochealth, quiet = TRUE)
 #' }
 #' }
 copy_clipboard <- function(
@@ -73,7 +73,7 @@ copy_clipboard <- function(
   }
 
   if (!clipr::clipr_available()) {
-    stop("Clipboard is not available on this system.")
+    stop("Clipboard is not available on this system.", call. = FALSE)
   }
 
   is_df <- is.data.frame(x)
@@ -107,7 +107,8 @@ copy_clipboard <- function(
     }
   } else if (!identical(row.names.as.col, FALSE)) {
     stop(
-      "`row.names.as.col` must be either FALSE, TRUE, or a character string."
+      "`row.names.as.col` must be either FALSE, TRUE, or a character string.",
+      call. = FALSE
     )
   }
 

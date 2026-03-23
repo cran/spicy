@@ -2,7 +2,7 @@
 % Please edit documentation in R/table_apa.R
 \name{table_apa}
 \alias{table_apa}
-\title{Build APA-Style Cross-Tabulation Tables From Multiple Row Variables}
+\title{Build APA-Style Cross-Tabulation Tables}
 \usage{
 table_apa(
   data,
@@ -20,8 +20,11 @@ table_apa(
   percent_digits = 1,
   p_digits = 3,
   v_digits = 2,
+  assoc_measure = "auto",
+  assoc_ci = FALSE,
   decimal_mark = ".",
-  output = c("wide", "long", "tinytable", "flextable", "excel", "clipboard", "word"),
+  output = c("wide", "long", "tinytable", "gt", "flextable", "excel", "clipboard",
+    "word"),
   style = c("auto", "raw", "report"),
   indent_text = "  ",
   indent_text_excel_clipboard = "      ",
@@ -75,12 +78,25 @@ Defaults to \code{1}.}
 \item{p_digits}{Number of digits for p-values (except \verb{< .001}).
 Defaults to \code{3}.}
 
-\item{v_digits}{Number of digits for Cramer's V. Defaults to \code{2}.}
+\item{v_digits}{Number of digits for the association measure. Defaults
+to \code{2}.}
+
+\item{assoc_measure}{Passed to \code{\link[=cross_tab]{cross_tab()}}. Which association measure
+to report (\code{"auto"}, \code{"cramer_v"}, \code{"phi"}, \code{"gamma"}, \code{"tau_b"},
+\code{"tau_c"}, \code{"somers_d"}, \code{"lambda"}, \code{"none"}). Defaults to \code{"auto"}.}
+
+\item{assoc_ci}{Passed to \code{\link[=cross_tab]{cross_tab()}}. If \code{TRUE}, includes the
+confidence interval. In data/export formats (\code{wide}, \code{long}, \code{excel},
+\code{clipboard}), two extra columns \verb{CI lower} and \verb{CI upper} are added.
+In rendered formats (\code{gt}, \code{tinytable}, \code{flextable}, \code{word}), the CI
+is shown inline as \code{.14 [.08, .19]} in the association measure column.
+Defaults to \code{FALSE}.}
 
 \item{decimal_mark}{Decimal separator (\code{"."} or \code{","}). Defaults to \code{"."}.}
 
-\item{output}{Output format: \code{"wide"} (the default), \code{"long"}, \code{"tinytable"},
-\code{"flextable"}, \code{"excel"}, \code{"clipboard"}, \code{"word"}.}
+\item{output}{Output format: \code{"wide"} (the default), \code{"long"},
+\code{"tinytable"}, \code{"gt"}, \code{"flextable"}, \code{"excel"}, \code{"clipboard"},
+\code{"word"}.}
 
 \item{style}{\code{"auto"} (the default) to select by output type, \code{"raw"} for
 machine-friendly outputs, \code{"report"} for formatted outputs.}
@@ -114,8 +130,10 @@ Depends on \code{output} and \code{style}:
 \item \code{"long"} + \code{"report"}: long formatted character data frame.
 \item \code{"wide"} + \code{"report"}: wide formatted character data frame.
 \item \code{"tinytable"}: a \code{tinytable} object.
+\item \code{"gt"}: a \code{gt_tbl} object.
 \item \code{"flextable"}: a \code{flextable} object.
-\item \code{"excel"} / \code{"clipboard"} / \code{"word"}: invisibly returns written object/path.
+\item \code{"excel"} / \code{"clipboard"} / \code{"word"}: invisibly returns written
+object/path.
 }
 }
 \description{
@@ -126,53 +144,45 @@ variable (\code{group_var}) with one or many row variables (\code{row_vars}), us
 \details{
 It supports raw data outputs (\code{wide}, \code{long}) and report-oriented outputs
 (\code{tinytable}, \code{flextable}, \code{excel}, \code{clipboard}, \code{word}) with multi-level
-headers, p-values, and Cramer's V.
+headers, p-values, and an association measure.
 
 Optional output engines require suggested packages:
 \itemize{
 \item \code{tinytable} for \code{output = "tinytable"}
+\item \code{gt} for \code{output = "gt"}
 \item \code{flextable} + \code{officer} for \code{output = "flextable"}/\code{"word"}
 \item \code{openxlsx} for \code{output = "excel"}
 \item \code{clipr} for \code{output = "clipboard"}
 }
 }
 \examples{
-# Build a minimal reproducible dataset
-d_ex <- transform(
-  mtcars,
-  hes = factor(gear, labels = c("BFH", "HEdS-Geneve", "HESAV")),
-  emploi_sf = ifelse(vs == 1, "Oui", "Non"),
-  role_prof_recherche = ifelse(am == 1, "Oui", "Non"),
-  w = mpg
-)
-
 # Raw long output (machine-friendly)
 table_apa(
-  data = d_ex,
-  row_vars = c("emploi_sf", "role_prof_recherche"),
-  group_var = "hes",
-  labels = c("Emploi SF", "Role recherche"),
+  data = sochealth,
+  row_vars = c("smoking", "physical_activity"),
+  group_var = "education",
+  labels = c("Current smoker", "Physical activity"),
   output = "long",
   style = "raw"
 )
 
 # Raw wide output
 table_apa(
-  data = d_ex,
-  row_vars = c("emploi_sf", "role_prof_recherche"),
-  group_var = "hes",
-  labels = c("Emploi SF", "Role recherche"),
+  data = sochealth,
+  row_vars = c("smoking", "physical_activity"),
+  group_var = "education",
+  labels = c("Current smoker", "Physical activity"),
   output = "wide",
   style = "raw"
 )
 
 # Weighted example
 table_apa(
-  data = d_ex,
-  row_vars = c("emploi_sf", "role_prof_recherche"),
-  group_var = "hes",
-  labels = c("Emploi SF", "Role recherche"),
-  weights = "w",
+  data = sochealth,
+  row_vars = c("smoking", "physical_activity"),
+  group_var = "education",
+  labels = c("Current smoker", "Physical activity"),
+  weights = "weight",
   rescale = TRUE,
   simulate_p = FALSE,
   output = "long",
@@ -182,11 +192,11 @@ table_apa(
 \donttest{
 # Optional output: tinytable
 if (requireNamespace("tinytable", quietly = TRUE)) {
-  tt_ex <- table_apa(
-    data = d_ex,
-    row_vars = c("emploi_sf", "role_prof_recherche"),
-    group_var = "hes",
-    labels = c("Emploi SF", "Role recherche"),
+  table_apa(
+    data = sochealth,
+    row_vars = c("smoking", "physical_activity"),
+    group_var = "education",
+    labels = c("Current smoker", "Physical activity"),
     output = "tinytable"
   )
 }
@@ -194,10 +204,10 @@ if (requireNamespace("tinytable", quietly = TRUE)) {
 # Optional output: Excel
 if (requireNamespace("openxlsx", quietly = TRUE)) {
   table_apa(
-    data = d_ex,
-    row_vars = c("emploi_sf", "role_prof_recherche"),
-    group_var = "hes",
-    labels = c("Emploi SF", "Role recherche"),
+    data = sochealth,
+    row_vars = c("smoking", "physical_activity"),
+    group_var = "education",
+    labels = c("Current smoker", "Physical activity"),
     output = "excel",
     excel_path = tempfile(fileext = ".xlsx")
   )

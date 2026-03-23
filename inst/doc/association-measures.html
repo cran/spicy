@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Association measures for contingency tables</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Association measures for contingency
+tables</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(spicy)</span></code></pre></div>
+<p>spicy provides a full suite of effect size and association measures
+for contingency tables, covering both nominal and ordinal variables.
+This vignette explains which measure to use depending on the measurement
+level of your variables, and how to obtain confidence intervals and
+p-values for chi-squared-based and rank-based statistics.</p>
+<div id="choosing-the-right-measure" class="section level2">
+<h2>Choosing the right measure</h2>
+<p>The table below summarizes the recommended measures by variable
+type.</p>
+<table>
+<colgroup>
+<col width="33%" />
+<col width="33%" />
+<col width="33%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th>Variable types</th>
+<th>Recommended measure</th>
+<th>Function</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>Nominal x Nominal</td>
+<td>Cramer’s V</td>
+<td><code>cramer_v()</code></td>
+</tr>
+<tr class="even">
+<td>Nominal x Nominal</td>
+<td>Contingency Coefficient</td>
+<td><code>contingency_coef()</code></td>
+</tr>
+<tr class="odd">
+<td>Nominal x Nominal (2x2)</td>
+<td>Phi</td>
+<td><code>phi()</code></td>
+</tr>
+<tr class="even">
+<td>Ordinal x Ordinal</td>
+<td>Kendall’s Tau-b</td>
+<td><code>kendall_tau_b()</code></td>
+</tr>
+<tr class="odd">
+<td>Ordinal x Ordinal (rectangular)</td>
+<td>Kendall’s Tau-c</td>
+<td><code>kendall_tau_c()</code></td>
+</tr>
+<tr class="even">
+<td>Ordinal x Ordinal</td>
+<td>Goodman-Kruskal Gamma</td>
+<td><code>gamma_gk()</code></td>
+</tr>
+<tr class="odd">
+<td>Ordinal x Ordinal (asymmetric)</td>
+<td>Somers’ D</td>
+<td><code>somers_d()</code></td>
+</tr>
+<tr class="even">
+<td>Nominal (asymmetric, PRE)</td>
+<td>Lambda</td>
+<td><code>lambda_gk()</code></td>
+</tr>
+<tr class="odd">
+<td>Nominal (asymmetric, PRE)</td>
+<td>Goodman-Kruskal Tau</td>
+<td><code>goodman_kruskal_tau()</code></td>
+</tr>
+<tr class="even">
+<td>Nominal (asymmetric, PRE)</td>
+<td>Uncertainty Coefficient</td>
+<td><code>uncertainty_coef()</code></td>
+</tr>
+<tr class="odd">
+<td>2x2 table</td>
+<td>Yule’s Q</td>
+<td><code>yule_q()</code></td>
+</tr>
+</tbody>
+</table>
+<p>PRE = Proportional Reduction in Error. These measures quantify how
+much knowing one variable reduces prediction error for the other.</p>
+<p>All functions accept a contingency table (class <code>table</code>,
+typically from <code>xtabs()</code> or <code>table()</code>).</p>
+</div>
+<div id="quick-overview-with-assoc_measures" class="section level2">
+<h2>Quick overview with assoc_measures()</h2>
+<p><code>assoc_measures()</code> computes all available measures at
+once:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a>tbl <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> education, <span class="at">data =</span> sochealth)</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="fu">assoc_measures</span>(tbl)</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt; Measure                            Estimate     SE  CI lower  CI upper        p </span></span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V                            0.136     --     0.079     0.191  &lt; 0.001 </span></span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a><span class="co">#&gt; Contingency Coefficient               0.134     --        --        --  &lt; 0.001 </span></span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a><span class="co">#&gt; Lambda symmetric                      0.000  0.000     0.000     0.000       -- </span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a><span class="co">#&gt; Lambda R|C                            0.000  0.000     0.000     0.000       -- </span></span>
+<span id="cb2-8"><a href="#cb2-8" tabindex="-1"></a><span class="co">#&gt; Lambda C|R                            0.000  0.000     0.000     0.000       -- </span></span>
+<span id="cb2-9"><a href="#cb2-9" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau R|C             0.018  0.008     0.003     0.034    0.023 </span></span>
+<span id="cb2-10"><a href="#cb2-10" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau C|R             0.008  0.003     0.001     0.014    0.022 </span></span>
+<span id="cb2-11"><a href="#cb2-11" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient symmetric     0.011  0.005     0.002     0.021    0.021 </span></span>
+<span id="cb2-12"><a href="#cb2-12" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient R|C           0.018  0.008     0.003     0.032    0.021 </span></span>
+<span id="cb2-13"><a href="#cb2-13" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient C|R           0.009  0.004     0.001     0.016    0.021 </span></span>
+<span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal Gamma                -0.268  0.056    -0.378    -0.158  &lt; 0.001 </span></span>
+<span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b                      -0.126  0.027    -0.180    -0.073  &lt; 0.001 </span></span>
+<span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-c                      -0.117  0.026    -0.167    -0.067  &lt; 0.001 </span></span>
+<span id="cb2-17"><a href="#cb2-17" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D R|C                        -0.091  0.020    -0.131    -0.052  &lt; 0.001 </span></span>
+<span id="cb2-18"><a href="#cb2-18" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D C|R                        -0.175  0.038    -0.249    -0.101  &lt; 0.001</span></span></code></pre></div>
+<p>This is useful for exploratory analysis. For reporting, pick the
+measure that matches your variable types.</p>
+</div>
+<div id="nominal-variables" class="section level2">
+<h2>Nominal variables</h2>
+<div id="cramers-v" class="section level3">
+<h3>Cramer’s V</h3>
+<p>Cramer’s V measures the strength of association between two nominal
+variables. It ranges from 0 (no association) to 1 (perfect
+association).</p>
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a>tbl <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> education, <span class="at">data =</span> sochealth)</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl)</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a><span class="co">#&gt; [1] 0.1356677</span></span></code></pre></div>
+<p>Pass <code>detail = TRUE</code> for the confidence interval and
+p-value. The p-value tests the null hypothesis of no association using
+the Pearson chi-squared test.</p>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt;    0.136     0.079     0.191  &lt; 0.001</span></span></code></pre></div>
+</div>
+<div id="phi-coefficient" class="section level3">
+<h3>Phi coefficient</h3>
+<p>For 2x2 tables, Phi is equivalent to Cramer’s V. Unlike V, Phi can be
+negative when the table is 2x2, indicating the direction of association.
+The p-value tests H0: no association (Pearson chi-squared test).</p>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>tbl_22 <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> physical_activity, <span class="at">data =</span> sochealth)</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">phi</span>(tbl_22, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper      p</span></span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a><span class="co">#&gt;    0.006     0.000     0.063  0.839</span></span></code></pre></div>
+</div>
+<div id="contingency-coefficient" class="section level3">
+<h3>Contingency coefficient</h3>
+<p>The contingency coefficient is an alternative to Cramer’s V. Its
+upper bound depends on the table dimensions, which makes it harder to
+compare across tables of different sizes. The p-value tests H0: no
+association (Pearson chi-squared test).</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">contingency_coef</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt;    0.134        --        --  &lt; 0.001</span></span></code></pre></div>
+</div>
+</div>
+<div id="ordinal-variables" class="section level2">
+<h2>Ordinal variables</h2>
+<p>When both variables are ordinal (ordered factors), measures that
+account for the ordering are more appropriate than Cramer’s V.</p>
+<div id="goodman-kruskal-gamma" class="section level3">
+<h3>Goodman-Kruskal Gamma</h3>
+<p>Gamma ranges from -1 to +1. It ignores tied pairs, which makes it
+sensitive to the direction of association but tends to overestimate
+strength when there are many ties.</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>tbl_ord <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> self_rated_health <span class="sc">+</span> education, <span class="at">data =</span> sochealth)</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="fu">gamma_gk</span>(tbl_ord, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;    0.310     0.238     0.383  &lt; 0.001</span></span></code></pre></div>
+<p>A positive value means that higher values on one variable tend to
+occur with higher values on the other. The p-value tests H0: Gamma = 0
+using a Wald z-test.</p>
+</div>
+<div id="kendalls-tau-b" class="section level3">
+<h3>Kendall’s Tau-b</h3>
+<p>Tau-b adjusts for ties and ranges from -1 to +1. It is generally
+preferred over Gamma for square or near-square tables. The p-value tests
+H0: Tau-b = 0 (Wald z-test).</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">kendall_tau_b</span>(tbl_ord, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co">#&gt;    0.205     0.155     0.254  &lt; 0.001</span></span></code></pre></div>
+</div>
+<div id="kendalls-tau-c" class="section level3">
+<h3>Kendall’s Tau-c</h3>
+<p>Tau-c is similar to Tau-b but adjusts for rectangular tables where
+the number of rows and columns differ. The p-value tests H0: Tau-c = 0
+(Wald z-test).</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">kendall_tau_c</span>(tbl_ord, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt;    0.200     0.151     0.248  &lt; 0.001</span></span></code></pre></div>
+</div>
+<div id="somers-d" class="section level3">
+<h3>Somers’ D</h3>
+<p>Somers’ D is an asymmetric measure: it distinguishes between a
+dependent and an independent variable. By default, the row variable is
+treated as dependent (D(R|C)). The p-value tests H0: D = 0 (Wald
+z-test).</p>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">somers_d</span>(tbl_ord, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt;    0.208     0.157     0.258  &lt; 0.001</span></span></code></pre></div>
+</div>
+</div>
+<div id="asymmetric-pre-measures" class="section level2">
+<h2>Asymmetric (PRE) measures</h2>
+<p>These measures answer a specific question: how much does knowing the
+column variable reduce our error in predicting the row variable (or vice
+versa)?</p>
+<div id="lambda" class="section level3">
+<h3>Lambda</h3>
+<p>Lambda measures the proportional reduction in classification error.
+It can equal zero even when the variables are associated, if the modal
+category does not change across columns. The p-value tests H0: Lambda =
+0 (Wald z-test).</p>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a>tbl <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> self_rated_health <span class="sc">+</span> education, <span class="at">data =</span> sochealth)</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="fu">lambda_gk</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper      p</span></span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a><span class="co">#&gt;    0.012     0.000     0.039  0.389</span></span></code></pre></div>
+</div>
+<div id="goodman-kruskal-tau" class="section level3">
+<h3>Goodman-Kruskal Tau</h3>
+<p>Tau measures the proportional reduction in error when predicting the
+row variable from the column variable, using the full distribution (not
+just the mode). The p-value tests H0: Tau = 0 (Wald z-test).</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">goodman_kruskal_tau</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a><span class="co">#&gt;    0.017     0.008     0.026  &lt; 0.001</span></span></code></pre></div>
+</div>
+<div id="uncertainty-coefficient" class="section level3">
+<h3>Uncertainty coefficient</h3>
+<p>The uncertainty coefficient (Theil’s U) is based on entropy. It
+measures how much knowing one variable reduces uncertainty about the
+other. The p-value tests H0: U = 0 (Wald z-test).</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">uncertainty_coef</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a><span class="co">#&gt;    0.028     0.016     0.040  &lt; 0.001</span></span></code></pre></div>
+</div>
+</div>
+<div id="yules-q" class="section level2">
+<h2>Yule’s Q</h2>
+<p>Yule’s Q is defined for 2x2 tables only. It ranges from -1 to +1 and
+is equivalent to Gamma for 2x2 tables. The p-value tests H0: Q = 0 (Wald
+z-test).</p>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>tbl_22 <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> physical_activity, <span class="at">data =</span> sochealth)</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a><span class="fu">yule_q</span>(tbl_22, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper      p</span></span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a><span class="co">#&gt;    0.015    -0.126     0.155  0.839</span></span></code></pre></div>
+</div>
+<div id="automatic-selection-in-cross_tab" class="section level2">
+<h2>Automatic selection in cross_tab()</h2>
+<p><code>cross_tab()</code> can automatically select an appropriate
+measure via <code>assoc_measure = &quot;auto&quot;</code> (the default). When both
+variables are ordered factors, it picks Kendall’s Tau-b; otherwise it
+uses Cramer’s V.</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="co"># Nominal: Cramer&#39;s V</span></span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education)</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N)</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="co">#&gt;  No          │                  179                   415            332 │        926 </span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   78                   112             59 │        249 </span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt;  Total       │                  257                   527            391 │       1175 </span></span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt; 0.001</span></span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a></span>
+<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co"># Ordinal: Kendall&#39;s Tau-b (automatic)</span></span>
+<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, self_rated_health, education)</span>
+<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt; Crosstable: self_rated_health x education (N)</span></span>
+<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt;  Values         │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
+<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt;  Poor           │                   28                    28              5 │         61 </span></span>
+<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="co">#&gt;  Fair           │                   86                   118             62 │        266 </span></span>
+<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a><span class="co">#&gt;  Good           │                  102                   263            193 │        558 </span></span>
+<span id="cb15-24"><a href="#cb15-24" tabindex="-1"></a><span class="co">#&gt;  Very good      │                   44                   118            133 │        295 </span></span>
+<span id="cb15-25"><a href="#cb15-25" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb15-26"><a href="#cb15-26" tabindex="-1"></a><span class="co">#&gt;  Total          │                  260                   527            393 │       1180 </span></span>
+<span id="cb15-27"><a href="#cb15-27" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-28"><a href="#cb15-28" tabindex="-1"></a><span class="co">#&gt; Chi-2(6) = 73.2, p &lt; 0.001</span></span>
+<span id="cb15-29"><a href="#cb15-29" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b = 0.20</span></span></code></pre></div>
+<p>You can override the automatic choice:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, self_rated_health, education, <span class="at">assoc_measure =</span> <span class="st">&quot;gamma&quot;</span>)</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: self_rated_health x education (N)</span></span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a><span class="co">#&gt;  Values         │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a><span class="co">#&gt;  Poor           │                   28                    28              5 │         61 </span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a><span class="co">#&gt;  Fair           │                   86                   118             62 │        266 </span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a><span class="co">#&gt;  Good           │                  102                   263            193 │        558 </span></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a><span class="co">#&gt;  Very good      │                   44                   118            133 │        295 </span></span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a><span class="co">#&gt;  Total          │                  260                   527            393 │       1180 </span></span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a><span class="co">#&gt; Chi-2(6) = 73.2, p &lt; 0.001</span></span>
+<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal Gamma = 0.31</span></span></code></pre></div>
+</div>
+<div id="confidence-intervals" class="section level2">
+<h2>Confidence intervals</h2>
+<p>All functions support confidence intervals via
+<code>detail = TRUE</code>. The confidence level defaults to 95% and can
+be changed with <code>conf_level</code>:</p>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>, <span class="at">conf_level =</span> <span class="fl">0.99</span>)</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a><span class="co">#&gt;    0.176     0.103     0.248  &lt; 0.001</span></span></code></pre></div>
+<p>To get only the estimate and p-value (no CI), pass
+<code>conf_level = NULL</code>:</p>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>, <span class="at">conf_level =</span> <span class="cn">NULL</span>)</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a><span class="co">#&gt; Estimate        p</span></span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a><span class="co">#&gt;    0.176  &lt; 0.001</span></span></code></pre></div>
+</div>
+<div id="controlling-decimal-places" class="section level2">
+<h2>Controlling decimal places</h2>
+<p>When <code>detail = FALSE</code> (the default), functions return a
+plain numeric scalar, so R’s own formatting rules apply. When
+<code>detail = TRUE</code>, the result uses a custom print method that
+defaults to 3 decimal places. Pass <code>digits</code> to change this
+(the p-value always uses 3 decimal places or
+<code>&lt; 0.001</code>):</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>, <span class="at">digits =</span> <span class="dv">4</span>)</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="co">#&gt;   0.1762    0.1203    0.2309  &lt; 0.001</span></span></code></pre></div>
+<p>The same <code>digits</code> argument works for
+<code>assoc_measures()</code>:</p>
+<div class="sourceCode" id="cb20"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb20-1"><a href="#cb20-1" tabindex="-1"></a><span class="fu">assoc_measures</span>(tbl, <span class="at">digits =</span> <span class="dv">2</span>)</span>
+<span id="cb20-2"><a href="#cb20-2" tabindex="-1"></a><span class="co">#&gt; Measure                            Estimate    SE  CI lower  CI upper        p </span></span>
+<span id="cb20-3"><a href="#cb20-3" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V                             0.18    --      0.12      0.23  &lt; 0.001 </span></span>
+<span id="cb20-4"><a href="#cb20-4" tabindex="-1"></a><span class="co">#&gt; Contingency Coefficient                0.24    --        --        --  &lt; 0.001 </span></span>
+<span id="cb20-5"><a href="#cb20-5" tabindex="-1"></a><span class="co">#&gt; Lambda symmetric                       0.01  0.01      0.00      0.04    0.389 </span></span>
+<span id="cb20-6"><a href="#cb20-6" tabindex="-1"></a><span class="co">#&gt; Lambda R|C                             0.00  0.00      0.00      0.00       -- </span></span>
+<span id="cb20-7"><a href="#cb20-7" tabindex="-1"></a><span class="co">#&gt; Lambda C|R                             0.02  0.03      0.00      0.07    0.386 </span></span>
+<span id="cb20-8"><a href="#cb20-8" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau R|C              0.02  0.00      0.01      0.03  &lt; 0.001 </span></span>
+<span id="cb20-9"><a href="#cb20-9" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau C|R              0.03  0.01      0.01      0.04  &lt; 0.001 </span></span>
+<span id="cb20-10"><a href="#cb20-10" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient symmetric      0.03  0.01      0.02      0.04  &lt; 0.001 </span></span>
+<span id="cb20-11"><a href="#cb20-11" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient R|C            0.03  0.01      0.01      0.04  &lt; 0.001 </span></span>
+<span id="cb20-12"><a href="#cb20-12" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient C|R            0.03  0.01      0.02      0.04  &lt; 0.001 </span></span>
+<span id="cb20-13"><a href="#cb20-13" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal Gamma                  0.31  0.04      0.24      0.38  &lt; 0.001 </span></span>
+<span id="cb20-14"><a href="#cb20-14" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b                        0.20  0.03      0.16      0.25  &lt; 0.001 </span></span>
+<span id="cb20-15"><a href="#cb20-15" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-c                        0.20  0.02      0.15      0.25  &lt; 0.001 </span></span>
+<span id="cb20-16"><a href="#cb20-16" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D R|C                          0.21  0.03      0.16      0.26  &lt; 0.001 </span></span>
+<span id="cb20-17"><a href="#cb20-17" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D C|R                          0.20  0.02      0.15      0.25  &lt; 0.001</span></span></code></pre></div>
+<p>You can also store a result and re-display it with a different
+precision without recalculating:</p>
+<div class="sourceCode" id="cb21"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb21-1"><a href="#cb21-1" tabindex="-1"></a>res <span class="ot">&lt;-</span> <span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
+<span id="cb21-2"><a href="#cb21-2" tabindex="-1"></a><span class="fu">print</span>(res, <span class="at">digits =</span> <span class="dv">5</span>)</span>
+<span id="cb21-3"><a href="#cb21-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
+<span id="cb21-4"><a href="#cb21-4" tabindex="-1"></a><span class="co">#&gt;  0.17617   0.12031   0.23092  &lt; 0.001</span></span></code></pre></div>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>
