@@ -1,0 +1,4106 @@
+<!DOCTYPE html>
+
+<html>
+
+<head>
+
+<meta charset="utf-8" />
+<meta name="generator" content="pandoc" />
+<meta http-equiv="X-UA-Compatible" content="IE=EDGE" />
+
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+
+
+
+<title>Summary tables for APA-style reporting</title>
+
+<script>// Pandoc 2.9 adds attributes on both header and div. We remove the former (to
+// be compatible with the behavior of Pandoc < 2.8).
+document.addEventListener('DOMContentLoaded', function(e) {
+  var hs = document.querySelectorAll("div.section[class*='level'] > :first-child");
+  var i, h, a;
+  for (i = 0; i < hs.length; i++) {
+    h = hs[i];
+    if (!/^h[1-6]$/i.test(h.tagName)) continue;  // it should be a header h1-h6
+    a = h.attributes;
+    while (a.length > 0) h.removeAttribute(a[0].name);
+  }
+});
+</script>
+
+<style type="text/css">
+code{white-space: pre-wrap;}
+span.smallcaps{font-variant: small-caps;}
+span.underline{text-decoration: underline;}
+div.column{display: inline-block; vertical-align: top; width: 50%;}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+</style>
+
+
+
+<style type="text/css">
+code {
+white-space: pre;
+}
+.sourceCode {
+overflow: visible;
+}
+</style>
+<style type="text/css" data-origin="pandoc">
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+{ counter-reset: source-line 0; }
+pre.numberSource code > span
+{ position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+{ content: counter(source-line);
+position: relative; left: -1em; text-align: right; vertical-align: baseline;
+border: none; display: inline-block;
+-webkit-touch-callout: none; -webkit-user-select: none;
+-khtml-user-select: none; -moz-user-select: none;
+-ms-user-select: none; user-select: none;
+padding: 0 4px; width: 4em;
+color: #aaaaaa;
+}
+pre.numberSource { margin-left: 3em; border-left: 1px solid #aaaaaa; padding-left: 4px; }
+div.sourceCode
+{ }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+code span.al { color: #ff0000; font-weight: bold; } 
+code span.an { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.at { color: #7d9029; } 
+code span.bn { color: #40a070; } 
+code span.bu { color: #008000; } 
+code span.cf { color: #007020; font-weight: bold; } 
+code span.ch { color: #4070a0; } 
+code span.cn { color: #880000; } 
+code span.co { color: #60a0b0; font-style: italic; } 
+code span.cv { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.do { color: #ba2121; font-style: italic; } 
+code span.dt { color: #902000; } 
+code span.dv { color: #40a070; } 
+code span.er { color: #ff0000; font-weight: bold; } 
+code span.ex { } 
+code span.fl { color: #40a070; } 
+code span.fu { color: #06287e; } 
+code span.im { color: #008000; font-weight: bold; } 
+code span.in { color: #60a0b0; font-weight: bold; font-style: italic; } 
+code span.kw { color: #007020; font-weight: bold; } 
+code span.op { color: #666666; } 
+code span.ot { color: #007020; } 
+code span.pp { color: #bc7a00; } 
+code span.sc { color: #4070a0; } 
+code span.ss { color: #bb6688; } 
+code span.st { color: #4070a0; } 
+code span.va { color: #19177c; } 
+code span.vs { color: #4070a0; } 
+code span.wa { color: #60a0b0; font-weight: bold; font-style: italic; } 
+</style>
+<script>
+// apply pandoc div.sourceCode style to pre.sourceCode instead
+(function() {
+  var sheets = document.styleSheets;
+  for (var i = 0; i < sheets.length; i++) {
+    if (sheets[i].ownerNode.dataset["origin"] !== "pandoc") continue;
+    try { var rules = sheets[i].cssRules; } catch (e) { continue; }
+    var j = 0;
+    while (j < rules.length) {
+      var rule = rules[j];
+      // check if there is a div.sourceCode rule
+      if (rule.type !== rule.STYLE_RULE || rule.selectorText !== "div.sourceCode") {
+        j++;
+        continue;
+      }
+      var style = rule.style.cssText;
+      // check if color or background-color is set
+      if (rule.style.color === '' && rule.style.backgroundColor === '') {
+        j++;
+        continue;
+      }
+      // replace div.sourceCode by a pre.sourceCode rule
+      sheets[i].deleteRule(j);
+      sheets[i].insertRule('pre.sourceCode{' + style + '}', j);
+    }
+  }
+})();
+</script>
+
+
+
+
+<style type="text/css">body {
+background-color: #fff;
+margin: 1em auto;
+max-width: 700px;
+overflow: visible;
+padding-left: 2em;
+padding-right: 2em;
+font-family: "Open Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+font-size: 14px;
+line-height: 1.35;
+}
+#TOC {
+clear: both;
+margin: 0 0 10px 10px;
+padding: 4px;
+width: 400px;
+border: 1px solid #CCCCCC;
+border-radius: 5px;
+background-color: #f6f6f6;
+font-size: 13px;
+line-height: 1.3;
+}
+#TOC .toctitle {
+font-weight: bold;
+font-size: 15px;
+margin-left: 5px;
+}
+#TOC ul {
+padding-left: 40px;
+margin-left: -1.5em;
+margin-top: 5px;
+margin-bottom: 5px;
+}
+#TOC ul ul {
+margin-left: -2em;
+}
+#TOC li {
+line-height: 16px;
+}
+table {
+margin: 1em auto;
+border-width: 1px;
+border-color: #DDDDDD;
+border-style: outset;
+border-collapse: collapse;
+}
+table th {
+border-width: 2px;
+padding: 5px;
+border-style: inset;
+}
+table td {
+border-width: 1px;
+border-style: inset;
+line-height: 18px;
+padding: 5px 5px;
+}
+table, table th, table td {
+border-left-style: none;
+border-right-style: none;
+}
+table thead, table tr.even {
+background-color: #f7f7f7;
+}
+p {
+margin: 0.5em 0;
+}
+blockquote {
+background-color: #f6f6f6;
+padding: 0.25em 0.75em;
+}
+hr {
+border-style: solid;
+border: none;
+border-top: 1px solid #777;
+margin: 28px 0;
+}
+dl {
+margin-left: 0;
+}
+dl dd {
+margin-bottom: 13px;
+margin-left: 13px;
+}
+dl dt {
+font-weight: bold;
+}
+ul {
+margin-top: 0;
+}
+ul li {
+list-style: circle outside;
+}
+ul ul {
+margin-bottom: 0;
+}
+pre, code {
+background-color: #f7f7f7;
+border-radius: 3px;
+color: #333;
+white-space: pre-wrap; 
+}
+pre {
+border-radius: 3px;
+margin: 5px 0px 10px 0px;
+padding: 10px;
+}
+pre:not([class]) {
+background-color: #f7f7f7;
+}
+code {
+font-family: Consolas, Monaco, 'Courier New', monospace;
+font-size: 85%;
+}
+p > code, li > code {
+padding: 2px 0px;
+}
+div.figure {
+text-align: center;
+}
+img {
+background-color: #FFFFFF;
+padding: 2px;
+border: 1px solid #DDDDDD;
+border-radius: 3px;
+border: 1px solid #CCCCCC;
+margin: 0 5px;
+}
+h1 {
+margin-top: 0;
+font-size: 35px;
+line-height: 40px;
+}
+h2 {
+border-bottom: 4px solid #f7f7f7;
+padding-top: 10px;
+padding-bottom: 2px;
+font-size: 145%;
+}
+h3 {
+border-bottom: 2px solid #f7f7f7;
+padding-top: 10px;
+font-size: 120%;
+}
+h4 {
+border-bottom: 1px solid #f7f7f7;
+margin-left: 8px;
+font-size: 105%;
+}
+h5, h6 {
+border-bottom: 1px solid #ccc;
+font-size: 105%;
+}
+a {
+color: #0033dd;
+text-decoration: none;
+}
+a:hover {
+color: #6666ff; }
+a:visited {
+color: #800080; }
+a:visited:hover {
+color: #BB00BB; }
+a[href^="http:"] {
+text-decoration: underline; }
+a[href^="https:"] {
+text-decoration: underline; }
+
+code > span.kw { color: #555; font-weight: bold; } 
+code > span.dt { color: #902000; } 
+code > span.dv { color: #40a070; } 
+code > span.bn { color: #d14; } 
+code > span.fl { color: #d14; } 
+code > span.ch { color: #d14; } 
+code > span.st { color: #d14; } 
+code > span.co { color: #888888; font-style: italic; } 
+code > span.ot { color: #007020; } 
+code > span.al { color: #ff0000; font-weight: bold; } 
+code > span.fu { color: #900; font-weight: bold; } 
+code > span.er { color: #a61717; background-color: #e3d2d2; } 
+</style>
+
+
+
+
+</head>
+
+<body>
+
+
+
+
+<h1 class="title toc-ignore">Summary tables for APA-style reporting</h1>
+
+
+
+<div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(spicy)</span></code></pre></div>
+<p><code>table_categorical()</code> and <code>table_continuous()</code>
+are the two main summary table helpers in spicy. They share the same
+main interface: choose variables with <code>select</code>, optionally
+split the table with <code>by</code>, apply readable labels, and pick an
+output format that matches your reporting workflow. This vignette
+focuses on that shared logic rather than repeating every
+function-specific option.</p>
+<div id="choose-the-right-function" class="section level2">
+<h2>Choose the right function</h2>
+<p>Use the function that matches the type of variables you want to
+report:</p>
+<table>
+<colgroup>
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+<col width="25%" />
+</colgroup>
+<thead>
+<tr class="header">
+<th align="left">Function</th>
+<th align="left">Use for</th>
+<th align="left">Optional <code>by</code></th>
+<th align="left">Typical additions</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>table_categorical()</code></td>
+<td align="left">Factors, labelled categorical variables, grouped
+frequency-style summaries</td>
+<td align="left">Yes</td>
+<td align="left">Chi-squared test, association measure, confidence
+interval</td>
+</tr>
+<tr class="even">
+<td align="left"><code>table_continuous()</code></td>
+<td align="left">Numeric or continuous variables</td>
+<td align="left">Yes</td>
+<td align="left">Group-comparison test, statistic, effect size</td>
+</tr>
+</tbody>
+</table>
+<p>In practice:</p>
+<ul>
+<li>use <code>table_categorical()</code> for smoking status, education,
+or activity;</li>
+<li>use <code>table_continuous()</code> for BMI, income, or scale
+scores;</li>
+<li>keep <code>by</code> for the grouping variable you want to compare
+across.</li>
+</ul>
+</div>
+<div id="a-shared-interface" class="section level2">
+<h2>A shared interface</h2>
+<p>Both functions use the same core arguments:</p>
+<div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">table_categorical</span>(</span>
+<span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity),</span>
+<span id="cb2-4"><a href="#cb2-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
+<span id="cb2-5"><a href="#cb2-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Smoking status&quot;</span>, <span class="st">&quot;Regular physical activity&quot;</span>),</span>
+<span id="cb2-6"><a href="#cb2-6" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
+<span id="cb2-7"><a href="#cb2-7" tabindex="-1"></a>)</span></code></pre></div>
+<!-- preamble start -->
+
+    <script>// TinyTable JavaScript Framework
+// Function factory for creating table-specific operations
+window.TinyTable = {
+  // Helper to create Tabulator instance with Luxon dependency
+  createTabulator: function(elementId, config) {
+    const { DateTime } = window.luxon || {};
+    return new Tabulator(elementId, {
+      dependencies: { DateTime },
+      ...config
+    });
+  },
+
+  createTableFunctions: function (tableId) {
+    const spans = []; // {top, left, rowspan, colspan}
+
+    function resolveToAnchor(i, j) {
+      // find if (i,j) is inside any span; return that span's anchor if so
+      for (const s of spans) {
+        if (
+          i >= s.top && i < s.top + s.rowspan &&
+          j >= s.left && j < s.left + s.colspan
+        ) {
+          return { i: s.top, j: s.left };
+        }
+      }
+      return { i, j };
+    }
+
+    return {
+      styleCell: function (i, j, css_id) {
+        // normalize possible string indices
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const { i: ai, j: aj } = resolveToAnchor(i, j);
+        const cell = table.querySelector(`[data-row="${ai}"][data-col="${aj}"]`);
+        if (!cell) return; // silently skip if not found (e.g., removed)
+        cell.classList.add(css_id);
+      },
+
+      spanCell: function (i, j, rowspan, colspan) {
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const targetCell = table.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+        if (!targetCell) {
+          console.warn(`Cell at (${i}, ${j}) not found.`);
+          return;
+        }
+
+        // record span so future styleCell calls map to the anchor
+        spans.push({ top: i, left: j, rowspan, colspan });
+
+        // remove covered cells (except anchor)
+        const cellsToRemove = [];
+        for (let r = 0; r < rowspan; r++) {
+          for (let c = 0; c < colspan; c++) {
+            if (r === 0 && c === 0) continue;
+            const cell = table.querySelector(`[data-row="${i + r}"][data-col="${j + c}"]`);
+            if (cell) cellsToRemove.push(cell);
+          }
+        }
+        cellsToRemove.forEach(cell => cell.remove());
+
+        // set HTML attributes for clarity/serialization
+        targetCell.setAttribute('rowspan', rowspan);
+        targetCell.setAttribute('colspan', colspan);
+      }
+    };
+  }
+};
+
+// =============================================================================
+// TABULATOR CUSTOM FORMATTERS (revised)
+// =============================================================================
+
+// SVG sparkline
+function tinytable_sparkline(cell, p = {}) {
+  let values = cell.getValue() ?? [];
+  if (!Array.isArray(values)) values = [values];
+  // coerce to finite numbers & strip NaNs
+  values = values.map(Number).filter(Number.isFinite);
+  const n = values.length;
+  if (n === 0) return "";
+
+  const w = p.width ?? 120, h = p.height ?? 30, pad = p.pad ?? 2;
+  const color = p.color ?? "currentColor", sw = p.strokeWidth ?? 1.5;
+  const fill = p.fillArea ?? false;
+  const showDots = p.showDots ?? false;
+  const dotR = p.dotRadius ?? 1.75;
+  const ariaLabel = p.ariaLabel ?? `sparkline with ${n} points`;
+
+  // single pass for min/max
+  let min = Infinity, max = -Infinity;
+  for (let v of values) { if (v < min) min = v; if (v > max) max = v; }
+  const span = (max - min) || 1;
+
+  const x = i => pad + (i * (w - 2 * pad)) / Math.max(n - 1, 1);
+  const y = v => h - pad - ((v - min) * (h - 2 * pad)) / span;
+
+  let d = `M ${x(0)},${y(values[0])}`;
+  for (let i = 1; i < n; i++) d += ` L ${x(i)},${y(values[i])}`;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", ariaLabel);
+
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", sw);
+  path.setAttribute("vector-effect", "non-scaling-stroke");
+
+  if (fill) {
+    const area = document.createElementNS(NS, "path");
+    area.setAttribute("d", d + ` L ${x(n - 1)},${h - pad} L ${x(0)},${h - pad} Z`);
+    area.setAttribute("fill", color);
+    area.setAttribute("fill-opacity", p.fillOpacity ?? 0.25);
+    svg.appendChild(area);
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  } else {
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  }
+  svg.appendChild(path);
+
+  if (showDots) {
+    const dot = (i) => {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", x(i));
+      c.setAttribute("cy", y(values[i]));
+      c.setAttribute("r", dotR);
+      c.setAttribute("fill", color);
+      return c;
+    };
+    if (p.dots === "end") svg.appendChild(dot(n - 1));
+    else if (p.dots === "minmax") {
+      const iMin = values.indexOf(min), iMax = values.indexOf(max);
+      svg.appendChild(dot(iMin)); svg.appendChild(dot(iMax));
+    } else if (p.dots === true) {
+      for (let i = 0; i < n; i++) svg.appendChild(dot(i));
+    }
+  }
+
+  if (p.title) {
+    const title = document.createElementNS(NS, "title");
+    title.textContent = p.title;
+    svg.appendChild(title);
+  }
+
+  return svg;
+}
+
+// Canvas histogram
+function tinytable_histogram(cell, p = {}) {
+  let data = cell.getValue() ?? [];
+  if (!Array.isArray(data)) data = [data];
+  data = data.map(Number).filter(Number.isFinite);
+  const n = data.length;
+  if (n === 0) return "";
+
+  const cssWidth = p.width ?? 120;
+  const cssHeight = p.height ?? 30;
+  const color = p.color ?? "currentColor";
+  const gap = p.gap ?? 1;         // px gap between bars
+  const pad = p.pad ?? 0;         // inner padding
+  const ariaLabel = p.ariaLabel ?? `histogram with ${n} observations`;
+
+  // robust bins: Sturges as default; allow override
+  const k = Math.max(1, Math.min(64, p.bins ?? Math.ceil(Math.log2(n) + 1)));
+
+  // stats
+  let min = Infinity, max = -Infinity;
+  for (let v of data) { if (v < min) min = v; if (v > max) max = v; }
+
+  // zero-range safeguard -> single centered bar
+  const range = max - min;
+  const binWidth = range > 0 ? range / k : 1;
+
+  const bins = new Array(k).fill(0);
+  if (range === 0) {
+    // put all mass in the middle bin
+    bins[Math.floor(k / 2)] = n;
+  } else {
+    for (let v of data) {
+      let idx = Math.floor((v - min) / binWidth);
+      if (idx >= k) idx = k - 1; // clamp max edge
+      bins[idx]++;
+    }
+  }
+  const maxCount = Math.max(...bins, 1);
+
+  // HiDPI / Retina crispness
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  canvas.style.width = cssWidth + "px";
+  canvas.style.height = cssHeight + "px";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", ariaLabel);
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.fillStyle = color;
+
+  const innerW = cssWidth - pad * 2;
+  const innerH = cssHeight - pad * 2;
+  const barW = innerW / k;
+
+  for (let i = 0; i < k; i++) {
+    const h = (bins[i] / maxCount) * innerH;
+    const x = pad + i * barW;
+    const y = cssHeight - pad - h;
+    // 0.5 translate helps crisp vertical edges on some displays
+    ctx.fillRect(Math.round(x) + 0.5, Math.floor(y), Math.max(0, barW - gap), Math.ceil(h));
+  }
+
+  if (p.title) canvas.title = p.title;
+  return canvas;
+}
+
+// Unified sorter that uses hidden rank field
+function tinytable_rank_sorter(a, b, aRow, bRow, column, dir, sorterParams) {
+  const rankField = sorterParams.rankField;
+  const aVal = aRow.getData()[rankField] || 0;
+  const bVal = bRow.getData()[rankField] || 0;
+  return aVal - bVal;
+}
+</script>
+
+    <script>
+      // Create table-specific functions using external factory
+      const tableFns_35kaujmxbye6wwa5o1ai = TinyTable.createTableFunctions("tinytable_35kaujmxbye6wwa5o1ai");
+      // tinytable span after
+      window.addEventListener('load', function () {
+          var cellsToStyle = [
+            // tinytable style arrays after
+          { positions: [ { i: '1', j: 10 }, { i: '2', j: 10 }, { i: '3', j: 10 }, { i: '4', j: 10 }, { i: '5', j: 10 }, { i: '1', j: 11 }, { i: '2', j: 11 }, { i: '3', j: 11 }, { i: '4', j: 11 }, { i: '5', j: 11 } ], css_id: 'tinytable_css_hdv3zhirh0yquqd6q1cg',}, 
+          { positions: [ { i: '0', j: 10 }, { i: '6', j: 10 }, { i: '0', j: 11 }, { i: '6', j: 11 } ], css_id: 'tinytable_css_vwxfhkry5oc1h9gge0cq',}, 
+          { positions: [ { i: '-1', j: 10 }, { i: '-1', j: 11 } ], css_id: 'tinytable_css_r7n9u8w695l1gkbycslh',}, 
+          { positions: [ { i: '6', j: 2 }, { i: '6', j: 3 }, { i: '6', j: 4 }, { i: '6', j: 5 }, { i: '6', j: 6 }, { i: '6', j: 7 }, { i: '6', j: 8 }, { i: '6', j: 9 } ], css_id: 'tinytable_css_yytv9xwocbl7enqwv0bh',}, 
+          { positions: [ { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '3', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '1', j: 3 }, { i: '2', j: 3 }, { i: '3', j: 3 }, { i: '4', j: 3 }, { i: '5', j: 3 }, { i: '1', j: 4 }, { i: '2', j: 4 }, { i: '3', j: 4 }, { i: '4', j: 4 }, { i: '5', j: 4 }, { i: '1', j: 5 }, { i: '2', j: 5 }, { i: '3', j: 5 }, { i: '4', j: 5 }, { i: '5', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '3', j: 6 }, { i: '4', j: 6 }, { i: '5', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '3', j: 7 }, { i: '4', j: 7 }, { i: '5', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '3', j: 8 }, { i: '4', j: 8 }, { i: '5', j: 8 }, { i: '1', j: 9 }, { i: '2', j: 9 }, { i: '3', j: 9 }, { i: '4', j: 9 }, { i: '5', j: 9 } ], css_id: 'tinytable_css_fgdpru6wr8w8tcn2tv90',}, 
+          { positions: [ { i: '0', j: 2 }, { i: '0', j: 3 }, { i: '0', j: 4 }, { i: '0', j: 5 }, { i: '0', j: 6 }, { i: '0', j: 7 }, { i: '0', j: 8 }, { i: '0', j: 9 } ], css_id: 'tinytable_css_oqnhrg2cix4arq2pv9sn',}, 
+          { positions: [ { i: '-1', j: 2 }, { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 7 }, { i: '-1', j: 8 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_pnxgwyiasu78ph6o6o2b',}, 
+          { positions: [ { i: '6', j: 1 } ], css_id: 'tinytable_css_4n7vsqivecd66jb4dy1q',}, 
+          { positions: [ { i: '2', j: 1 }, { i: '3', j: 1 }, { i: '5', j: 1 } ], css_id: 'tinytable_css_99dadvqejp237fbedy1w',}, 
+          { positions: [ { i: '1', j: 1 }, { i: '4', j: 1 } ], css_id: 'tinytable_css_tahdutc3q0n503il66h8',}, 
+          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_jtm0d146s6e5ouhsb24t',}, 
+          { positions: [ { i: '-1', j: 1 } ], css_id: 'tinytable_css_otpfqt3w2k9nllarmmzg',}, 
+          ];
+
+          // Loop over the arrays to style the cells
+          cellsToStyle.forEach(function (group) {
+              group.positions.forEach(function (cell) {
+                  tableFns_35kaujmxbye6wwa5o1ai.styleCell(cell.i, cell.j, group.css_id);
+              });
+          });
+      });
+    </script>
+
+    <style type="text/css">
+
+
+.tinytable {
+
+--tt-text-color: inherit;
+--tt-line-color: black;
+--tt-border-color: var(--tt-line-color);
+--tt-striped-bg: rgba(0, 0, 0, .05);
+--tt-hover-bg: rgba(0, 0, 0, .075);
+--tt-background-color: transparent;
+--tt-footnote-bg: var(--tt-background-color);
+
+--tt-cell-padding: .5rem;
+--tt-cell-padding-sm: calc(var(--tt-cell-padding) / 2);
+--tt-table-margin: .5rem 0;
+--tt-caption-padding: .5rem 0;
+--tt-footnote-padding: .2rem .5rem;
+--tt-footnote-first-padding-top: .5rem;
+--tt-footnote-gap: .1rem;
+--tt-container-padding: 10px;
+
+--tt-font-size-footnote: 0.875rem;
+--tt-font-size-caption: 1rem;
+--tt-font-size-sup: 0.75em;
+--tt-line-height-footnote: 1.25;
+--tt-line-height-footnote-tight: 1.2;
+--tt-font-weight-header: normal;
+
+--tt-cell-valign: top;
+--tt-header-align: left;
+--tt-header-valign: bottom;
+--tt-caption-align: var(--tt-header-align);
+--tt-caption-side: top;
+
+--tt-table-width: 100%;
+
+--tt-border-width: 1px;
+--tt-border-width-tbody: 2px;
+}
+
+.tinytable {
+width: var(--tt-table-width);
+margin: var(--tt-table-margin);
+border-collapse: collapse;
+background-color: var(--tt-background-color);
+color: var(--tt-text-color);
+font-family: inherit;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+.tinytable *:not(mjx-container):not(mjx-container *) {
+font-family: inherit;
+}
+
+.tinytable th,
+.tinytable td {
+position: relative;
+padding: var(--tt-cell-padding);
+vertical-align: var(--tt-cell-valign);
+}
+.tinytable thead th {
+text-align: var(--tt-header-align);
+vertical-align: var(--tt-header-valign);
+font-weight: var(--tt-font-weight-header);
+border-bottom: none;
+}
+.tinytable thead th[align="center"] {
+text-align: center;
+}
+.tinytable tbody + tbody {
+border-top: var(--tt-border-width-tbody) solid var(--tt-border-color);
+}
+
+
+.tinytable-sm th,
+.tinytable-sm td {
+padding: var(--tt-cell-padding-sm);
+}
+
+.tinytable-bordered {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+.tinytable-bordered th,
+.tinytable-bordered td {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+
+.tinytable-striped tbody tr:nth-of-type(odd) {
+background-color: var(--tt-striped-bg);
+}
+
+.tinytable-hover tbody tr:hover {
+background-color: var(--tt-hover-bg);
+}
+
+.tinytable-responsive {
+width: var(--tt-table-width);
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"] {
+position: relative;
+
+--border-top: 0;
+--border-right: 0;
+--border-bottom: 0;
+--border-left: 0;
+
+--line-color-top: currentColor;
+--line-color-right: currentColor;
+--line-color-bottom: currentColor;
+--line-color-left: currentColor;
+
+--line-width-top: 0.1em;
+--line-width-right: 0.1em;
+--line-width-bottom: 0.1em;
+--line-width-left: 0.1em;
+
+--trim-top-left: 0%;
+--trim-top-right: 0%;
+--trim-right-top: 0%;
+--trim-right-bottom: 0%;
+--trim-bottom-left: 0%;
+--trim-bottom-right: 0%;
+--trim-left-top: 0%;
+--trim-left-bottom: 0%;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::before {
+content: "";
+position: absolute;
+top: var(--trim-top-left, var(--trim-top-right, 0));
+left: var(--trim-left-top, 0);
+right: var(--trim-right-top, 0);
+bottom: 0;
+pointer-events: none;
+z-index: 1;
+border-top: calc(var(--border-top) * var(--line-width-top)) solid var(--line-color-top);
+border-right: calc(var(--border-right) * var(--line-width-right)) solid var(--line-color-right);
+border-left: calc(var(--border-left) * var(--line-width-left)) solid var(--line-color-left);
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::after {
+content: "";
+position: absolute;
+left: var(--trim-bottom-left, 0);
+right: var(--trim-bottom-right, 0);
+bottom: var(--trim-left-bottom, var(--trim-right-bottom, 0));
+height: calc(var(--border-bottom) * var(--line-width-bottom));
+background: var(--line-color-bottom);
+pointer-events: none;
+z-index: 2;
+}
+
+.tinytable-container {
+padding: var(--tt-container-padding);
+overflow-x: auto;
+overflow-y: auto;
+width: auto;
+height: auto;
+}
+
+.tinytable caption {
+padding: var(--tt-caption-padding);
+caption-side: var(--tt-caption-side);
+font-size: var(--tt-font-size-caption);
+text-align: var(--tt-caption-align);
+}
+
+.tinytable tfoot tr:first-child td {
+padding-top: var(--tt-footnote-first-padding-top);
+}
+.tinytable tfoot td {
+padding: var(--tt-footnote-padding);
+font-size: var(--tt-font-size-footnote);
+line-height: var(--tt-line-height-footnote);
+background-color: var(--tt-footnote-bg);
+}
+
+.tinytable tfoot tr + tr td {
+padding-top: var(--tt-footnote-gap);
+}
+
+.tinytable tfoot sup {
+font-size: var(--tt-font-size-sup);
+line-height: 0;
+vertical-align: text-top;
+}
+
+.tinytable tfoot tr:nth-child(n+2) td {
+line-height: var(--tt-line-height-footnote-tight);
+}
+</style>
+    <style>
+
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_hdv3zhirh0yquqd6q1cg, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_hdv3zhirh0yquqd6q1cg { text-align: right; white-space: nowrap; }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_vwxfhkry5oc1h9gge0cq, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_vwxfhkry5oc1h9gge0cq { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right; white-space: nowrap; }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_r7n9u8w695l1gkbycslh, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_r7n9u8w695l1gkbycslh { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center; white-space: nowrap; }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_yytv9xwocbl7enqwv0bh, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_yytv9xwocbl7enqwv0bh { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_fgdpru6wr8w8tcn2tv90, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_fgdpru6wr8w8tcn2tv90 { text-align: right }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_oqnhrg2cix4arq2pv9sn, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_oqnhrg2cix4arq2pv9sn { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_pnxgwyiasu78ph6o6o2b, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_pnxgwyiasu78ph6o6o2b { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_4n7vsqivecd66jb4dy1q, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_4n7vsqivecd66jb4dy1q { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_99dadvqejp237fbedy1w, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_99dadvqejp237fbedy1w { text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_tahdutc3q0n503il66h8, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_tahdutc3q0n503il66h8 { text-align: left }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_jtm0d146s6e5ouhsb24t, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_jtm0d146s6e5ouhsb24t { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_35kaujmxbye6wwa5o1ai td.tinytable_css_otpfqt3w2k9nllarmmzg, #tinytable_35kaujmxbye6wwa5o1ai th.tinytable_css_otpfqt3w2k9nllarmmzg { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+</style>
+    <div class="container">
+      <table class="tinytable" id="tinytable_35kaujmxbye6wwa5o1ai" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+        
+        <thead>
+<tr>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="1">Variable</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="2">Lower secondary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="4">Upper secondary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="6">Tertiary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="8">Total</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="10">p</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="11">Cramer&#39;s V</th>
+</tr>
+              <tr>
+                <th scope="col" data-row="0" data-col="1"></th>
+                <th scope="col" data-row="0" data-col="2">n</th>
+                <th scope="col" data-row="0" data-col="3">%</th>
+                <th scope="col" data-row="0" data-col="4">n</th>
+                <th scope="col" data-row="0" data-col="5">%</th>
+                <th scope="col" data-row="0" data-col="6">n</th>
+                <th scope="col" data-row="0" data-col="7">%</th>
+                <th scope="col" data-row="0" data-col="8">n</th>
+                <th scope="col" data-row="0" data-col="9">%</th>
+                <th scope="col" data-row="0" data-col="10"></th>
+                <th scope="col" data-row="0" data-col="11"></th>
+              </tr>
+        </thead>
+        
+        <tbody>
+                <tr>
+                  <td data-row="1" data-col="1">Smoking status</td>
+                  <td data-row="1" data-col="2"></td>
+                  <td data-row="1" data-col="3"></td>
+                  <td data-row="1" data-col="4"></td>
+                  <td data-row="1" data-col="5"></td>
+                  <td data-row="1" data-col="6"></td>
+                  <td data-row="1" data-col="7"></td>
+                  <td data-row="1" data-col="8"></td>
+                  <td data-row="1" data-col="9"></td>
+                  <td data-row="1" data-col="10">&lt; .001</td>
+                  <td data-row="1" data-col="11">.14</td>
+                </tr>
+                <tr>
+                  <td data-row="2" data-col="1">    No</td>
+                  <td data-row="2" data-col="2">179</td>
+                  <td data-row="2" data-col="3">69.6</td>
+                  <td data-row="2" data-col="4">415</td>
+                  <td data-row="2" data-col="5">78.7</td>
+                  <td data-row="2" data-col="6">332</td>
+                  <td data-row="2" data-col="7">84.9</td>
+                  <td data-row="2" data-col="8">926</td>
+                  <td data-row="2" data-col="9">78.8</td>
+                  <td data-row="2" data-col="10"></td>
+                  <td data-row="2" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="3" data-col="1">    Yes</td>
+                  <td data-row="3" data-col="2">78</td>
+                  <td data-row="3" data-col="3">30.4</td>
+                  <td data-row="3" data-col="4">112</td>
+                  <td data-row="3" data-col="5">21.3</td>
+                  <td data-row="3" data-col="6">59</td>
+                  <td data-row="3" data-col="7">15.1</td>
+                  <td data-row="3" data-col="8">249</td>
+                  <td data-row="3" data-col="9">21.2</td>
+                  <td data-row="3" data-col="10"></td>
+                  <td data-row="3" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="4" data-col="1">Regular physical activity</td>
+                  <td data-row="4" data-col="2"></td>
+                  <td data-row="4" data-col="3"></td>
+                  <td data-row="4" data-col="4"></td>
+                  <td data-row="4" data-col="5"></td>
+                  <td data-row="4" data-col="6"></td>
+                  <td data-row="4" data-col="7"></td>
+                  <td data-row="4" data-col="8"></td>
+                  <td data-row="4" data-col="9"></td>
+                  <td data-row="4" data-col="10">&lt; .001</td>
+                  <td data-row="4" data-col="11">.21</td>
+                </tr>
+                <tr>
+                  <td data-row="5" data-col="1">    No</td>
+                  <td data-row="5" data-col="2">177</td>
+                  <td data-row="5" data-col="3">67.8</td>
+                  <td data-row="5" data-col="4">310</td>
+                  <td data-row="5" data-col="5">57.5</td>
+                  <td data-row="5" data-col="6">163</td>
+                  <td data-row="5" data-col="7">40.8</td>
+                  <td data-row="5" data-col="8">650</td>
+                  <td data-row="5" data-col="9">54.2</td>
+                  <td data-row="5" data-col="10"></td>
+                  <td data-row="5" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="6" data-col="1">    Yes</td>
+                  <td data-row="6" data-col="2">84</td>
+                  <td data-row="6" data-col="3">32.2</td>
+                  <td data-row="6" data-col="4">229</td>
+                  <td data-row="6" data-col="5">42.5</td>
+                  <td data-row="6" data-col="6">237</td>
+                  <td data-row="6" data-col="7">59.2</td>
+                  <td data-row="6" data-col="8">550</td>
+                  <td data-row="6" data-col="9">45.8</td>
+                  <td data-row="6" data-col="10"></td>
+                  <td data-row="6" data-col="11"></td>
+                </tr>
+        </tbody>
+      </table>
+    </div>
+<!-- hack to avoid NA insertion in last line -->
+<div class="sourceCode" id="cb3"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
+<span id="cb3-2"><a href="#cb3-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb3-3"><a href="#cb3-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score, life_sat_health),</span>
+<span id="cb3-4"><a href="#cb3-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
+<span id="cb3-5"><a href="#cb3-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(</span>
+<span id="cb3-6"><a href="#cb3-6" tabindex="-1"></a>    <span class="at">bmi =</span> <span class="st">&quot;Body mass index&quot;</span>,</span>
+<span id="cb3-7"><a href="#cb3-7" tabindex="-1"></a>    <span class="at">wellbeing_score =</span> <span class="st">&quot;Well-being score&quot;</span>,</span>
+<span id="cb3-8"><a href="#cb3-8" tabindex="-1"></a>    <span class="at">life_sat_health =</span> <span class="st">&quot;Satisfaction with health&quot;</span></span>
+<span id="cb3-9"><a href="#cb3-9" tabindex="-1"></a>  ),</span>
+<span id="cb3-10"><a href="#cb3-10" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
+<span id="cb3-11"><a href="#cb3-11" tabindex="-1"></a>)</span></code></pre></div>
+<!-- preamble start -->
+
+    <script>// TinyTable JavaScript Framework
+// Function factory for creating table-specific operations
+window.TinyTable = {
+  // Helper to create Tabulator instance with Luxon dependency
+  createTabulator: function(elementId, config) {
+    const { DateTime } = window.luxon || {};
+    return new Tabulator(elementId, {
+      dependencies: { DateTime },
+      ...config
+    });
+  },
+
+  createTableFunctions: function (tableId) {
+    const spans = []; // {top, left, rowspan, colspan}
+
+    function resolveToAnchor(i, j) {
+      // find if (i,j) is inside any span; return that span's anchor if so
+      for (const s of spans) {
+        if (
+          i >= s.top && i < s.top + s.rowspan &&
+          j >= s.left && j < s.left + s.colspan
+        ) {
+          return { i: s.top, j: s.left };
+        }
+      }
+      return { i, j };
+    }
+
+    return {
+      styleCell: function (i, j, css_id) {
+        // normalize possible string indices
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const { i: ai, j: aj } = resolveToAnchor(i, j);
+        const cell = table.querySelector(`[data-row="${ai}"][data-col="${aj}"]`);
+        if (!cell) return; // silently skip if not found (e.g., removed)
+        cell.classList.add(css_id);
+      },
+
+      spanCell: function (i, j, rowspan, colspan) {
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const targetCell = table.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+        if (!targetCell) {
+          console.warn(`Cell at (${i}, ${j}) not found.`);
+          return;
+        }
+
+        // record span so future styleCell calls map to the anchor
+        spans.push({ top: i, left: j, rowspan, colspan });
+
+        // remove covered cells (except anchor)
+        const cellsToRemove = [];
+        for (let r = 0; r < rowspan; r++) {
+          for (let c = 0; c < colspan; c++) {
+            if (r === 0 && c === 0) continue;
+            const cell = table.querySelector(`[data-row="${i + r}"][data-col="${j + c}"]`);
+            if (cell) cellsToRemove.push(cell);
+          }
+        }
+        cellsToRemove.forEach(cell => cell.remove());
+
+        // set HTML attributes for clarity/serialization
+        targetCell.setAttribute('rowspan', rowspan);
+        targetCell.setAttribute('colspan', colspan);
+      }
+    };
+  }
+};
+
+// =============================================================================
+// TABULATOR CUSTOM FORMATTERS (revised)
+// =============================================================================
+
+// SVG sparkline
+function tinytable_sparkline(cell, p = {}) {
+  let values = cell.getValue() ?? [];
+  if (!Array.isArray(values)) values = [values];
+  // coerce to finite numbers & strip NaNs
+  values = values.map(Number).filter(Number.isFinite);
+  const n = values.length;
+  if (n === 0) return "";
+
+  const w = p.width ?? 120, h = p.height ?? 30, pad = p.pad ?? 2;
+  const color = p.color ?? "currentColor", sw = p.strokeWidth ?? 1.5;
+  const fill = p.fillArea ?? false;
+  const showDots = p.showDots ?? false;
+  const dotR = p.dotRadius ?? 1.75;
+  const ariaLabel = p.ariaLabel ?? `sparkline with ${n} points`;
+
+  // single pass for min/max
+  let min = Infinity, max = -Infinity;
+  for (let v of values) { if (v < min) min = v; if (v > max) max = v; }
+  const span = (max - min) || 1;
+
+  const x = i => pad + (i * (w - 2 * pad)) / Math.max(n - 1, 1);
+  const y = v => h - pad - ((v - min) * (h - 2 * pad)) / span;
+
+  let d = `M ${x(0)},${y(values[0])}`;
+  for (let i = 1; i < n; i++) d += ` L ${x(i)},${y(values[i])}`;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", ariaLabel);
+
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", sw);
+  path.setAttribute("vector-effect", "non-scaling-stroke");
+
+  if (fill) {
+    const area = document.createElementNS(NS, "path");
+    area.setAttribute("d", d + ` L ${x(n - 1)},${h - pad} L ${x(0)},${h - pad} Z`);
+    area.setAttribute("fill", color);
+    area.setAttribute("fill-opacity", p.fillOpacity ?? 0.25);
+    svg.appendChild(area);
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  } else {
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  }
+  svg.appendChild(path);
+
+  if (showDots) {
+    const dot = (i) => {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", x(i));
+      c.setAttribute("cy", y(values[i]));
+      c.setAttribute("r", dotR);
+      c.setAttribute("fill", color);
+      return c;
+    };
+    if (p.dots === "end") svg.appendChild(dot(n - 1));
+    else if (p.dots === "minmax") {
+      const iMin = values.indexOf(min), iMax = values.indexOf(max);
+      svg.appendChild(dot(iMin)); svg.appendChild(dot(iMax));
+    } else if (p.dots === true) {
+      for (let i = 0; i < n; i++) svg.appendChild(dot(i));
+    }
+  }
+
+  if (p.title) {
+    const title = document.createElementNS(NS, "title");
+    title.textContent = p.title;
+    svg.appendChild(title);
+  }
+
+  return svg;
+}
+
+// Canvas histogram
+function tinytable_histogram(cell, p = {}) {
+  let data = cell.getValue() ?? [];
+  if (!Array.isArray(data)) data = [data];
+  data = data.map(Number).filter(Number.isFinite);
+  const n = data.length;
+  if (n === 0) return "";
+
+  const cssWidth = p.width ?? 120;
+  const cssHeight = p.height ?? 30;
+  const color = p.color ?? "currentColor";
+  const gap = p.gap ?? 1;         // px gap between bars
+  const pad = p.pad ?? 0;         // inner padding
+  const ariaLabel = p.ariaLabel ?? `histogram with ${n} observations`;
+
+  // robust bins: Sturges as default; allow override
+  const k = Math.max(1, Math.min(64, p.bins ?? Math.ceil(Math.log2(n) + 1)));
+
+  // stats
+  let min = Infinity, max = -Infinity;
+  for (let v of data) { if (v < min) min = v; if (v > max) max = v; }
+
+  // zero-range safeguard -> single centered bar
+  const range = max - min;
+  const binWidth = range > 0 ? range / k : 1;
+
+  const bins = new Array(k).fill(0);
+  if (range === 0) {
+    // put all mass in the middle bin
+    bins[Math.floor(k / 2)] = n;
+  } else {
+    for (let v of data) {
+      let idx = Math.floor((v - min) / binWidth);
+      if (idx >= k) idx = k - 1; // clamp max edge
+      bins[idx]++;
+    }
+  }
+  const maxCount = Math.max(...bins, 1);
+
+  // HiDPI / Retina crispness
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  canvas.style.width = cssWidth + "px";
+  canvas.style.height = cssHeight + "px";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", ariaLabel);
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.fillStyle = color;
+
+  const innerW = cssWidth - pad * 2;
+  const innerH = cssHeight - pad * 2;
+  const barW = innerW / k;
+
+  for (let i = 0; i < k; i++) {
+    const h = (bins[i] / maxCount) * innerH;
+    const x = pad + i * barW;
+    const y = cssHeight - pad - h;
+    // 0.5 translate helps crisp vertical edges on some displays
+    ctx.fillRect(Math.round(x) + 0.5, Math.floor(y), Math.max(0, barW - gap), Math.ceil(h));
+  }
+
+  if (p.title) canvas.title = p.title;
+  return canvas;
+}
+
+// Unified sorter that uses hidden rank field
+function tinytable_rank_sorter(a, b, aRow, bRow, column, dir, sorterParams) {
+  const rankField = sorterParams.rankField;
+  const aVal = aRow.getData()[rankField] || 0;
+  const bVal = bRow.getData()[rankField] || 0;
+  return aVal - bVal;
+}
+</script>
+
+    <script>
+      // Create table-specific functions using external factory
+      const tableFns_15rr5vtvcrp84v4zhtdn = TinyTable.createTableFunctions("tinytable_15rr5vtvcrp84v4zhtdn");
+      // tinytable span after
+      window.addEventListener('load', function () {
+          var cellsToStyle = [
+            // tinytable style arrays after
+          { positions: [ { i: '3', j: 9 }, { i: '6', j: 9 } ], css_id: 'tinytable_css_09ksmwbrjtsx4rcmxf7a',}, 
+          { positions: [ { i: '1', j: 9 }, { i: '2', j: 9 }, { i: '4', j: 9 }, { i: '5', j: 9 }, { i: '7', j: 9 }, { i: '8', j: 9 } ], css_id: 'tinytable_css_lg1ischz3iyrmpten7o3',}, 
+          { positions: [ { i: '0', j: 9 }, { i: '9', j: 9 } ], css_id: 'tinytable_css_91rbw3tjoupvnmr3hhs8',}, 
+          { positions: [ { i: '-1', j: 7 }, { i: '-1', j: 8 } ], css_id: 'tinytable_css_wo0h03g5z7p225h6wi61',}, 
+          { positions: [ { i: '3', j: 3 }, { i: '6', j: 3 }, { i: '3', j: 4 }, { i: '6', j: 4 }, { i: '3', j: 5 }, { i: '6', j: 5 }, { i: '3', j: 6 }, { i: '6', j: 6 }, { i: '3', j: 7 }, { i: '6', j: 7 }, { i: '3', j: 8 }, { i: '6', j: 8 } ], css_id: 'tinytable_css_kmkfg669e9cwmvjs1ipk',}, 
+          { positions: [ { i: '1', j: 3 }, { i: '2', j: 3 }, { i: '4', j: 3 }, { i: '5', j: 3 }, { i: '7', j: 3 }, { i: '8', j: 3 }, { i: '1', j: 4 }, { i: '2', j: 4 }, { i: '4', j: 4 }, { i: '5', j: 4 }, { i: '7', j: 4 }, { i: '8', j: 4 }, { i: '1', j: 5 }, { i: '2', j: 5 }, { i: '4', j: 5 }, { i: '5', j: 5 }, { i: '7', j: 5 }, { i: '8', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '4', j: 6 }, { i: '5', j: 6 }, { i: '7', j: 6 }, { i: '8', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '4', j: 7 }, { i: '5', j: 7 }, { i: '7', j: 7 }, { i: '8', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '4', j: 8 }, { i: '5', j: 8 }, { i: '7', j: 8 }, { i: '8', j: 8 } ], css_id: 'tinytable_css_3seb3fayi85uh0vyg95b',}, 
+          { positions: [ { i: '0', j: 3 }, { i: '9', j: 3 }, { i: '0', j: 4 }, { i: '9', j: 4 }, { i: '0', j: 5 }, { i: '9', j: 5 }, { i: '0', j: 6 }, { i: '9', j: 6 }, { i: '0', j: 7 }, { i: '9', j: 7 }, { i: '0', j: 8 }, { i: '9', j: 8 } ], css_id: 'tinytable_css_fifkm2jv06da9t0j40kn',}, 
+          { positions: [ { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_929m5ak37pjowmjygkvh',}, 
+          { positions: [ { i: '3', j: 1 }, { i: '6', j: 1 }, { i: '3', j: 2 }, { i: '6', j: 2 } ], css_id: 'tinytable_css_xl6kskb9b1kuzigm24qz',}, 
+          { positions: [ { i: '1', j: 1 }, { i: '2', j: 1 }, { i: '4', j: 1 }, { i: '5', j: 1 }, { i: '7', j: 1 }, { i: '8', j: 1 }, { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '7', j: 2 }, { i: '8', j: 2 } ], css_id: 'tinytable_css_xa1dw64a7l77scmar4f0',}, 
+          { positions: [ { i: '0', j: 1 }, { i: '9', j: 1 }, { i: '0', j: 2 }, { i: '9', j: 2 } ], css_id: 'tinytable_css_mn9vdx6jwalneywio18l',}, 
+          { positions: [ { i: '-1', j: 1 }, { i: '-1', j: 2 } ], css_id: 'tinytable_css_ud652wakln7q42lsrg2s',}, 
+          ];
+
+          // Loop over the arrays to style the cells
+          cellsToStyle.forEach(function (group) {
+              group.positions.forEach(function (cell) {
+                  tableFns_15rr5vtvcrp84v4zhtdn.styleCell(cell.i, cell.j, group.css_id);
+              });
+          });
+      });
+    </script>
+
+    <style type="text/css">
+
+
+.tinytable {
+
+--tt-text-color: inherit;
+--tt-line-color: black;
+--tt-border-color: var(--tt-line-color);
+--tt-striped-bg: rgba(0, 0, 0, .05);
+--tt-hover-bg: rgba(0, 0, 0, .075);
+--tt-background-color: transparent;
+--tt-footnote-bg: var(--tt-background-color);
+
+--tt-cell-padding: .5rem;
+--tt-cell-padding-sm: calc(var(--tt-cell-padding) / 2);
+--tt-table-margin: .5rem 0;
+--tt-caption-padding: .5rem 0;
+--tt-footnote-padding: .2rem .5rem;
+--tt-footnote-first-padding-top: .5rem;
+--tt-footnote-gap: .1rem;
+--tt-container-padding: 10px;
+
+--tt-font-size-footnote: 0.875rem;
+--tt-font-size-caption: 1rem;
+--tt-font-size-sup: 0.75em;
+--tt-line-height-footnote: 1.25;
+--tt-line-height-footnote-tight: 1.2;
+--tt-font-weight-header: normal;
+
+--tt-cell-valign: top;
+--tt-header-align: left;
+--tt-header-valign: bottom;
+--tt-caption-align: var(--tt-header-align);
+--tt-caption-side: top;
+
+--tt-table-width: 100%;
+
+--tt-border-width: 1px;
+--tt-border-width-tbody: 2px;
+}
+
+.tinytable {
+width: var(--tt-table-width);
+margin: var(--tt-table-margin);
+border-collapse: collapse;
+background-color: var(--tt-background-color);
+color: var(--tt-text-color);
+font-family: inherit;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+.tinytable *:not(mjx-container):not(mjx-container *) {
+font-family: inherit;
+}
+
+.tinytable th,
+.tinytable td {
+position: relative;
+padding: var(--tt-cell-padding);
+vertical-align: var(--tt-cell-valign);
+}
+.tinytable thead th {
+text-align: var(--tt-header-align);
+vertical-align: var(--tt-header-valign);
+font-weight: var(--tt-font-weight-header);
+border-bottom: none;
+}
+.tinytable thead th[align="center"] {
+text-align: center;
+}
+.tinytable tbody + tbody {
+border-top: var(--tt-border-width-tbody) solid var(--tt-border-color);
+}
+
+
+.tinytable-sm th,
+.tinytable-sm td {
+padding: var(--tt-cell-padding-sm);
+}
+
+.tinytable-bordered {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+.tinytable-bordered th,
+.tinytable-bordered td {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+
+.tinytable-striped tbody tr:nth-of-type(odd) {
+background-color: var(--tt-striped-bg);
+}
+
+.tinytable-hover tbody tr:hover {
+background-color: var(--tt-hover-bg);
+}
+
+.tinytable-responsive {
+width: var(--tt-table-width);
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"] {
+position: relative;
+
+--border-top: 0;
+--border-right: 0;
+--border-bottom: 0;
+--border-left: 0;
+
+--line-color-top: currentColor;
+--line-color-right: currentColor;
+--line-color-bottom: currentColor;
+--line-color-left: currentColor;
+
+--line-width-top: 0.1em;
+--line-width-right: 0.1em;
+--line-width-bottom: 0.1em;
+--line-width-left: 0.1em;
+
+--trim-top-left: 0%;
+--trim-top-right: 0%;
+--trim-right-top: 0%;
+--trim-right-bottom: 0%;
+--trim-bottom-left: 0%;
+--trim-bottom-right: 0%;
+--trim-left-top: 0%;
+--trim-left-bottom: 0%;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::before {
+content: "";
+position: absolute;
+top: var(--trim-top-left, var(--trim-top-right, 0));
+left: var(--trim-left-top, 0);
+right: var(--trim-right-top, 0);
+bottom: 0;
+pointer-events: none;
+z-index: 1;
+border-top: calc(var(--border-top) * var(--line-width-top)) solid var(--line-color-top);
+border-right: calc(var(--border-right) * var(--line-width-right)) solid var(--line-color-right);
+border-left: calc(var(--border-left) * var(--line-width-left)) solid var(--line-color-left);
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::after {
+content: "";
+position: absolute;
+left: var(--trim-bottom-left, 0);
+right: var(--trim-bottom-right, 0);
+bottom: var(--trim-left-bottom, var(--trim-right-bottom, 0));
+height: calc(var(--border-bottom) * var(--line-width-bottom));
+background: var(--line-color-bottom);
+pointer-events: none;
+z-index: 2;
+}
+
+.tinytable-container {
+padding: var(--tt-container-padding);
+overflow-x: auto;
+overflow-y: auto;
+width: auto;
+height: auto;
+}
+
+.tinytable caption {
+padding: var(--tt-caption-padding);
+caption-side: var(--tt-caption-side);
+font-size: var(--tt-font-size-caption);
+text-align: var(--tt-caption-align);
+}
+
+.tinytable tfoot tr:first-child td {
+padding-top: var(--tt-footnote-first-padding-top);
+}
+.tinytable tfoot td {
+padding: var(--tt-footnote-padding);
+font-size: var(--tt-font-size-footnote);
+line-height: var(--tt-line-height-footnote);
+background-color: var(--tt-footnote-bg);
+}
+
+.tinytable tfoot tr + tr td {
+padding-top: var(--tt-footnote-gap);
+}
+
+.tinytable tfoot sup {
+font-size: var(--tt-font-size-sup);
+line-height: 0;
+vertical-align: text-top;
+}
+
+.tinytable tfoot tr:nth-child(n+2) td {
+line-height: var(--tt-line-height-footnote-tight);
+}
+</style>
+    <style>
+
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_09ksmwbrjtsx4rcmxf7a, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_09ksmwbrjtsx4rcmxf7a { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.03em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_lg1ischz3iyrmpten7o3, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_lg1ischz3iyrmpten7o3 { text-align: right }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_91rbw3tjoupvnmr3hhs8, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_91rbw3tjoupvnmr3hhs8 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_wo0h03g5z7p225h6wi61, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_wo0h03g5z7p225h6wi61 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_kmkfg669e9cwmvjs1ipk, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_kmkfg669e9cwmvjs1ipk { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.03em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_3seb3fayi85uh0vyg95b, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_3seb3fayi85uh0vyg95b { text-align: center }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_fifkm2jv06da9t0j40kn, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_fifkm2jv06da9t0j40kn { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_929m5ak37pjowmjygkvh, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_929m5ak37pjowmjygkvh { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_xl6kskb9b1kuzigm24qz, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_xl6kskb9b1kuzigm24qz { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.03em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_xa1dw64a7l77scmar4f0, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_xa1dw64a7l77scmar4f0 { text-align: left }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_mn9vdx6jwalneywio18l, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_mn9vdx6jwalneywio18l { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_15rr5vtvcrp84v4zhtdn td.tinytable_css_ud652wakln7q42lsrg2s, #tinytable_15rr5vtvcrp84v4zhtdn th.tinytable_css_ud652wakln7q42lsrg2s { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+</style>
+    <div class="container">
+      <table class="tinytable" id="tinytable_15rr5vtvcrp84v4zhtdn" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+        
+        <thead>
+<tr>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="1">Variable</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="2">Group</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="3">M</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="4">SD</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="5">Min</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="6">Max</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="7">95% CI</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="9">n</th>
+</tr>
+              <tr>
+                <th scope="col" data-row="0" data-col="1"></th>
+                <th scope="col" data-row="0" data-col="2"></th>
+                <th scope="col" data-row="0" data-col="3"></th>
+                <th scope="col" data-row="0" data-col="4"></th>
+                <th scope="col" data-row="0" data-col="5"></th>
+                <th scope="col" data-row="0" data-col="6"></th>
+                <th scope="col" data-row="0" data-col="7">LL</th>
+                <th scope="col" data-row="0" data-col="8">UL</th>
+                <th scope="col" data-row="0" data-col="9"></th>
+              </tr>
+        </thead>
+        
+        <tbody>
+                <tr>
+                  <td data-row="1" data-col="1">Body mass index</td>
+                  <td data-row="1" data-col="2">Lower secondary</td>
+                  <td data-row="1" data-col="3">28.09</td>
+                  <td data-row="1" data-col="4">3.47</td>
+                  <td data-row="1" data-col="5">18.20</td>
+                  <td data-row="1" data-col="6">38.90</td>
+                  <td data-row="1" data-col="7">27.66</td>
+                  <td data-row="1" data-col="8">28.51</td>
+                  <td data-row="1" data-col="9">260</td>
+                </tr>
+                <tr>
+                  <td data-row="2" data-col="1"></td>
+                  <td data-row="2" data-col="2">Upper secondary</td>
+                  <td data-row="2" data-col="3">26.02</td>
+                  <td data-row="2" data-col="4">3.43</td>
+                  <td data-row="2" data-col="5">16.00</td>
+                  <td data-row="2" data-col="6">37.10</td>
+                  <td data-row="2" data-col="7">25.73</td>
+                  <td data-row="2" data-col="8">26.31</td>
+                  <td data-row="2" data-col="9">534</td>
+                </tr>
+                <tr>
+                  <td data-row="3" data-col="1"></td>
+                  <td data-row="3" data-col="2">Tertiary</td>
+                  <td data-row="3" data-col="3">24.39</td>
+                  <td data-row="3" data-col="4">3.52</td>
+                  <td data-row="3" data-col="5">16.00</td>
+                  <td data-row="3" data-col="6">33.00</td>
+                  <td data-row="3" data-col="7">24.04</td>
+                  <td data-row="3" data-col="8">24.74</td>
+                  <td data-row="3" data-col="9">394</td>
+                </tr>
+                <tr>
+                  <td data-row="4" data-col="1">Well-being score</td>
+                  <td data-row="4" data-col="2">Lower secondary</td>
+                  <td data-row="4" data-col="3">57.22</td>
+                  <td data-row="4" data-col="4">15.44</td>
+                  <td data-row="4" data-col="5">18.70</td>
+                  <td data-row="4" data-col="6">97.90</td>
+                  <td data-row="4" data-col="7">55.33</td>
+                  <td data-row="4" data-col="8">59.10</td>
+                  <td data-row="4" data-col="9">261</td>
+                </tr>
+                <tr>
+                  <td data-row="5" data-col="1"></td>
+                  <td data-row="5" data-col="2">Upper secondary</td>
+                  <td data-row="5" data-col="3">68.97</td>
+                  <td data-row="5" data-col="4">13.62</td>
+                  <td data-row="5" data-col="5">26.70</td>
+                  <td data-row="5" data-col="6">100.00</td>
+                  <td data-row="5" data-col="7">67.82</td>
+                  <td data-row="5" data-col="8">70.12</td>
+                  <td data-row="5" data-col="9">539</td>
+                </tr>
+                <tr>
+                  <td data-row="6" data-col="1"></td>
+                  <td data-row="6" data-col="2">Tertiary</td>
+                  <td data-row="6" data-col="3">76.85</td>
+                  <td data-row="6" data-col="4">13.23</td>
+                  <td data-row="6" data-col="5">40.40</td>
+                  <td data-row="6" data-col="6">100.00</td>
+                  <td data-row="6" data-col="7">75.55</td>
+                  <td data-row="6" data-col="8">78.15</td>
+                  <td data-row="6" data-col="9">400</td>
+                </tr>
+                <tr>
+                  <td data-row="7" data-col="1">Satisfaction with health</td>
+                  <td data-row="7" data-col="2">Lower secondary</td>
+                  <td data-row="7" data-col="3">2.71</td>
+                  <td data-row="7" data-col="4">1.20</td>
+                  <td data-row="7" data-col="5">1.00</td>
+                  <td data-row="7" data-col="6">5.00</td>
+                  <td data-row="7" data-col="7">2.57</td>
+                  <td data-row="7" data-col="8">2.86</td>
+                  <td data-row="7" data-col="9">259</td>
+                </tr>
+                <tr>
+                  <td data-row="8" data-col="1"></td>
+                  <td data-row="8" data-col="2">Upper secondary</td>
+                  <td data-row="8" data-col="3">3.53</td>
+                  <td data-row="8" data-col="4">1.19</td>
+                  <td data-row="8" data-col="5">1.00</td>
+                  <td data-row="8" data-col="6">5.00</td>
+                  <td data-row="8" data-col="7">3.43</td>
+                  <td data-row="8" data-col="8">3.63</td>
+                  <td data-row="8" data-col="9">534</td>
+                </tr>
+                <tr>
+                  <td data-row="9" data-col="1"></td>
+                  <td data-row="9" data-col="2">Tertiary</td>
+                  <td data-row="9" data-col="3">4.11</td>
+                  <td data-row="9" data-col="4">1.04</td>
+                  <td data-row="9" data-col="5">1.00</td>
+                  <td data-row="9" data-col="6">5.00</td>
+                  <td data-row="9" data-col="7">4.01</td>
+                  <td data-row="9" data-col="8">4.21</td>
+                  <td data-row="9" data-col="9">399</td>
+                </tr>
+        </tbody>
+      </table>
+    </div>
+<!-- hack to avoid NA insertion in last line -->
+<p>The same argument pattern works in both cases:</p>
+<ul>
+<li><code>select</code> chooses the reported variables;</li>
+<li><code>by</code> defines the grouping structure;</li>
+<li><code>labels</code> cleans up the row labels;</li>
+<li><code>output</code> decides how the result is rendered or
+exported.</li>
+</ul>
+</div>
+<div id="a-practical-reporting-sequence" class="section level2">
+<h2>A practical reporting sequence</h2>
+<p>A common report contains both table types, often with the same
+grouping variable. For example, you might first summarize categorical
+health behaviors, then summarize continuous well-being indicators.</p>
+<div id="categorical-variables" class="section level3">
+<h3>Categorical variables</h3>
+<div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">pkgdown_dark_gt</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  <span class="fu">table_categorical</span>(</span>
+<span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>    sochealth,</span>
+<span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity, dentist_12m),</span>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>    <span class="at">by =</span> education,</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>    <span class="at">labels =</span> <span class="fu">c</span>(</span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>      <span class="st">&quot;Smoking status&quot;</span>,</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a>      <span class="st">&quot;Regular physical activity&quot;</span>,</span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a>      <span class="st">&quot;Visited a dentist in the last 12 months&quot;</span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a>    ),</span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;gt&quot;</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a>  )</span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a>)</span></code></pre></div>
+<div id="gwmidpjyal" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#gwmidpjyal table {
+font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+#gwmidpjyal thead, #gwmidpjyal tbody, #gwmidpjyal tfoot, #gwmidpjyal tr, #gwmidpjyal td, #gwmidpjyal th {
+border-style: none;
+}
+#gwmidpjyal p {
+margin: 0;
+padding: 0;
+}
+#gwmidpjyal .gt_table {
+display: table;
+border-collapse: collapse;
+line-height: normal;
+margin-left: auto;
+margin-right: auto;
+color: #333333;
+font-size: 16px;
+font-weight: normal;
+font-style: normal;
+background-color: #FFFFFF;
+width: auto;
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #A8A8A8;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #A8A8A8;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+}
+#gwmidpjyal .gt_caption {
+padding-top: 4px;
+padding-bottom: 4px;
+}
+#gwmidpjyal .gt_title {
+color: #333333;
+font-size: 125%;
+font-weight: initial;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-color: #FFFFFF;
+border-bottom-width: 0;
+}
+#gwmidpjyal .gt_subtitle {
+color: #333333;
+font-size: 85%;
+font-weight: initial;
+padding-top: 3px;
+padding-bottom: 5px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-color: #FFFFFF;
+border-top-width: 0;
+}
+#gwmidpjyal .gt_heading {
+background-color: #FFFFFF;
+text-align: center;
+border-bottom-color: #FFFFFF;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+}
+#gwmidpjyal .gt_bottom_border {
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#gwmidpjyal .gt_col_headings {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: rgba(255, 255, 255, 0);
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: rgba(255, 255, 255, 0);
+}
+#gwmidpjyal .gt_col_heading {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 6px;
+padding-left: 5px;
+padding-right: 5px;
+overflow-x: hidden;
+}
+#gwmidpjyal .gt_column_spanner_outer {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+padding-top: 0;
+padding-bottom: 0;
+padding-left: 4px;
+padding-right: 4px;
+}
+#gwmidpjyal .gt_column_spanner_outer:first-child {
+padding-left: 0;
+}
+#gwmidpjyal .gt_column_spanner_outer:last-child {
+padding-right: 0;
+}
+#gwmidpjyal .gt_column_spanner {
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 5px;
+overflow-x: hidden;
+display: inline-block;
+width: 100%;
+}
+#gwmidpjyal .gt_spanner_row {
+border-bottom-style: hidden;
+}
+#gwmidpjyal .gt_group_heading {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+text-align: left;
+}
+#gwmidpjyal .gt_empty_group_heading {
+padding: 0.5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+vertical-align: middle;
+}
+#gwmidpjyal .gt_from_md > :first-child {
+margin-top: 0;
+}
+#gwmidpjyal .gt_from_md > :last-child {
+margin-bottom: 0;
+}
+#gwmidpjyal .gt_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+margin: 10px;
+border-top-style: solid;
+border-top-width: 1px;
+border-top-color: rgba(255, 255, 255, 0);
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+overflow-x: hidden;
+}
+#gwmidpjyal .gt_stub {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+}
+#gwmidpjyal .gt_stub_row_group {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+vertical-align: top;
+}
+#gwmidpjyal .gt_row_group_first td {
+border-top-width: 2px;
+}
+#gwmidpjyal .gt_row_group_first th {
+border-top-width: 2px;
+}
+#gwmidpjyal .gt_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#gwmidpjyal .gt_first_summary_row {
+border-top-style: solid;
+border-top-color: #D3D3D3;
+}
+#gwmidpjyal .gt_first_summary_row.thick {
+border-top-width: 2px;
+}
+#gwmidpjyal .gt_last_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#gwmidpjyal .gt_grand_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#gwmidpjyal .gt_first_grand_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-style: double;
+border-top-width: 6px;
+border-top-color: #D3D3D3;
+}
+#gwmidpjyal .gt_last_grand_summary_row_top {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: double;
+border-bottom-width: 6px;
+border-bottom-color: #D3D3D3;
+}
+#gwmidpjyal .gt_striped {
+background-color: rgba(128, 128, 128, 0.05);
+}
+#gwmidpjyal .gt_table_body {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+}
+#gwmidpjyal .gt_footnotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#gwmidpjyal .gt_footnote {
+margin: 0px;
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#gwmidpjyal .gt_sourcenotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#gwmidpjyal .gt_sourcenote {
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#gwmidpjyal .gt_left {
+text-align: left;
+}
+#gwmidpjyal .gt_center {
+text-align: center;
+}
+#gwmidpjyal .gt_right {
+text-align: right;
+font-variant-numeric: tabular-nums;
+}
+#gwmidpjyal .gt_font_normal {
+font-weight: normal;
+}
+#gwmidpjyal .gt_font_bold {
+font-weight: bold;
+}
+#gwmidpjyal .gt_font_italic {
+font-style: italic;
+}
+#gwmidpjyal .gt_super {
+font-size: 65%;
+}
+#gwmidpjyal .gt_footnote_marks {
+font-size: 75%;
+vertical-align: 0.4em;
+position: initial;
+}
+#gwmidpjyal .gt_asterisk {
+font-size: 100%;
+vertical-align: 0;
+}
+#gwmidpjyal .gt_indent_1 {
+text-indent: 5px;
+}
+#gwmidpjyal .gt_indent_2 {
+text-indent: 10px;
+}
+#gwmidpjyal .gt_indent_3 {
+text-indent: 15px;
+}
+#gwmidpjyal .gt_indent_4 {
+text-indent: 20px;
+}
+#gwmidpjyal .gt_indent_5 {
+text-indent: 25px;
+}
+#gwmidpjyal .katex-display {
+display: inline-flex !important;
+margin-bottom: 0.75em !important;
+}
+#gwmidpjyal div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+height: 0px !important;
+}
+.gt_table thead tr:first-child {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr.gt_spanner_row {
+border-bottom-style: none !important;
+}
+.gt_table thead th, .gt_table thead td {
+background-color: transparent !important;
+}
+.gt_table thead tr:last-child th[id="Lower secondary_n"],
+.gt_table thead tr:last-child th[id="Lower secondary_pct"],
+.gt_table thead tr:last-child th[id="Upper secondary_n"],
+.gt_table thead tr:last-child th[id="Upper secondary_pct"],
+.gt_table thead tr:last-child th[id="Tertiary_n"],
+.gt_table thead tr:last-child th[id="Tertiary_pct"],
+.gt_table thead tr:last-child th[id="Total_n"],
+.gt_table thead tr:last-child th[id="Total_pct"] {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr {
+border-top-style: none !important;
+border-bottom-style: none !important;
+}
+.gt_table, .gt_heading, .gt_col_headings, .gt_col_heading,
+.gt_column_spanner_outer, .gt_column_spanner, .gt_title,
+.gt_subtitle, .gt_sourcenotes, .gt_sourcenote {
+background-color: transparent !important;
+color: currentColor !important;
+}
+</style>
+<table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
+  <thead>
+    <tr class="gt_col_headings gt_spanner_row">
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="text-align: left; border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_variable">
+        <div class="gt_column_spanner">Variable</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Lower secondary">
+        <div class="gt_column_spanner">Lower secondary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Upper secondary">
+        <div class="gt_column_spanner">Upper secondary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Tertiary">
+        <div class="gt_column_spanner">Tertiary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Total">
+        <div class="gt_column_spanner">Total</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_p">
+        <div class="gt_column_spanner">p</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_v">
+        <div class="gt_column_spanner">Cramer&#39;s V</div>
+      </th>
+    </tr>
+    <tr class="gt_col_headings">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Variable"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Lower-secondary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Lower-secondary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Upper-secondary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Upper-secondary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Tertiary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Tertiary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Total_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Total_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="p"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="assoc_col"></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="Variable" class="gt_row gt_left">Smoking status</td>
+<td headers="Lower secondary_n" class="gt_row gt_center"></td>
+<td headers="Lower secondary_pct" class="gt_row gt_center"></td>
+<td headers="Upper secondary_n" class="gt_row gt_center"></td>
+<td headers="Upper secondary_pct" class="gt_row gt_center"></td>
+<td headers="Tertiary_n" class="gt_row gt_center"></td>
+<td headers="Tertiary_pct" class="gt_row gt_center"></td>
+<td headers="Total_n" class="gt_row gt_center"></td>
+<td headers="Total_pct" class="gt_row gt_center"></td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="assoc_col" class="gt_row gt_right">.14</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    No</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">179</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">69.6</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">415</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">78.7</td>
+<td headers="Tertiary_n" class="gt_row gt_center">332</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">84.9</td>
+<td headers="Total_n" class="gt_row gt_center">926</td>
+<td headers="Total_pct" class="gt_row gt_center">78.8</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    Yes</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">78</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">30.4</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">112</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">21.3</td>
+<td headers="Tertiary_n" class="gt_row gt_center">59</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">15.1</td>
+<td headers="Total_n" class="gt_row gt_center">249</td>
+<td headers="Total_pct" class="gt_row gt_center">21.2</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">Regular physical activity</td>
+<td headers="Lower secondary_n" class="gt_row gt_center"></td>
+<td headers="Lower secondary_pct" class="gt_row gt_center"></td>
+<td headers="Upper secondary_n" class="gt_row gt_center"></td>
+<td headers="Upper secondary_pct" class="gt_row gt_center"></td>
+<td headers="Tertiary_n" class="gt_row gt_center"></td>
+<td headers="Tertiary_pct" class="gt_row gt_center"></td>
+<td headers="Total_n" class="gt_row gt_center"></td>
+<td headers="Total_pct" class="gt_row gt_center"></td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="assoc_col" class="gt_row gt_right">.21</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    No</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">177</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">67.8</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">310</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">57.5</td>
+<td headers="Tertiary_n" class="gt_row gt_center">163</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">40.8</td>
+<td headers="Total_n" class="gt_row gt_center">650</td>
+<td headers="Total_pct" class="gt_row gt_center">54.2</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    Yes</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">84</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">32.2</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">229</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">42.5</td>
+<td headers="Tertiary_n" class="gt_row gt_center">237</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">59.2</td>
+<td headers="Total_n" class="gt_row gt_center">550</td>
+<td headers="Total_pct" class="gt_row gt_center">45.8</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">Visited a dentist in the last 12 months</td>
+<td headers="Lower secondary_n" class="gt_row gt_center"></td>
+<td headers="Lower secondary_pct" class="gt_row gt_center"></td>
+<td headers="Upper secondary_n" class="gt_row gt_center"></td>
+<td headers="Upper secondary_pct" class="gt_row gt_center"></td>
+<td headers="Tertiary_n" class="gt_row gt_center"></td>
+<td headers="Tertiary_pct" class="gt_row gt_center"></td>
+<td headers="Total_n" class="gt_row gt_center"></td>
+<td headers="Total_pct" class="gt_row gt_center"></td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="assoc_col" class="gt_row gt_right">.22</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    No</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">113</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">43.3</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">174</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">32.3</td>
+<td headers="Tertiary_n" class="gt_row gt_center">67</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">16.8</td>
+<td headers="Total_n" class="gt_row gt_center">354</td>
+<td headers="Total_pct" class="gt_row gt_center">29.5</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">    Yes</td>
+<td headers="Lower secondary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">148</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">56.7</td>
+<td headers="Upper secondary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">365</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">67.7</td>
+<td headers="Tertiary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">333</td>
+<td headers="Tertiary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">83.2</td>
+<td headers="Total_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">846</td>
+<td headers="Total_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">70.5</td>
+<td headers="p" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td>
+<td headers="assoc_col" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td></tr>
+  </tbody>
+  
+</table>
+</div>
+</div>
+<div id="continuous-variables" class="section level3">
+<h3>Continuous variables</h3>
+<div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a><span class="fu">pkgdown_dark_gt</span>(</span>
+<span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  <span class="fu">table_continuous</span>(</span>
+<span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>    sochealth,</span>
+<span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score, life_sat_health),</span>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>    <span class="at">by =</span> education,</span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>    <span class="at">labels =</span> <span class="fu">c</span>(</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>      <span class="at">bmi =</span> <span class="st">&quot;Body mass index&quot;</span>,</span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a>      <span class="at">wellbeing_score =</span> <span class="st">&quot;Well-being score&quot;</span>,</span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a>      <span class="at">life_sat_health =</span> <span class="st">&quot;Satisfaction with health&quot;</span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a>    ),</span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a>    <span class="at">p_value =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a>    <span class="at">effect_size =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;gt&quot;</span></span>
+<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a>  )</span>
+<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a>)</span></code></pre></div>
+<div id="hkiruofuqb" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#hkiruofuqb table {
+font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+#hkiruofuqb thead, #hkiruofuqb tbody, #hkiruofuqb tfoot, #hkiruofuqb tr, #hkiruofuqb td, #hkiruofuqb th {
+border-style: none;
+}
+#hkiruofuqb p {
+margin: 0;
+padding: 0;
+}
+#hkiruofuqb .gt_table {
+display: table;
+border-collapse: collapse;
+line-height: normal;
+margin-left: auto;
+margin-right: auto;
+color: #333333;
+font-size: 16px;
+font-weight: normal;
+font-style: normal;
+background-color: #FFFFFF;
+width: auto;
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #A8A8A8;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #A8A8A8;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+}
+#hkiruofuqb .gt_caption {
+padding-top: 4px;
+padding-bottom: 4px;
+}
+#hkiruofuqb .gt_title {
+color: #333333;
+font-size: 125%;
+font-weight: initial;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-color: #FFFFFF;
+border-bottom-width: 0;
+}
+#hkiruofuqb .gt_subtitle {
+color: #333333;
+font-size: 85%;
+font-weight: initial;
+padding-top: 3px;
+padding-bottom: 5px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-color: #FFFFFF;
+border-top-width: 0;
+}
+#hkiruofuqb .gt_heading {
+background-color: #FFFFFF;
+text-align: center;
+border-bottom-color: #FFFFFF;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+}
+#hkiruofuqb .gt_bottom_border {
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#hkiruofuqb .gt_col_headings {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: rgba(255, 255, 255, 0);
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: rgba(255, 255, 255, 0);
+}
+#hkiruofuqb .gt_col_heading {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 6px;
+padding-left: 5px;
+padding-right: 5px;
+overflow-x: hidden;
+}
+#hkiruofuqb .gt_column_spanner_outer {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+padding-top: 0;
+padding-bottom: 0;
+padding-left: 4px;
+padding-right: 4px;
+}
+#hkiruofuqb .gt_column_spanner_outer:first-child {
+padding-left: 0;
+}
+#hkiruofuqb .gt_column_spanner_outer:last-child {
+padding-right: 0;
+}
+#hkiruofuqb .gt_column_spanner {
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 5px;
+overflow-x: hidden;
+display: inline-block;
+width: 100%;
+}
+#hkiruofuqb .gt_spanner_row {
+border-bottom-style: hidden;
+}
+#hkiruofuqb .gt_group_heading {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+text-align: left;
+}
+#hkiruofuqb .gt_empty_group_heading {
+padding: 0.5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+vertical-align: middle;
+}
+#hkiruofuqb .gt_from_md > :first-child {
+margin-top: 0;
+}
+#hkiruofuqb .gt_from_md > :last-child {
+margin-bottom: 0;
+}
+#hkiruofuqb .gt_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+margin: 10px;
+border-top-style: solid;
+border-top-width: 1px;
+border-top-color: rgba(255, 255, 255, 0);
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+overflow-x: hidden;
+}
+#hkiruofuqb .gt_stub {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+}
+#hkiruofuqb .gt_stub_row_group {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+vertical-align: top;
+}
+#hkiruofuqb .gt_row_group_first td {
+border-top-width: 2px;
+}
+#hkiruofuqb .gt_row_group_first th {
+border-top-width: 2px;
+}
+#hkiruofuqb .gt_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#hkiruofuqb .gt_first_summary_row {
+border-top-style: solid;
+border-top-color: #D3D3D3;
+}
+#hkiruofuqb .gt_first_summary_row.thick {
+border-top-width: 2px;
+}
+#hkiruofuqb .gt_last_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#hkiruofuqb .gt_grand_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#hkiruofuqb .gt_first_grand_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-style: double;
+border-top-width: 6px;
+border-top-color: #D3D3D3;
+}
+#hkiruofuqb .gt_last_grand_summary_row_top {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: double;
+border-bottom-width: 6px;
+border-bottom-color: #D3D3D3;
+}
+#hkiruofuqb .gt_striped {
+background-color: rgba(128, 128, 128, 0.05);
+}
+#hkiruofuqb .gt_table_body {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+}
+#hkiruofuqb .gt_footnotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#hkiruofuqb .gt_footnote {
+margin: 0px;
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#hkiruofuqb .gt_sourcenotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#hkiruofuqb .gt_sourcenote {
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#hkiruofuqb .gt_left {
+text-align: left;
+}
+#hkiruofuqb .gt_center {
+text-align: center;
+}
+#hkiruofuqb .gt_right {
+text-align: right;
+font-variant-numeric: tabular-nums;
+}
+#hkiruofuqb .gt_font_normal {
+font-weight: normal;
+}
+#hkiruofuqb .gt_font_bold {
+font-weight: bold;
+}
+#hkiruofuqb .gt_font_italic {
+font-style: italic;
+}
+#hkiruofuqb .gt_super {
+font-size: 65%;
+}
+#hkiruofuqb .gt_footnote_marks {
+font-size: 75%;
+vertical-align: 0.4em;
+position: initial;
+}
+#hkiruofuqb .gt_asterisk {
+font-size: 100%;
+vertical-align: 0;
+}
+#hkiruofuqb .gt_indent_1 {
+text-indent: 5px;
+}
+#hkiruofuqb .gt_indent_2 {
+text-indent: 10px;
+}
+#hkiruofuqb .gt_indent_3 {
+text-indent: 15px;
+}
+#hkiruofuqb .gt_indent_4 {
+text-indent: 20px;
+}
+#hkiruofuqb .gt_indent_5 {
+text-indent: 25px;
+}
+#hkiruofuqb .katex-display {
+display: inline-flex !important;
+margin-bottom: 0.75em !important;
+}
+#hkiruofuqb div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+height: 0px !important;
+}
+.gt_table thead tr:first-child {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr.gt_spanner_row {
+border-bottom-style: none !important;
+}
+.gt_table thead th, .gt_table thead td {
+background-color: transparent !important;
+}
+.gt_table thead tr:last-child th[id="LL"],
+.gt_table thead tr:last-child th[id="UL"] {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr {
+border-top-style: none !important;
+border-bottom-style: none !important;
+}
+.gt_table, .gt_heading, .gt_col_headings, .gt_col_heading,
+.gt_column_spanner_outer, .gt_column_spanner, .gt_title,
+.gt_subtitle, .gt_sourcenotes, .gt_sourcenote {
+background-color: transparent !important;
+color: currentColor !important;
+}
+</style>
+<table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
+  <thead>
+    <tr class="gt_col_headings gt_spanner_row">
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="text-align: left; border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_Variable">
+        <div class="gt_column_spanner">Variable</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="text-align: left; border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_Group">
+        <div class="gt_column_spanner">Group</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_M">
+        <div class="gt_column_spanner">M</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_SD">
+        <div class="gt_column_spanner">SD</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_Min">
+        <div class="gt_column_spanner">Min</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_Max">
+        <div class="gt_column_spanner">Max</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="95% CI">
+        <div class="gt_column_spanner">95% CI</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_n">
+        <div class="gt_column_spanner">n</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_p">
+        <div class="gt_column_spanner">p</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_ES">
+        <div class="gt_column_spanner">ES</div>
+      </th>
+    </tr>
+    <tr class="gt_col_headings">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Variable"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Group"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="M"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="SD"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Min"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Max"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="LL">LL</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="UL">UL</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="n"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="p"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="ES"></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="Variable" class="gt_row gt_left">Body mass index</td>
+<td headers="Group" class="gt_row gt_left">Lower secondary</td>
+<td headers="M" class="gt_row gt_center">28.09</td>
+<td headers="SD" class="gt_row gt_center">3.47</td>
+<td headers="Min" class="gt_row gt_center">18.20</td>
+<td headers="Max" class="gt_row gt_center">38.90</td>
+<td headers="LL" class="gt_row gt_center">27.66</td>
+<td headers="UL" class="gt_row gt_center">28.51</td>
+<td headers="n" class="gt_row gt_right">260</td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="ES" class="gt_row gt_center">η² = 0.13</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left"></td>
+<td headers="Group" class="gt_row gt_left">Upper secondary</td>
+<td headers="M" class="gt_row gt_center">26.02</td>
+<td headers="SD" class="gt_row gt_center">3.43</td>
+<td headers="Min" class="gt_row gt_center">16.00</td>
+<td headers="Max" class="gt_row gt_center">37.10</td>
+<td headers="LL" class="gt_row gt_center">25.73</td>
+<td headers="UL" class="gt_row gt_center">26.31</td>
+<td headers="n" class="gt_row gt_right">534</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="ES" class="gt_row gt_center"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td>
+<td headers="Group" class="gt_row gt_left" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">Tertiary</td>
+<td headers="M" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">24.39</td>
+<td headers="SD" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">3.52</td>
+<td headers="Min" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">16.00</td>
+<td headers="Max" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">33.00</td>
+<td headers="LL" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">24.04</td>
+<td headers="UL" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">24.74</td>
+<td headers="n" class="gt_row gt_right" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">394</td>
+<td headers="p" class="gt_row gt_right" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td>
+<td headers="ES" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">Well-being score</td>
+<td headers="Group" class="gt_row gt_left">Lower secondary</td>
+<td headers="M" class="gt_row gt_center">57.22</td>
+<td headers="SD" class="gt_row gt_center">15.44</td>
+<td headers="Min" class="gt_row gt_center">18.70</td>
+<td headers="Max" class="gt_row gt_center">97.90</td>
+<td headers="LL" class="gt_row gt_center">55.33</td>
+<td headers="UL" class="gt_row gt_center">59.10</td>
+<td headers="n" class="gt_row gt_right">261</td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="ES" class="gt_row gt_center">η² = 0.21</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left"></td>
+<td headers="Group" class="gt_row gt_left">Upper secondary</td>
+<td headers="M" class="gt_row gt_center">68.97</td>
+<td headers="SD" class="gt_row gt_center">13.62</td>
+<td headers="Min" class="gt_row gt_center">26.70</td>
+<td headers="Max" class="gt_row gt_center">100.00</td>
+<td headers="LL" class="gt_row gt_center">67.82</td>
+<td headers="UL" class="gt_row gt_center">70.12</td>
+<td headers="n" class="gt_row gt_right">539</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="ES" class="gt_row gt_center"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td>
+<td headers="Group" class="gt_row gt_left" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">Tertiary</td>
+<td headers="M" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">76.85</td>
+<td headers="SD" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">13.23</td>
+<td headers="Min" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">40.40</td>
+<td headers="Max" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">100.00</td>
+<td headers="LL" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">75.55</td>
+<td headers="UL" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">78.15</td>
+<td headers="n" class="gt_row gt_right" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;">400</td>
+<td headers="p" class="gt_row gt_right" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td>
+<td headers="ES" class="gt_row gt_center" style="border-bottom-width: 0.5px; border-bottom-style: solid; border-bottom-color: #cccccc;"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">Satisfaction with health</td>
+<td headers="Group" class="gt_row gt_left">Lower secondary</td>
+<td headers="M" class="gt_row gt_center">2.71</td>
+<td headers="SD" class="gt_row gt_center">1.20</td>
+<td headers="Min" class="gt_row gt_center">1.00</td>
+<td headers="Max" class="gt_row gt_center">5.00</td>
+<td headers="LL" class="gt_row gt_center">2.57</td>
+<td headers="UL" class="gt_row gt_center">2.86</td>
+<td headers="n" class="gt_row gt_right">259</td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="ES" class="gt_row gt_center">η² = 0.16</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left"></td>
+<td headers="Group" class="gt_row gt_left">Upper secondary</td>
+<td headers="M" class="gt_row gt_center">3.53</td>
+<td headers="SD" class="gt_row gt_center">1.19</td>
+<td headers="Min" class="gt_row gt_center">1.00</td>
+<td headers="Max" class="gt_row gt_center">5.00</td>
+<td headers="LL" class="gt_row gt_center">3.43</td>
+<td headers="UL" class="gt_row gt_center">3.63</td>
+<td headers="n" class="gt_row gt_right">534</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="ES" class="gt_row gt_center"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td>
+<td headers="Group" class="gt_row gt_left" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">Tertiary</td>
+<td headers="M" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">4.11</td>
+<td headers="SD" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">1.04</td>
+<td headers="Min" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">1.00</td>
+<td headers="Max" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">5.00</td>
+<td headers="LL" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">4.01</td>
+<td headers="UL" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">4.21</td>
+<td headers="n" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">399</td>
+<td headers="p" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td>
+<td headers="ES" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td></tr>
+  </tbody>
+  
+</table>
+</div>
+<p>This keeps the reporting structure consistent while still using the
+function that fits each variable type.</p>
+</div>
+</div>
+<div id="choose-the-output-format" class="section level2">
+<h2>Choose the output format</h2>
+<p>Both functions support the same reporting formats:</p>
+<table>
+<thead>
+<tr class="header">
+<th align="left">Output</th>
+<th align="left">Best use</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td align="left"><code>&quot;default&quot;</code></td>
+<td align="left">Quick console review in plain ASCII</td>
+</tr>
+<tr class="even">
+<td align="left"><code>&quot;tinytable&quot;</code></td>
+<td align="left">Quarto or R Markdown documents</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>&quot;gt&quot;</code></td>
+<td align="left">HTML output with styled reporting tables</td>
+</tr>
+<tr class="even">
+<td align="left"><code>&quot;flextable&quot;</code></td>
+<td align="left">Office-first workflows; also renders in HTML</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>&quot;excel&quot;</code></td>
+<td align="left">Spreadsheet handoff or downstream editing</td>
+</tr>
+<tr class="even">
+<td align="left"><code>&quot;word&quot;</code></td>
+<td align="left">Direct <code>.docx</code> export</td>
+</tr>
+<tr class="odd">
+<td align="left"><code>&quot;clipboard&quot;</code></td>
+<td align="left">Fast pasting into another application</td>
+</tr>
+</tbody>
+</table>
+<p>Pick the output based on where the table is going, not on the
+analysis itself. The underlying selection and grouping pattern stays the
+same.</p>
+<p>If you want an object that fits naturally into Word and PowerPoint
+workflows but can also be rendered in HTML documents,
+<code>flextable</code> is a good choice:</p>
+<div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">requireNamespace</span>(<span class="st">&quot;flextable&quot;</span>, <span class="at">quietly =</span> <span class="cn">TRUE</span>)) {</span>
+<span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  <span class="fu">table_continuous</span>(</span>
+<span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>    sochealth,</span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score, life_sat_health),</span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>    <span class="at">by =</span> education,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;flextable&quot;</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  )</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>}</span></code></pre></div>
+</div>
+<div id="post-process-the-returned-table-object" class="section level2">
+<h2>Post-process the returned table object</h2>
+<p>Both summary-table helpers return regular <code>gt</code>,
+<code>tinytable</code>, or <code>flextable</code> objects, so you can
+keep styling them with the native package API.</p>
+<p>Use <code>gt::</code> functions when you want to keep the
+<code>gt</code> workflow:</p>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a>tab <span class="ot">&lt;-</span> <span class="fu">pkgdown_dark_gt</span>(<span class="fu">table_categorical</span>(</span>
+<span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity),</span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Smoking status&quot;</span>, <span class="st">&quot;Regular physical activity&quot;</span>),</span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;gt&quot;</span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>))</span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>tab <span class="sc">|&gt;</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a>  gt<span class="sc">::</span><span class="fu">tab_header</span>(</span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a>    <span class="at">title =</span> <span class="st">&quot;Health behaviors by education&quot;</span>,</span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a>    <span class="at">subtitle =</span> <span class="st">&quot;Categorical summary table&quot;</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a>  gt<span class="sc">::</span><span class="fu">tab_source_note</span>(</span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a>    gt<span class="sc">::</span><span class="fu">md</span>(<span class="st">&quot;*Percentages are computed within each education group.*&quot;</span>)</span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a>  )</span></code></pre></div>
+<div id="obesbfpvjq" style="padding-left:0px;padding-right:0px;padding-top:10px;padding-bottom:10px;overflow-x:auto;overflow-y:auto;width:auto;height:auto;">
+<style>#obesbfpvjq table {
+font-family: system-ui, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+#obesbfpvjq thead, #obesbfpvjq tbody, #obesbfpvjq tfoot, #obesbfpvjq tr, #obesbfpvjq td, #obesbfpvjq th {
+border-style: none;
+}
+#obesbfpvjq p {
+margin: 0;
+padding: 0;
+}
+#obesbfpvjq .gt_table {
+display: table;
+border-collapse: collapse;
+line-height: normal;
+margin-left: auto;
+margin-right: auto;
+color: #333333;
+font-size: 16px;
+font-weight: normal;
+font-style: normal;
+background-color: #FFFFFF;
+width: auto;
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #A8A8A8;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #A8A8A8;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+}
+#obesbfpvjq .gt_caption {
+padding-top: 4px;
+padding-bottom: 4px;
+}
+#obesbfpvjq .gt_title {
+color: #333333;
+font-size: 125%;
+font-weight: initial;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-color: #FFFFFF;
+border-bottom-width: 0;
+}
+#obesbfpvjq .gt_subtitle {
+color: #333333;
+font-size: 85%;
+font-weight: initial;
+padding-top: 3px;
+padding-bottom: 5px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-color: #FFFFFF;
+border-top-width: 0;
+}
+#obesbfpvjq .gt_heading {
+background-color: #FFFFFF;
+text-align: center;
+border-bottom-color: #FFFFFF;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+}
+#obesbfpvjq .gt_bottom_border {
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#obesbfpvjq .gt_col_headings {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: rgba(255, 255, 255, 0);
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: rgba(255, 255, 255, 0);
+}
+#obesbfpvjq .gt_col_heading {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 6px;
+padding-left: 5px;
+padding-right: 5px;
+overflow-x: hidden;
+}
+#obesbfpvjq .gt_column_spanner_outer {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: normal;
+text-transform: inherit;
+padding-top: 0;
+padding-bottom: 0;
+padding-left: 4px;
+padding-right: 4px;
+}
+#obesbfpvjq .gt_column_spanner_outer:first-child {
+padding-left: 0;
+}
+#obesbfpvjq .gt_column_spanner_outer:last-child {
+padding-right: 0;
+}
+#obesbfpvjq .gt_column_spanner {
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+vertical-align: bottom;
+padding-top: 5px;
+padding-bottom: 5px;
+overflow-x: hidden;
+display: inline-block;
+width: 100%;
+}
+#obesbfpvjq .gt_spanner_row {
+border-bottom-style: hidden;
+}
+#obesbfpvjq .gt_group_heading {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+text-align: left;
+}
+#obesbfpvjq .gt_empty_group_heading {
+padding: 0.5px;
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+border-top-style: solid;
+border-top-width: 2px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+vertical-align: middle;
+}
+#obesbfpvjq .gt_from_md > :first-child {
+margin-top: 0;
+}
+#obesbfpvjq .gt_from_md > :last-child {
+margin-bottom: 0;
+}
+#obesbfpvjq .gt_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+margin: 10px;
+border-top-style: solid;
+border-top-width: 1px;
+border-top-color: rgba(255, 255, 255, 0);
+border-left-style: none;
+border-left-width: 1px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 1px;
+border-right-color: #D3D3D3;
+vertical-align: middle;
+overflow-x: hidden;
+}
+#obesbfpvjq .gt_stub {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+}
+#obesbfpvjq .gt_stub_row_group {
+color: #333333;
+background-color: #FFFFFF;
+font-size: 100%;
+font-weight: initial;
+text-transform: inherit;
+border-right-style: solid;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+padding-left: 5px;
+padding-right: 5px;
+vertical-align: top;
+}
+#obesbfpvjq .gt_row_group_first td {
+border-top-width: 2px;
+}
+#obesbfpvjq .gt_row_group_first th {
+border-top-width: 2px;
+}
+#obesbfpvjq .gt_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#obesbfpvjq .gt_first_summary_row {
+border-top-style: solid;
+border-top-color: #D3D3D3;
+}
+#obesbfpvjq .gt_first_summary_row.thick {
+border-top-width: 2px;
+}
+#obesbfpvjq .gt_last_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: solid;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+}
+#obesbfpvjq .gt_grand_summary_row {
+color: #333333;
+background-color: #FFFFFF;
+text-transform: inherit;
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#obesbfpvjq .gt_first_grand_summary_row {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-top-style: double;
+border-top-width: 6px;
+border-top-color: #D3D3D3;
+}
+#obesbfpvjq .gt_last_grand_summary_row_top {
+padding-top: 8px;
+padding-bottom: 8px;
+padding-left: 5px;
+padding-right: 5px;
+border-bottom-style: double;
+border-bottom-width: 6px;
+border-bottom-color: #D3D3D3;
+}
+#obesbfpvjq .gt_striped {
+background-color: rgba(128, 128, 128, 0.05);
+}
+#obesbfpvjq .gt_table_body {
+border-top-style: solid;
+border-top-width: 0px;
+border-top-color: #D3D3D3;
+border-bottom-style: solid;
+border-bottom-width: 0px;
+border-bottom-color: #D3D3D3;
+}
+#obesbfpvjq .gt_footnotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#obesbfpvjq .gt_footnote {
+margin: 0px;
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#obesbfpvjq .gt_sourcenotes {
+color: #333333;
+background-color: #FFFFFF;
+border-bottom-style: none;
+border-bottom-width: 2px;
+border-bottom-color: #D3D3D3;
+border-left-style: none;
+border-left-width: 2px;
+border-left-color: #D3D3D3;
+border-right-style: none;
+border-right-width: 2px;
+border-right-color: #D3D3D3;
+}
+#obesbfpvjq .gt_sourcenote {
+font-size: 90%;
+padding-top: 4px;
+padding-bottom: 4px;
+padding-left: 5px;
+padding-right: 5px;
+}
+#obesbfpvjq .gt_left {
+text-align: left;
+}
+#obesbfpvjq .gt_center {
+text-align: center;
+}
+#obesbfpvjq .gt_right {
+text-align: right;
+font-variant-numeric: tabular-nums;
+}
+#obesbfpvjq .gt_font_normal {
+font-weight: normal;
+}
+#obesbfpvjq .gt_font_bold {
+font-weight: bold;
+}
+#obesbfpvjq .gt_font_italic {
+font-style: italic;
+}
+#obesbfpvjq .gt_super {
+font-size: 65%;
+}
+#obesbfpvjq .gt_footnote_marks {
+font-size: 75%;
+vertical-align: 0.4em;
+position: initial;
+}
+#obesbfpvjq .gt_asterisk {
+font-size: 100%;
+vertical-align: 0;
+}
+#obesbfpvjq .gt_indent_1 {
+text-indent: 5px;
+}
+#obesbfpvjq .gt_indent_2 {
+text-indent: 10px;
+}
+#obesbfpvjq .gt_indent_3 {
+text-indent: 15px;
+}
+#obesbfpvjq .gt_indent_4 {
+text-indent: 20px;
+}
+#obesbfpvjq .gt_indent_5 {
+text-indent: 25px;
+}
+#obesbfpvjq .katex-display {
+display: inline-flex !important;
+margin-bottom: 0.75em !important;
+}
+#obesbfpvjq div.Reactable > div.rt-table > div.rt-thead > div.rt-tr.rt-tr-group-header > div.rt-th-group:after {
+height: 0px !important;
+}
+.gt_table thead tr:first-child {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr.gt_spanner_row {
+border-bottom-style: none !important;
+}
+.gt_table thead th, .gt_table thead td {
+background-color: transparent !important;
+}
+.gt_table thead tr:last-child th[id="Lower secondary_n"],
+.gt_table thead tr:last-child th[id="Lower secondary_pct"],
+.gt_table thead tr:last-child th[id="Upper secondary_n"],
+.gt_table thead tr:last-child th[id="Upper secondary_pct"],
+.gt_table thead tr:last-child th[id="Tertiary_n"],
+.gt_table thead tr:last-child th[id="Tertiary_pct"],
+.gt_table thead tr:last-child th[id="Total_n"],
+.gt_table thead tr:last-child th[id="Total_pct"] {
+border-top: 1px solid currentColor !important;
+}
+.gt_table thead tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr:last-child {
+border-bottom: 1px solid currentColor !important;
+}
+.gt_table tbody tr {
+border-top-style: none !important;
+border-bottom-style: none !important;
+}
+.gt_table, .gt_heading, .gt_col_headings, .gt_col_heading,
+.gt_column_spanner_outer, .gt_column_spanner, .gt_title,
+.gt_subtitle, .gt_sourcenotes, .gt_sourcenote {
+background-color: transparent !important;
+color: currentColor !important;
+}
+</style>
+<table class="gt_table" data-quarto-disable-processing="false" data-quarto-bootstrap="false">
+  <thead>
+    <tr class="gt_heading">
+      <td colspan="11" class="gt_heading gt_title gt_font_normal" style>Health behaviors by education</td>
+    </tr>
+    <tr class="gt_heading">
+      <td colspan="11" class="gt_heading gt_subtitle gt_font_normal gt_bottom_border" style>Categorical summary table</td>
+    </tr>
+    <tr class="gt_col_headings gt_spanner_row">
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="text-align: left; border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_variable">
+        <div class="gt_column_spanner">Variable</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Lower secondary">
+        <div class="gt_column_spanner">Lower secondary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Upper secondary">
+        <div class="gt_column_spanner">Upper secondary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Tertiary">
+        <div class="gt_column_spanner">Tertiary</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="2" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="colgroup" id="Total">
+        <div class="gt_column_spanner">Total</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_p">
+        <div class="gt_column_spanner">p</div>
+      </th>
+      <th class="gt_center gt_columns_top_border gt_column_spanner_outer" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor;" scope="col" id="spn_v">
+        <div class="gt_column_spanner">Cramer&#39;s V</div>
+      </th>
+    </tr>
+    <tr class="gt_col_headings">
+      <th class="gt_col_heading gt_columns_bottom_border gt_left" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Variable"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Lower-secondary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Lower-secondary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Upper-secondary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Upper-secondary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Tertiary_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Tertiary_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Total_n">n</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_center" rowspan="1" colspan="1" style="border-top-width: 1px; border-top-style: solid; border-top-color: currentColor; border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="Total_pct">%</th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="p"></th>
+      <th class="gt_col_heading gt_columns_bottom_border gt_right" rowspan="1" colspan="1" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;" scope="col" id="assoc_col"></th>
+    </tr>
+  </thead>
+  <tbody class="gt_table_body">
+    <tr><td headers="Variable" class="gt_row gt_left">Smoking status</td>
+<td headers="Lower secondary_n" class="gt_row gt_center"></td>
+<td headers="Lower secondary_pct" class="gt_row gt_center"></td>
+<td headers="Upper secondary_n" class="gt_row gt_center"></td>
+<td headers="Upper secondary_pct" class="gt_row gt_center"></td>
+<td headers="Tertiary_n" class="gt_row gt_center"></td>
+<td headers="Tertiary_pct" class="gt_row gt_center"></td>
+<td headers="Total_n" class="gt_row gt_center"></td>
+<td headers="Total_pct" class="gt_row gt_center"></td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="assoc_col" class="gt_row gt_right">.14</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    No</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">179</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">69.6</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">415</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">78.7</td>
+<td headers="Tertiary_n" class="gt_row gt_center">332</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">84.9</td>
+<td headers="Total_n" class="gt_row gt_center">926</td>
+<td headers="Total_pct" class="gt_row gt_center">78.8</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    Yes</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">78</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">30.4</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">112</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">21.3</td>
+<td headers="Tertiary_n" class="gt_row gt_center">59</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">15.1</td>
+<td headers="Total_n" class="gt_row gt_center">249</td>
+<td headers="Total_pct" class="gt_row gt_center">21.2</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">Regular physical activity</td>
+<td headers="Lower secondary_n" class="gt_row gt_center"></td>
+<td headers="Lower secondary_pct" class="gt_row gt_center"></td>
+<td headers="Upper secondary_n" class="gt_row gt_center"></td>
+<td headers="Upper secondary_pct" class="gt_row gt_center"></td>
+<td headers="Tertiary_n" class="gt_row gt_center"></td>
+<td headers="Tertiary_pct" class="gt_row gt_center"></td>
+<td headers="Total_n" class="gt_row gt_center"></td>
+<td headers="Total_pct" class="gt_row gt_center"></td>
+<td headers="p" class="gt_row gt_right">&lt; .001</td>
+<td headers="assoc_col" class="gt_row gt_right">.21</td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left">    No</td>
+<td headers="Lower secondary_n" class="gt_row gt_center">177</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center">67.8</td>
+<td headers="Upper secondary_n" class="gt_row gt_center">310</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center">57.5</td>
+<td headers="Tertiary_n" class="gt_row gt_center">163</td>
+<td headers="Tertiary_pct" class="gt_row gt_center">40.8</td>
+<td headers="Total_n" class="gt_row gt_center">650</td>
+<td headers="Total_pct" class="gt_row gt_center">54.2</td>
+<td headers="p" class="gt_row gt_right"></td>
+<td headers="assoc_col" class="gt_row gt_right"></td></tr>
+    <tr><td headers="Variable" class="gt_row gt_left" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">    Yes</td>
+<td headers="Lower secondary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">84</td>
+<td headers="Lower secondary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">32.2</td>
+<td headers="Upper secondary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">229</td>
+<td headers="Upper secondary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">42.5</td>
+<td headers="Tertiary_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">237</td>
+<td headers="Tertiary_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">59.2</td>
+<td headers="Total_n" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">550</td>
+<td headers="Total_pct" class="gt_row gt_center" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;">45.8</td>
+<td headers="p" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td>
+<td headers="assoc_col" class="gt_row gt_right" style="border-bottom-width: 1px; border-bottom-style: solid; border-bottom-color: currentColor;"></td></tr>
+  </tbody>
+  <tfoot>
+    <tr class="gt_sourcenotes">
+      <td class="gt_sourcenote" colspan="11"><span class="gt_from_md"><em>Percentages are computed within each education group.</em></span></td>
+    </tr>
+  </tfoot>
+</table>
+</div>
+<p>Use <code>tinytable::</code> functions when you want lightweight
+table-specific styling:</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a>tab <span class="ot">&lt;-</span> <span class="fu">table_categorical</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity),</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(<span class="st">&quot;Smoking status&quot;</span>, <span class="st">&quot;Regular physical activity&quot;</span>),</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>tab <span class="sc">|&gt;</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a>  tinytable<span class="sc">::</span><span class="fu">style_tt</span>(</span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a>    <span class="at">i =</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">3</span>,</span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a>    <span class="at">j =</span> <span class="dv">2</span><span class="sc">:</span><span class="dv">5</span>,</span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a>    <span class="at">background =</span> <span class="st">&quot;red&quot;</span>,</span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a>    <span class="at">color =</span> <span class="st">&quot;white&quot;</span>,</span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a>    <span class="at">bold =</span> <span class="cn">TRUE</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a>  )</span></code></pre></div>
+<!-- preamble start -->
+
+    <script>// TinyTable JavaScript Framework
+// Function factory for creating table-specific operations
+window.TinyTable = {
+  // Helper to create Tabulator instance with Luxon dependency
+  createTabulator: function(elementId, config) {
+    const { DateTime } = window.luxon || {};
+    return new Tabulator(elementId, {
+      dependencies: { DateTime },
+      ...config
+    });
+  },
+
+  createTableFunctions: function (tableId) {
+    const spans = []; // {top, left, rowspan, colspan}
+
+    function resolveToAnchor(i, j) {
+      // find if (i,j) is inside any span; return that span's anchor if so
+      for (const s of spans) {
+        if (
+          i >= s.top && i < s.top + s.rowspan &&
+          j >= s.left && j < s.left + s.colspan
+        ) {
+          return { i: s.top, j: s.left };
+        }
+      }
+      return { i, j };
+    }
+
+    return {
+      styleCell: function (i, j, css_id) {
+        // normalize possible string indices
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const { i: ai, j: aj } = resolveToAnchor(i, j);
+        const cell = table.querySelector(`[data-row="${ai}"][data-col="${aj}"]`);
+        if (!cell) return; // silently skip if not found (e.g., removed)
+        cell.classList.add(css_id);
+      },
+
+      spanCell: function (i, j, rowspan, colspan) {
+        i = +i; j = +j;
+
+        const table = document.getElementById(tableId);
+        const targetCell = table.querySelector(`[data-row="${i}"][data-col="${j}"]`);
+        if (!targetCell) {
+          console.warn(`Cell at (${i}, ${j}) not found.`);
+          return;
+        }
+
+        // record span so future styleCell calls map to the anchor
+        spans.push({ top: i, left: j, rowspan, colspan });
+
+        // remove covered cells (except anchor)
+        const cellsToRemove = [];
+        for (let r = 0; r < rowspan; r++) {
+          for (let c = 0; c < colspan; c++) {
+            if (r === 0 && c === 0) continue;
+            const cell = table.querySelector(`[data-row="${i + r}"][data-col="${j + c}"]`);
+            if (cell) cellsToRemove.push(cell);
+          }
+        }
+        cellsToRemove.forEach(cell => cell.remove());
+
+        // set HTML attributes for clarity/serialization
+        targetCell.setAttribute('rowspan', rowspan);
+        targetCell.setAttribute('colspan', colspan);
+      }
+    };
+  }
+};
+
+// =============================================================================
+// TABULATOR CUSTOM FORMATTERS (revised)
+// =============================================================================
+
+// SVG sparkline
+function tinytable_sparkline(cell, p = {}) {
+  let values = cell.getValue() ?? [];
+  if (!Array.isArray(values)) values = [values];
+  // coerce to finite numbers & strip NaNs
+  values = values.map(Number).filter(Number.isFinite);
+  const n = values.length;
+  if (n === 0) return "";
+
+  const w = p.width ?? 120, h = p.height ?? 30, pad = p.pad ?? 2;
+  const color = p.color ?? "currentColor", sw = p.strokeWidth ?? 1.5;
+  const fill = p.fillArea ?? false;
+  const showDots = p.showDots ?? false;
+  const dotR = p.dotRadius ?? 1.75;
+  const ariaLabel = p.ariaLabel ?? `sparkline with ${n} points`;
+
+  // single pass for min/max
+  let min = Infinity, max = -Infinity;
+  for (let v of values) { if (v < min) min = v; if (v > max) max = v; }
+  const span = (max - min) || 1;
+
+  const x = i => pad + (i * (w - 2 * pad)) / Math.max(n - 1, 1);
+  const y = v => h - pad - ((v - min) * (h - 2 * pad)) / span;
+
+  let d = `M ${x(0)},${y(values[0])}`;
+  for (let i = 1; i < n; i++) d += ` L ${x(i)},${y(values[i])}`;
+
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = document.createElementNS(NS, "svg");
+  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
+  svg.setAttribute("width", w);
+  svg.setAttribute("height", h);
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", ariaLabel);
+
+  const path = document.createElementNS(NS, "path");
+  path.setAttribute("stroke", color);
+  path.setAttribute("stroke-width", sw);
+  path.setAttribute("vector-effect", "non-scaling-stroke");
+
+  if (fill) {
+    const area = document.createElementNS(NS, "path");
+    area.setAttribute("d", d + ` L ${x(n - 1)},${h - pad} L ${x(0)},${h - pad} Z`);
+    area.setAttribute("fill", color);
+    area.setAttribute("fill-opacity", p.fillOpacity ?? 0.25);
+    svg.appendChild(area);
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  } else {
+    path.setAttribute("d", d);
+    path.setAttribute("fill", "none");
+  }
+  svg.appendChild(path);
+
+  if (showDots) {
+    const dot = (i) => {
+      const c = document.createElementNS(NS, "circle");
+      c.setAttribute("cx", x(i));
+      c.setAttribute("cy", y(values[i]));
+      c.setAttribute("r", dotR);
+      c.setAttribute("fill", color);
+      return c;
+    };
+    if (p.dots === "end") svg.appendChild(dot(n - 1));
+    else if (p.dots === "minmax") {
+      const iMin = values.indexOf(min), iMax = values.indexOf(max);
+      svg.appendChild(dot(iMin)); svg.appendChild(dot(iMax));
+    } else if (p.dots === true) {
+      for (let i = 0; i < n; i++) svg.appendChild(dot(i));
+    }
+  }
+
+  if (p.title) {
+    const title = document.createElementNS(NS, "title");
+    title.textContent = p.title;
+    svg.appendChild(title);
+  }
+
+  return svg;
+}
+
+// Canvas histogram
+function tinytable_histogram(cell, p = {}) {
+  let data = cell.getValue() ?? [];
+  if (!Array.isArray(data)) data = [data];
+  data = data.map(Number).filter(Number.isFinite);
+  const n = data.length;
+  if (n === 0) return "";
+
+  const cssWidth = p.width ?? 120;
+  const cssHeight = p.height ?? 30;
+  const color = p.color ?? "currentColor";
+  const gap = p.gap ?? 1;         // px gap between bars
+  const pad = p.pad ?? 0;         // inner padding
+  const ariaLabel = p.ariaLabel ?? `histogram with ${n} observations`;
+
+  // robust bins: Sturges as default; allow override
+  const k = Math.max(1, Math.min(64, p.bins ?? Math.ceil(Math.log2(n) + 1)));
+
+  // stats
+  let min = Infinity, max = -Infinity;
+  for (let v of data) { if (v < min) min = v; if (v > max) max = v; }
+
+  // zero-range safeguard -> single centered bar
+  const range = max - min;
+  const binWidth = range > 0 ? range / k : 1;
+
+  const bins = new Array(k).fill(0);
+  if (range === 0) {
+    // put all mass in the middle bin
+    bins[Math.floor(k / 2)] = n;
+  } else {
+    for (let v of data) {
+      let idx = Math.floor((v - min) / binWidth);
+      if (idx >= k) idx = k - 1; // clamp max edge
+      bins[idx]++;
+    }
+  }
+  const maxCount = Math.max(...bins, 1);
+
+  // HiDPI / Retina crispness
+  const dpr = window.devicePixelRatio || 1;
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.round(cssWidth * dpr);
+  canvas.height = Math.round(cssHeight * dpr);
+  canvas.style.width = cssWidth + "px";
+  canvas.style.height = cssHeight + "px";
+  canvas.setAttribute("role", "img");
+  canvas.setAttribute("aria-label", ariaLabel);
+
+  const ctx = canvas.getContext("2d");
+  ctx.scale(dpr, dpr);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+  ctx.fillStyle = color;
+
+  const innerW = cssWidth - pad * 2;
+  const innerH = cssHeight - pad * 2;
+  const barW = innerW / k;
+
+  for (let i = 0; i < k; i++) {
+    const h = (bins[i] / maxCount) * innerH;
+    const x = pad + i * barW;
+    const y = cssHeight - pad - h;
+    // 0.5 translate helps crisp vertical edges on some displays
+    ctx.fillRect(Math.round(x) + 0.5, Math.floor(y), Math.max(0, barW - gap), Math.ceil(h));
+  }
+
+  if (p.title) canvas.title = p.title;
+  return canvas;
+}
+
+// Unified sorter that uses hidden rank field
+function tinytable_rank_sorter(a, b, aRow, bRow, column, dir, sorterParams) {
+  const rankField = sorterParams.rankField;
+  const aVal = aRow.getData()[rankField] || 0;
+  const bVal = bRow.getData()[rankField] || 0;
+  return aVal - bVal;
+}
+</script>
+
+    <script>
+      // Create table-specific functions using external factory
+      const tableFns_71nezl8bs1a44yfkznp0 = TinyTable.createTableFunctions("tinytable_71nezl8bs1a44yfkznp0");
+      // tinytable span after
+      window.addEventListener('load', function () {
+          var cellsToStyle = [
+            // tinytable style arrays after
+          { positions: [ { i: '1', j: 10 }, { i: '2', j: 10 }, { i: '3', j: 10 }, { i: '4', j: 10 }, { i: '5', j: 10 }, { i: '1', j: 11 }, { i: '2', j: 11 }, { i: '3', j: 11 }, { i: '4', j: 11 }, { i: '5', j: 11 } ], css_id: 'tinytable_css_eit6so3ej1c552k7rv49',}, 
+          { positions: [ { i: '0', j: 10 }, { i: '6', j: 10 }, { i: '0', j: 11 }, { i: '6', j: 11 } ], css_id: 'tinytable_css_y4bgiiewraghojmztlde',}, 
+          { positions: [ { i: '-1', j: 10 }, { i: '-1', j: 11 } ], css_id: 'tinytable_css_bcm0ebslb449r9xqtgyu',}, 
+          { positions: [ { i: '6', j: 2 }, { i: '6', j: 3 }, { i: '6', j: 4 }, { i: '6', j: 5 }, { i: '6', j: 6 }, { i: '6', j: 7 }, { i: '6', j: 8 }, { i: '6', j: 9 } ], css_id: 'tinytable_css_d0td9y7snqmzq5lc1uzz',}, 
+          { positions: [ { i: '2', j: 2 }, { i: '3', j: 2 }, { i: '2', j: 3 }, { i: '3', j: 3 }, { i: '2', j: 4 }, { i: '3', j: 4 }, { i: '2', j: 5 }, { i: '3', j: 5 } ], css_id: 'tinytable_css_r5k7kud7io6vryyfxout',}, 
+          { positions: [ { i: '1', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '1', j: 3 }, { i: '4', j: 3 }, { i: '5', j: 3 }, { i: '1', j: 4 }, { i: '4', j: 4 }, { i: '5', j: 4 }, { i: '1', j: 5 }, { i: '4', j: 5 }, { i: '5', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '3', j: 6 }, { i: '4', j: 6 }, { i: '5', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '3', j: 7 }, { i: '4', j: 7 }, { i: '5', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '3', j: 8 }, { i: '4', j: 8 }, { i: '5', j: 8 }, { i: '1', j: 9 }, { i: '2', j: 9 }, { i: '3', j: 9 }, { i: '4', j: 9 }, { i: '5', j: 9 } ], css_id: 'tinytable_css_4knx4hlpntrccpa2ubxc',}, 
+          { positions: [ { i: '0', j: 2 }, { i: '0', j: 3 }, { i: '0', j: 4 }, { i: '0', j: 5 }, { i: '0', j: 6 }, { i: '0', j: 7 }, { i: '0', j: 8 }, { i: '0', j: 9 } ], css_id: 'tinytable_css_08341g7w3o3j9dq95r2r',}, 
+          { positions: [ { i: '-1', j: 2 }, { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 7 }, { i: '-1', j: 8 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_thes2lce2kkfpn115s3a',}, 
+          { positions: [ { i: '6', j: 1 } ], css_id: 'tinytable_css_vbi25yhuqb8gwb7hats7',}, 
+          { positions: [ { i: '2', j: 1 }, { i: '3', j: 1 }, { i: '5', j: 1 } ], css_id: 'tinytable_css_ibn3yry0ovqurn9i5t6c',}, 
+          { positions: [ { i: '1', j: 1 }, { i: '4', j: 1 } ], css_id: 'tinytable_css_aagopayta8suwthx492g',}, 
+          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_umic054x7r63exbznnac',}, 
+          { positions: [ { i: '-1', j: 1 } ], css_id: 'tinytable_css_k9e9srg9pl8ofv6pvza8',}, 
+          ];
+
+          // Loop over the arrays to style the cells
+          cellsToStyle.forEach(function (group) {
+              group.positions.forEach(function (cell) {
+                  tableFns_71nezl8bs1a44yfkznp0.styleCell(cell.i, cell.j, group.css_id);
+              });
+          });
+      });
+    </script>
+
+    <style type="text/css">
+
+
+.tinytable {
+
+--tt-text-color: inherit;
+--tt-line-color: black;
+--tt-border-color: var(--tt-line-color);
+--tt-striped-bg: rgba(0, 0, 0, .05);
+--tt-hover-bg: rgba(0, 0, 0, .075);
+--tt-background-color: transparent;
+--tt-footnote-bg: var(--tt-background-color);
+
+--tt-cell-padding: .5rem;
+--tt-cell-padding-sm: calc(var(--tt-cell-padding) / 2);
+--tt-table-margin: .5rem 0;
+--tt-caption-padding: .5rem 0;
+--tt-footnote-padding: .2rem .5rem;
+--tt-footnote-first-padding-top: .5rem;
+--tt-footnote-gap: .1rem;
+--tt-container-padding: 10px;
+
+--tt-font-size-footnote: 0.875rem;
+--tt-font-size-caption: 1rem;
+--tt-font-size-sup: 0.75em;
+--tt-line-height-footnote: 1.25;
+--tt-line-height-footnote-tight: 1.2;
+--tt-font-weight-header: normal;
+
+--tt-cell-valign: top;
+--tt-header-align: left;
+--tt-header-valign: bottom;
+--tt-caption-align: var(--tt-header-align);
+--tt-caption-side: top;
+
+--tt-table-width: 100%;
+
+--tt-border-width: 1px;
+--tt-border-width-tbody: 2px;
+}
+
+.tinytable {
+width: var(--tt-table-width);
+margin: var(--tt-table-margin);
+border-collapse: collapse;
+background-color: var(--tt-background-color);
+color: var(--tt-text-color);
+font-family: inherit;
+-webkit-font-smoothing: antialiased;
+-moz-osx-font-smoothing: grayscale;
+}
+.tinytable *:not(mjx-container):not(mjx-container *) {
+font-family: inherit;
+}
+
+.tinytable th,
+.tinytable td {
+position: relative;
+padding: var(--tt-cell-padding);
+vertical-align: var(--tt-cell-valign);
+}
+.tinytable thead th {
+text-align: var(--tt-header-align);
+vertical-align: var(--tt-header-valign);
+font-weight: var(--tt-font-weight-header);
+border-bottom: none;
+}
+.tinytable thead th[align="center"] {
+text-align: center;
+}
+.tinytable tbody + tbody {
+border-top: var(--tt-border-width-tbody) solid var(--tt-border-color);
+}
+
+
+.tinytable-sm th,
+.tinytable-sm td {
+padding: var(--tt-cell-padding-sm);
+}
+
+.tinytable-bordered {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+.tinytable-bordered th,
+.tinytable-bordered td {
+border: var(--tt-border-width) solid var(--tt-border-color);
+}
+
+.tinytable-striped tbody tr:nth-of-type(odd) {
+background-color: var(--tt-striped-bg);
+}
+
+.tinytable-hover tbody tr:hover {
+background-color: var(--tt-hover-bg);
+}
+
+.tinytable-responsive {
+width: var(--tt-table-width);
+overflow-x: auto;
+-webkit-overflow-scrolling: touch;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"] {
+position: relative;
+
+--border-top: 0;
+--border-right: 0;
+--border-bottom: 0;
+--border-left: 0;
+
+--line-color-top: currentColor;
+--line-color-right: currentColor;
+--line-color-bottom: currentColor;
+--line-color-left: currentColor;
+
+--line-width-top: 0.1em;
+--line-width-right: 0.1em;
+--line-width-bottom: 0.1em;
+--line-width-left: 0.1em;
+
+--trim-top-left: 0%;
+--trim-top-right: 0%;
+--trim-right-top: 0%;
+--trim-right-bottom: 0%;
+--trim-bottom-left: 0%;
+--trim-bottom-right: 0%;
+--trim-left-top: 0%;
+--trim-left-bottom: 0%;
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::before {
+content: "";
+position: absolute;
+top: var(--trim-top-left, var(--trim-top-right, 0));
+left: var(--trim-left-top, 0);
+right: var(--trim-right-top, 0);
+bottom: 0;
+pointer-events: none;
+z-index: 1;
+border-top: calc(var(--border-top) * var(--line-width-top)) solid var(--line-color-top);
+border-right: calc(var(--border-right) * var(--line-width-right)) solid var(--line-color-right);
+border-left: calc(var(--border-left) * var(--line-width-left)) solid var(--line-color-left);
+}
+
+.tinytable :is(td, th)[class*="tinytable_css_"]::after {
+content: "";
+position: absolute;
+left: var(--trim-bottom-left, 0);
+right: var(--trim-bottom-right, 0);
+bottom: var(--trim-left-bottom, var(--trim-right-bottom, 0));
+height: calc(var(--border-bottom) * var(--line-width-bottom));
+background: var(--line-color-bottom);
+pointer-events: none;
+z-index: 2;
+}
+
+.tinytable-container {
+padding: var(--tt-container-padding);
+overflow-x: auto;
+overflow-y: auto;
+width: auto;
+height: auto;
+}
+
+.tinytable caption {
+padding: var(--tt-caption-padding);
+caption-side: var(--tt-caption-side);
+font-size: var(--tt-font-size-caption);
+text-align: var(--tt-caption-align);
+}
+
+.tinytable tfoot tr:first-child td {
+padding-top: var(--tt-footnote-first-padding-top);
+}
+.tinytable tfoot td {
+padding: var(--tt-footnote-padding);
+font-size: var(--tt-font-size-footnote);
+line-height: var(--tt-line-height-footnote);
+background-color: var(--tt-footnote-bg);
+}
+
+.tinytable tfoot tr + tr td {
+padding-top: var(--tt-footnote-gap);
+}
+
+.tinytable tfoot sup {
+font-size: var(--tt-font-size-sup);
+line-height: 0;
+vertical-align: text-top;
+}
+
+.tinytable tfoot tr:nth-child(n+2) td {
+line-height: var(--tt-line-height-footnote-tight);
+}
+</style>
+    <style>
+
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_eit6so3ej1c552k7rv49, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_eit6so3ej1c552k7rv49 { text-align: right; white-space: nowrap; }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_y4bgiiewraghojmztlde, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_y4bgiiewraghojmztlde { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right; white-space: nowrap; }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_bcm0ebslb449r9xqtgyu, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_bcm0ebslb449r9xqtgyu { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center; white-space: nowrap; }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_d0td9y7snqmzq5lc1uzz, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_d0td9y7snqmzq5lc1uzz { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_r5k7kud7io6vryyfxout, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_r5k7kud7io6vryyfxout { font-weight: bold; text-align: right; color: white; background-color: #FF0000 }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_4knx4hlpntrccpa2ubxc, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_4knx4hlpntrccpa2ubxc { text-align: right }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_08341g7w3o3j9dq95r2r, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_08341g7w3o3j9dq95r2r { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_thes2lce2kkfpn115s3a, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_thes2lce2kkfpn115s3a { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_vbi25yhuqb8gwb7hats7, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_vbi25yhuqb8gwb7hats7 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_ibn3yry0ovqurn9i5t6c, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_ibn3yry0ovqurn9i5t6c { text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_aagopayta8suwthx492g, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_aagopayta8suwthx492g { text-align: left }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_umic054x7r63exbznnac, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_umic054x7r63exbznnac { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_71nezl8bs1a44yfkznp0 td.tinytable_css_k9e9srg9pl8ofv6pvza8, #tinytable_71nezl8bs1a44yfkznp0 th.tinytable_css_k9e9srg9pl8ofv6pvza8 { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+</style>
+    <div class="container">
+      <table class="tinytable" id="tinytable_71nezl8bs1a44yfkznp0" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+        
+        <thead>
+<tr>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="1">Variable</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="2">Lower secondary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="4">Upper secondary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="6">Tertiary</th>
+<th scope="col" align="center" colspan="2" data-row="-1" data-col="8">Total</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="10">p</th>
+<th scope="col" align="center" colspan="1" data-row="-1" data-col="11">Cramer&#39;s V</th>
+</tr>
+              <tr>
+                <th scope="col" data-row="0" data-col="1"></th>
+                <th scope="col" data-row="0" data-col="2">n</th>
+                <th scope="col" data-row="0" data-col="3">%</th>
+                <th scope="col" data-row="0" data-col="4">n</th>
+                <th scope="col" data-row="0" data-col="5">%</th>
+                <th scope="col" data-row="0" data-col="6">n</th>
+                <th scope="col" data-row="0" data-col="7">%</th>
+                <th scope="col" data-row="0" data-col="8">n</th>
+                <th scope="col" data-row="0" data-col="9">%</th>
+                <th scope="col" data-row="0" data-col="10"></th>
+                <th scope="col" data-row="0" data-col="11"></th>
+              </tr>
+        </thead>
+        
+        <tbody>
+                <tr>
+                  <td data-row="1" data-col="1">Smoking status</td>
+                  <td data-row="1" data-col="2"></td>
+                  <td data-row="1" data-col="3"></td>
+                  <td data-row="1" data-col="4"></td>
+                  <td data-row="1" data-col="5"></td>
+                  <td data-row="1" data-col="6"></td>
+                  <td data-row="1" data-col="7"></td>
+                  <td data-row="1" data-col="8"></td>
+                  <td data-row="1" data-col="9"></td>
+                  <td data-row="1" data-col="10">&lt; .001</td>
+                  <td data-row="1" data-col="11">.14</td>
+                </tr>
+                <tr>
+                  <td data-row="2" data-col="1">    No</td>
+                  <td data-row="2" data-col="2">179</td>
+                  <td data-row="2" data-col="3">69.6</td>
+                  <td data-row="2" data-col="4">415</td>
+                  <td data-row="2" data-col="5">78.7</td>
+                  <td data-row="2" data-col="6">332</td>
+                  <td data-row="2" data-col="7">84.9</td>
+                  <td data-row="2" data-col="8">926</td>
+                  <td data-row="2" data-col="9">78.8</td>
+                  <td data-row="2" data-col="10"></td>
+                  <td data-row="2" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="3" data-col="1">    Yes</td>
+                  <td data-row="3" data-col="2">78</td>
+                  <td data-row="3" data-col="3">30.4</td>
+                  <td data-row="3" data-col="4">112</td>
+                  <td data-row="3" data-col="5">21.3</td>
+                  <td data-row="3" data-col="6">59</td>
+                  <td data-row="3" data-col="7">15.1</td>
+                  <td data-row="3" data-col="8">249</td>
+                  <td data-row="3" data-col="9">21.2</td>
+                  <td data-row="3" data-col="10"></td>
+                  <td data-row="3" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="4" data-col="1">Regular physical activity</td>
+                  <td data-row="4" data-col="2"></td>
+                  <td data-row="4" data-col="3"></td>
+                  <td data-row="4" data-col="4"></td>
+                  <td data-row="4" data-col="5"></td>
+                  <td data-row="4" data-col="6"></td>
+                  <td data-row="4" data-col="7"></td>
+                  <td data-row="4" data-col="8"></td>
+                  <td data-row="4" data-col="9"></td>
+                  <td data-row="4" data-col="10">&lt; .001</td>
+                  <td data-row="4" data-col="11">.21</td>
+                </tr>
+                <tr>
+                  <td data-row="5" data-col="1">    No</td>
+                  <td data-row="5" data-col="2">177</td>
+                  <td data-row="5" data-col="3">67.8</td>
+                  <td data-row="5" data-col="4">310</td>
+                  <td data-row="5" data-col="5">57.5</td>
+                  <td data-row="5" data-col="6">163</td>
+                  <td data-row="5" data-col="7">40.8</td>
+                  <td data-row="5" data-col="8">650</td>
+                  <td data-row="5" data-col="9">54.2</td>
+                  <td data-row="5" data-col="10"></td>
+                  <td data-row="5" data-col="11"></td>
+                </tr>
+                <tr>
+                  <td data-row="6" data-col="1">    Yes</td>
+                  <td data-row="6" data-col="2">84</td>
+                  <td data-row="6" data-col="3">32.2</td>
+                  <td data-row="6" data-col="4">229</td>
+                  <td data-row="6" data-col="5">42.5</td>
+                  <td data-row="6" data-col="6">237</td>
+                  <td data-row="6" data-col="7">59.2</td>
+                  <td data-row="6" data-col="8">550</td>
+                  <td data-row="6" data-col="9">45.8</td>
+                  <td data-row="6" data-col="10"></td>
+                  <td data-row="6" data-col="11"></td>
+                </tr>
+        </tbody>
+      </table>
+    </div>
+<!-- hack to avoid NA insertion in last line -->
+<p>Use <code>flextable::</code> functions when you want to keep working
+toward Office or HTML document output. The example is shown as code here
+because the dark pkgdown theme is not a reliable preview of the final
+<code>flextable</code> HTML rendering:</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="cf">if</span> (<span class="fu">requireNamespace</span>(<span class="st">&quot;flextable&quot;</span>, <span class="at">quietly =</span> <span class="cn">TRUE</span>)) {</span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  tab <span class="ot">&lt;-</span> <span class="fu">table_continuous</span>(</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>    sochealth,</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score),</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>    <span class="at">by =</span> education,</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;flextable&quot;</span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>  )</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>  tab <span class="sc">|&gt;</span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a>    flextable<span class="sc">::</span><span class="fu">theme_booktabs</span>() <span class="sc">|&gt;</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a>    flextable<span class="sc">::</span><span class="fu">autofit</span>() <span class="sc">|&gt;</span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a>    flextable<span class="sc">::</span><span class="fu">fontsize</span>(<span class="at">size =</span> <span class="dv">10</span>, <span class="at">part =</span> <span class="st">&quot;all&quot;</span>)</span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a>}</span></code></pre></div>
+</div>
+<div id="keep-the-detailed-options-in-the-function-specific-articles" class="section level2">
+<h2>Keep the detailed options in the function-specific articles</h2>
+<p>The dedicated articles go deeper into each function:</p>
+<ul>
+<li><code>table_categorical()</code> covers missing values, level
+filtering, association measures, and one-way frequency-style
+tables.</li>
+<li><code>table_continuous()</code> covers grouped descriptive
+statistics, parametric and nonparametric tests, and effect sizes.</li>
+</ul>
+<p>Use this vignette as the final reporting overview, then consult the
+function-specific articles when you need the detailed controls.</p>
+</div>
+
+
+
+<!-- code folding -->
+
+
+<!-- dynamically load mathjax for compatibility with self-contained -->
+<script>
+  (function () {
+    var script = document.createElement("script");
+    script.type = "text/javascript";
+    script.src  = "https://mathjax.rstudio.com/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML";
+    document.getElementsByTagName("head")[0].appendChild(script);
+  })();
+</script>
+
+</body>
+</html>

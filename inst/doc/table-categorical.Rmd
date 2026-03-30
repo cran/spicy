@@ -1,0 +1,306 @@
+---
+title: "Categorical summary tables in R"
+description: >
+  Build categorical summary tables in R with table_categorical(),
+  including grouped cross-tabulations, effect sizes, confidence
+  intervals, and export to gt, tinytable, flextable, Excel, or Word.
+output: rmarkdown::html_vignette
+vignette: >
+  %\VignetteIndexEntry{Categorical summary tables in R}
+  %\VignetteEngine{knitr::rmarkdown}
+  %\VignetteEncoding{UTF-8}
+---
+
+```{r, include = FALSE}
+knitr::opts_chunk$set(
+  collapse = TRUE,
+  comment = "#>"
+)
+
+pkgdown_dark_gt <- function(tab) {
+  tab |>
+    gt::opt_css(
+      css = paste(
+        ".gt_table, .gt_heading, .gt_col_headings, .gt_col_heading,",
+        ".gt_column_spanner_outer, .gt_column_spanner, .gt_title,",
+        ".gt_subtitle, .gt_sourcenotes, .gt_sourcenote {",
+        "  background-color: transparent !important;",
+        "  color: currentColor !important;",
+        "}",
+        sep = "\n"
+      )
+    )
+}
+```
+
+```{r setup}
+library(spicy)
+```
+
+`table_categorical()` builds publication-ready categorical tables suitable for
+APA-style reporting in social science and data science research. With
+`by`, it produces grouped cross-tabulation tables with chi-squared
+\(p\)-values, effect sizes, confidence intervals, and multi-level
+headers. Without `by`, it produces one-way frequency-style tables for
+the selected variables. Export to gt, tinytable, flextable, Excel, or
+Word. This vignette walks through the main features.
+
+## Basic usage
+
+For grouped tables, provide a data frame, one or more selected
+variables, and a grouping variable:
+
+```{r basic}
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity, dentist_12m),
+  by = education
+)
+```
+
+The default output is `"default"`, which prints a styled ASCII table to
+the console. Use `output = "data.frame"` to get a plain numeric
+data frame suitable for further processing.
+
+## One-way tables
+
+Omit `by` to build a frequency-style table for the selected variables:
+
+```{r oneway}
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity),
+  output = "default"
+)
+```
+
+## Output formats
+
+`table_categorical()` supports several output formats. The table below
+summarizes the options:
+
+| Format | Description |
+|---|---|
+| `"default"` | Styled ASCII table in the console (default) |
+| `"data.frame"` | Wide data frame, one row per modality |
+| `"long"` | Long data frame, one row per modality x group |
+| `"gt"` | Formatted gt table |
+| `"tinytable"` | Formatted tinytable |
+| `"flextable"` | Formatted flextable |
+| `"excel"` | Excel file (requires `excel_path`) |
+| `"clipboard"` | Copy to clipboard |
+| `"word"` | Word document (requires `word_path`) |
+
+### gt output
+
+The `"gt"` format produces a table with APA-style borders, column
+spanners, and proper alignment:
+
+```{r gt}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity, dentist_12m),
+    by = education,
+    output = "gt"
+  )
+)
+```
+
+### tinytable output
+
+```{r tinytable}
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity),
+  by = sex,
+  output = "tinytable"
+)
+```
+
+### Data frame output
+
+Use `output = "data.frame"` for a wide numeric data frame (one row per
+modality), or `output = "long"` for a long format (one row per
+modality x group):
+
+```{r data-frame}
+table_categorical(
+  sochealth,
+  select = smoking,
+  by = education,
+  output = "data.frame"
+)
+```
+
+## Custom labels
+
+By default, `table_categorical()` uses variable names as row headers. Use the
+`labels` argument to provide human-readable labels:
+
+```{r labels}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    by = education,
+    labels = c("Smoking status", "Regular physical activity"),
+    output = "gt"
+  )
+)
+```
+
+## Association measures and confidence intervals
+
+By default, `table_categorical()` reports Cramer's V for nominal variables and
+automatically switches to Kendall's Tau-b when both variables are
+ordered factors. Override with `assoc_measure`:
+
+```{r assoc-measure}
+table_categorical(
+  sochealth,
+  select = smoking,
+  by = education,
+  assoc_measure = "lambda",
+  output = "tinytable"
+)
+```
+
+Add confidence intervals with `assoc_ci = TRUE`. In rendered formats
+(gt, tinytable, flextable), the CI is shown inline:
+
+```{r ci-rendered}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    by = education,
+    assoc_ci = TRUE,
+    output = "gt"
+  )
+)
+```
+
+In data formats (`"data.frame"`, `"long"`, `"excel"`, `"clipboard"`),
+separate `CI lower` and `CI upper` columns are added:
+
+```{r ci-data}
+table_categorical(
+  sochealth,
+  select = smoking,
+  by = education,
+  assoc_ci = TRUE,
+  output = "data.frame"
+)
+```
+
+## Weighted tables
+
+Pass survey weights with the `weights` argument. Use `rescale = TRUE` so
+the total weighted N matches the unweighted N:
+
+```{r weighted}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    by = education,
+    weights = "weight",
+    rescale = TRUE,
+    output = "gt"
+  )
+)
+```
+
+## Handling missing values
+
+By default, rows with missing values are dropped (`drop_na = TRUE`).
+Set `drop_na = FALSE` to display them as a "(Missing)" category:
+
+```{r missing}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = income_group,
+    by = education,
+    drop_na = FALSE,
+    output = "gt"
+  )
+)
+```
+
+## Filtering and reordering levels
+
+Use `levels_keep` to display only specific modalities. The order you
+specify controls the display order, which is useful for placing
+"(Missing)" first to highlight missingness:
+
+```{r levels-keep}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = income_group,
+    by = education,
+    drop_na = FALSE,
+    levels_keep = c("(Missing)", "Low", "High"),
+    output = "gt"
+  )
+)
+```
+
+## Formatting options
+
+Control the number of digits for percentages, p-values, and the
+association measure:
+
+```{r formatting}
+pkgdown_dark_gt(
+  table_categorical(
+    sochealth,
+    select = smoking,
+    by = education,
+    percent_digits = 2,
+    p_digits = 4,
+    v_digits = 3,
+    output = "gt"
+  )
+)
+```
+
+## Exporting to Excel, Word, or clipboard
+
+For Excel export, provide a file path:
+
+```r
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity, dentist_12m),
+  by = education,
+  output = "excel",
+  excel_path = "my_table.xlsx"
+)
+```
+
+For Word, use `output = "word"`:
+
+```r
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity, dentist_12m),
+  by = education,
+  output = "word",
+  word_path = "my_table.docx"
+)
+```
+
+You can also copy directly to the clipboard for pasting into a
+spreadsheet or a text editor:
+
+```r
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity),
+  by = education,
+  output = "clipboard"
+)
+```

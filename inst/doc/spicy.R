@@ -38,29 +38,19 @@ assoc_measures(tbl)
 ## ----cramer-detail------------------------------------------------------------
 cramer_v(tbl, detail = TRUE)
 
-## ----table-apa-tt-------------------------------------------------------------
-table_apa(
+## ----table-categorical-tt-----------------------------------------------------
+table_categorical(
   sochealth,
-  row_vars = c("smoking", "physical_activity", "dentist_12m"),
-  group_var = "education",
+  select = c(smoking, physical_activity, dentist_12m),
+  by = education,
   output = "tinytable"
 )
 
-## ----table-apa-ci-------------------------------------------------------------
-table_apa(
+## ----table-continuous---------------------------------------------------------
+table_continuous(
   sochealth,
-  row_vars = "smoking",
-  group_var = "education",
-  output = "tinytable",
-  assoc_ci = TRUE
-)
-
-## ----table-apa-wide-----------------------------------------------------------
-table_apa(
-  sochealth,
-  row_vars = c("smoking", "physical_activity"),
-  group_var = "education",
-  output = "wide"
+  select = c(bmi, life_sat_health),
+  by = education
 )
 
 ## ----mean-n-------------------------------------------------------------------

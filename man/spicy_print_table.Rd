@@ -15,6 +15,8 @@ spicy_print_table(
   bottom_line = FALSE,
   lines_color = "darkgrey",
   align_left_cols = NULL,
+  align_center_cols = integer(0),
+  group_sep_rows = integer(0),
   ...
 )
 }
@@ -53,6 +55,12 @@ If \code{NULL} (the default), alignment is auto-detected based on \code{x}:
 \item For \code{cross} tables -> \code{1}
 }}
 
+\item{align_center_cols}{Integer vector of column indices to
+center-align. Defaults to \code{integer(0)}.}
+
+\item{group_sep_rows}{Integer vector of row indices before which a
+light dashed separator line is drawn. Defaults to \code{integer(0)}.}
+
 \item{...}{Additional arguments passed to \code{\link[=build_ascii_table]{build_ascii_table()}}.}
 }
 \value{
@@ -81,6 +89,8 @@ are left-aligned.
 The function supports Unicode line-drawing characters and colored separators
 using the \strong{crayon} package, with graceful fallback to monochrome output when
 color is not supported.
+If the table exceeds the console width, it is split into stacked horizontal
+panels while repeating the left-most identifier columns.
 }
 \examples{
 # Simple demonstration

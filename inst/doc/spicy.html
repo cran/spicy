@@ -345,18 +345,19 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <p>spicy is an R package for descriptive statistics and data analysis,
 designed for data science and survey research workflows. It covers
 variable inspection, frequency tables, cross-tabulations with
-chi-squared tests and effect sizes, and publication-ready APA-style
-reporting — offering functionality similar to Stata or SPSS but within a
+chi-squared tests and effect sizes, and publication-ready summary
+tables, offering functionality similar to Stata or SPSS but within a
 tidyverse-friendly R environment. This vignette walks through the core
-workflow using the bundled <code>sochealth</code> dataset, a simulated
-social-health survey with 1 200 respondents and 24 variables.</p>
+workflow using the bundled <a href="../reference/sochealth.html"><code>sochealth</code></a> dataset, a
+simulated social-health survey with 1200 respondents and 24
+variables.</p>
 <div id="inspect-your-data" class="section level2">
 <h2>Inspect your data</h2>
 <p><code>varlist()</code> (or its shortcut <code>vl()</code>) gives a
 compact overview of every variable in a data frame: name, label,
 representative values, class, number of distinct values, valid
 observations, and missing values. In RStudio or Positron, calling
-<code>varlist()</code> without arguments opens an interactive viewer —
+<code>varlist()</code> without arguments opens an interactive viewer -
 this is the most common usage in practice. Here we use
 <code>tbl = TRUE</code> to produce static output for the vignette:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">varlist</span>(sochealth, <span class="at">tbl =</span> <span class="cn">TRUE</span>)</span>
@@ -428,71 +429,109 @@ default it shows counts, a chi-squared test, and Cramer’s V:</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education)</span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N)</span></span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;  No          │                  179                   415            332 │        926 </span></span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   78                   112             59 │        249 </span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                  257                   527            391 │       1175 </span></span>
+<span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary </span></span>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a><span class="co">#&gt;  No          │                  179                   415            332 </span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   78                   112             59 </span></span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                  257                   527            391 </span></span>
 <span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt; 0.001</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;  Values      │      Total </span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt;  No          │        926 </span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt;  Yes         │        249 </span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt;  Total       │       1175 </span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt; 0.001</span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
 <p>Add percentages with <code>percent</code>:</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education, <span class="at">percent =</span> <span class="st">&quot;col&quot;</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (Column %)</span></span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
-<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt;  No          │                 69.6                  78.7           84.9 │       78.8 </span></span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                 30.4                  21.3           15.1 │       21.2 </span></span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                100.0                 100.0          100.0 │      100.0 </span></span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;  N           │                  257                   527            391 │       1175 </span></span>
+<span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary </span></span>
+<span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a><span class="co">#&gt;  No          │                 69.6                  78.7           84.9 </span></span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                 30.4                  21.3           15.1 </span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                100.0                 100.0          100.0 </span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;  N           │                  257                   527            391 </span></span>
 <span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt; 0.001</span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;  Values      │      Total </span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt;  No          │       78.8 </span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt;  Yes         │       21.2 </span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt;  Total       │      100.0 </span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt;  N           │       1175 </span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt; 0.001</span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
 <p>Group by a third variable with <code>by</code>:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education, <span class="at">by =</span> sex)</span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Female</span></span>
 <span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt;  No          │                   95                   220            160 │        475 </span></span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   38                    62             31 │        131 </span></span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                  133                   282            191 │        606 </span></span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary </span></span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a><span class="co">#&gt;  No          │                   95                   220            160 </span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   38                    62             31 </span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;  Total       │                  133                   282            191 </span></span>
 <span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 7.1, p = 0.029</span></span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.11</span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Male</span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt;  No          │                   84                   195            172 │        451 </span></span>
-<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   40                    50             28 │        118 </span></span>
-<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt;  Total       │                  124                   245            200 │        569 </span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt;  Values      │      Total </span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt;  No          │        475 </span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt;  Yes         │        131 </span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt;  Total       │        606 </span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 7.1, p = 0.029</span></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.11</span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Male</span></span>
 <span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 15.6, p &lt; 0.001</span></span>
-<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.17</span></span></code></pre></div>
+<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt;  Values      │      Lower secondary       Upper secondary       Tertiary </span></span>
+<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a><span class="co">#&gt;  No          │                   84                   195            172 </span></span>
+<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="co">#&gt;  Yes         │                   40                    50             28 </span></span>
+<span id="cb8-27"><a href="#cb8-27" tabindex="-1"></a><span class="co">#&gt; ─────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb8-28"><a href="#cb8-28" tabindex="-1"></a><span class="co">#&gt;  Total       │                  124                   245            200 </span></span>
+<span id="cb8-29"><a href="#cb8-29" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-30"><a href="#cb8-30" tabindex="-1"></a><span class="co">#&gt;  Values      │      Total </span></span>
+<span id="cb8-31"><a href="#cb8-31" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb8-32"><a href="#cb8-32" tabindex="-1"></a><span class="co">#&gt;  No          │        451 </span></span>
+<span id="cb8-33"><a href="#cb8-33" tabindex="-1"></a><span class="co">#&gt;  Yes         │        118 </span></span>
+<span id="cb8-34"><a href="#cb8-34" tabindex="-1"></a><span class="co">#&gt; ─────────────┼────────────</span></span>
+<span id="cb8-35"><a href="#cb8-35" tabindex="-1"></a><span class="co">#&gt;  Total       │        569 </span></span>
+<span id="cb8-36"><a href="#cb8-36" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-37"><a href="#cb8-37" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 15.6, p &lt; 0.001</span></span>
+<span id="cb8-38"><a href="#cb8-38" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.17</span></span></code></pre></div>
 <p>When both variables are ordered factors, <code>cross_tab()</code>
 automatically selects an ordinal measure (Kendall’s Tau-b) instead of
 Cramer’s V:</p>
 <div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, self_rated_health, education)</span>
 <span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: self_rated_health x education (N)</span></span>
 <span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt;  Values         │      Lower secondary       Upper secondary       Tertiary │      Total </span></span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt;  Poor           │                   28                    28              5 │         61 </span></span>
-<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt;  Fair           │                   86                   118             62 │        266 </span></span>
-<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt;  Good           │                  102                   263            193 │        558 </span></span>
-<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt;  Very good      │                   44                   118            133 │        295 </span></span>
-<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────┼────────────</span></span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt;  Total          │                  260                   527            393 │       1180 </span></span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a><span class="co">#&gt;  Values         │      Lower secondary       Upper secondary       Tertiary </span></span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a><span class="co">#&gt;  Poor           │                   28                    28              5 </span></span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt;  Fair           │                   86                   118             62 </span></span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt;  Good           │                  102                   263            193 </span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt;  Very good      │                   44                   118            133 </span></span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; ────────────────┼───────────────────────────────────────────────────────────</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt;  Total          │                  260                   527            393 </span></span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; Chi-2(6) = 73.2, p &lt; 0.001</span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b = 0.20</span></span></code></pre></div>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt;  Values         │      Total </span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; ────────────────┼────────────</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;  Poor           │         61 </span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt;  Fair           │        266 </span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt;  Good           │        558 </span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt;  Very good      │        295 </span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt; ────────────────┼────────────</span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  Total          │       1180 </span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt; Chi-2(6) = 73.2, p &lt; 0.001</span></span>
+<span id="cb9-23"><a href="#cb9-23" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b = 0.20</span></span></code></pre></div>
 </div>
 <div id="association-measures" class="section level2">
 <h2>Association measures</h2>
@@ -524,17 +563,14 @@ and p-value:</p>
 <span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper        p</span></span>
 <span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt;    0.136     0.079     0.191  &lt; 0.001</span></span></code></pre></div>
 </div>
-<div id="apa-tables" class="section level2">
-<h2>APA tables</h2>
-<p><code>table_apa()</code> builds a publication-ready cross-tabulation
-report by crossing one grouping variable with one or many row variables.
-It supports multiple output formats.</p>
-<p>With <code>output = &quot;tinytable&quot;</code> you get a formatted table
-suitable for R Markdown or Quarto documents:</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">table_apa</span>(</span>
+<div id="summary-tables" class="section level2">
+<h2>Summary tables</h2>
+<p><code>table_categorical()</code> covers grouped or one-way summary
+tables for categorical variables:</p>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">table_categorical</span>(</span>
 <span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">row_vars =</span> <span class="fu">c</span>(<span class="st">&quot;smoking&quot;</span>, <span class="st">&quot;physical_activity&quot;</span>, <span class="st">&quot;dentist_12m&quot;</span>),</span>
-<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">group_var =</span> <span class="st">&quot;education&quot;</span>,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity, dentist_12m),</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
 <span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
 <span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>)</span></code></pre></div>
 <!-- preamble start -->
@@ -777,29 +813,29 @@ function tinytable_rank_sorter(a, b, aRow, bRow, column, dir, sorterParams) {
 
     <script>
       // Create table-specific functions using external factory
-      const tableFns_9nhqwo594jl82n5my68k = TinyTable.createTableFunctions("tinytable_9nhqwo594jl82n5my68k");
+      const tableFns_b4vcvxde8jpck7i4e0np = TinyTable.createTableFunctions("tinytable_b4vcvxde8jpck7i4e0np");
       // tinytable span after
       window.addEventListener('load', function () {
           var cellsToStyle = [
             // tinytable style arrays after
-          { positions: [ { i: '1', j: 10 }, { i: '2', j: 10 }, { i: '3', j: 10 }, { i: '4', j: 10 }, { i: '5', j: 10 }, { i: '6', j: 10 }, { i: '7', j: 10 }, { i: '8', j: 10 }, { i: '1', j: 11 }, { i: '2', j: 11 }, { i: '3', j: 11 }, { i: '4', j: 11 }, { i: '5', j: 11 }, { i: '6', j: 11 }, { i: '7', j: 11 }, { i: '8', j: 11 } ], css_id: 'tinytable_css_prt4fjabfrqld4r40jfe',}, 
-          { positions: [ { i: '0', j: 10 }, { i: '9', j: 10 }, { i: '0', j: 11 }, { i: '9', j: 11 } ], css_id: 'tinytable_css_kcrzql6wlesmgonlfmvc',}, 
-          { positions: [ { i: '-1', j: 10 }, { i: '-1', j: 11 } ], css_id: 'tinytable_css_fjbjtaabeh206q5xedb0',}, 
-          { positions: [ { i: '9', j: 2 }, { i: '9', j: 3 }, { i: '9', j: 4 }, { i: '9', j: 5 }, { i: '9', j: 6 }, { i: '9', j: 7 }, { i: '9', j: 8 }, { i: '9', j: 9 } ], css_id: 'tinytable_css_puy1g5ckfcyc5oliex31',}, 
-          { positions: [ { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '3', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '6', j: 2 }, { i: '7', j: 2 }, { i: '8', j: 2 }, { i: '1', j: 3 }, { i: '2', j: 3 }, { i: '3', j: 3 }, { i: '4', j: 3 }, { i: '5', j: 3 }, { i: '6', j: 3 }, { i: '7', j: 3 }, { i: '8', j: 3 }, { i: '1', j: 4 }, { i: '2', j: 4 }, { i: '3', j: 4 }, { i: '4', j: 4 }, { i: '5', j: 4 }, { i: '6', j: 4 }, { i: '7', j: 4 }, { i: '8', j: 4 }, { i: '1', j: 5 }, { i: '2', j: 5 }, { i: '3', j: 5 }, { i: '4', j: 5 }, { i: '5', j: 5 }, { i: '6', j: 5 }, { i: '7', j: 5 }, { i: '8', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '3', j: 6 }, { i: '4', j: 6 }, { i: '5', j: 6 }, { i: '6', j: 6 }, { i: '7', j: 6 }, { i: '8', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '3', j: 7 }, { i: '4', j: 7 }, { i: '5', j: 7 }, { i: '6', j: 7 }, { i: '7', j: 7 }, { i: '8', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '3', j: 8 }, { i: '4', j: 8 }, { i: '5', j: 8 }, { i: '6', j: 8 }, { i: '7', j: 8 }, { i: '8', j: 8 }, { i: '1', j: 9 }, { i: '2', j: 9 }, { i: '3', j: 9 }, { i: '4', j: 9 }, { i: '5', j: 9 }, { i: '6', j: 9 }, { i: '7', j: 9 }, { i: '8', j: 9 } ], css_id: 'tinytable_css_71gu1cmtbvuzqjl660v6',}, 
-          { positions: [ { i: '0', j: 2 }, { i: '0', j: 3 }, { i: '0', j: 4 }, { i: '0', j: 5 }, { i: '0', j: 6 }, { i: '0', j: 7 }, { i: '0', j: 8 }, { i: '0', j: 9 } ], css_id: 'tinytable_css_6fihk5qfjn81v0r0qfry',}, 
-          { positions: [ { i: '-1', j: 2 }, { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 7 }, { i: '-1', j: 8 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_vlvkntz9fhwdyefye0au',}, 
-          { positions: [ { i: '9', j: 1 } ], css_id: 'tinytable_css_jh9uuzdbcmw7zb7wqo79',}, 
-          { positions: [ { i: '2', j: 1 }, { i: '3', j: 1 }, { i: '5', j: 1 }, { i: '6', j: 1 }, { i: '8', j: 1 } ], css_id: 'tinytable_css_0gxom282kschxfavetpp',}, 
-          { positions: [ { i: '1', j: 1 }, { i: '4', j: 1 }, { i: '7', j: 1 } ], css_id: 'tinytable_css_jayd1d9kqiwpzwtyso19',}, 
-          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_ks73yhrc00xy457td736',}, 
-          { positions: [ { i: '-1', j: 1 } ], css_id: 'tinytable_css_1ssfw9jjtsh0lm67s5x5',}, 
+          { positions: [ { i: '1', j: 10 }, { i: '2', j: 10 }, { i: '3', j: 10 }, { i: '4', j: 10 }, { i: '5', j: 10 }, { i: '6', j: 10 }, { i: '7', j: 10 }, { i: '8', j: 10 }, { i: '1', j: 11 }, { i: '2', j: 11 }, { i: '3', j: 11 }, { i: '4', j: 11 }, { i: '5', j: 11 }, { i: '6', j: 11 }, { i: '7', j: 11 }, { i: '8', j: 11 } ], css_id: 'tinytable_css_6yzjrlgffdl477f7vb68',}, 
+          { positions: [ { i: '0', j: 10 }, { i: '9', j: 10 }, { i: '0', j: 11 }, { i: '9', j: 11 } ], css_id: 'tinytable_css_b2l9l71om9m05ush9x12',}, 
+          { positions: [ { i: '-1', j: 10 }, { i: '-1', j: 11 } ], css_id: 'tinytable_css_gnaudru9sdwvzdppzfz3',}, 
+          { positions: [ { i: '9', j: 2 }, { i: '9', j: 3 }, { i: '9', j: 4 }, { i: '9', j: 5 }, { i: '9', j: 6 }, { i: '9', j: 7 }, { i: '9', j: 8 }, { i: '9', j: 9 } ], css_id: 'tinytable_css_ppj3nysigqicwnhoi0s1',}, 
+          { positions: [ { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '3', j: 2 }, { i: '4', j: 2 }, { i: '5', j: 2 }, { i: '6', j: 2 }, { i: '7', j: 2 }, { i: '8', j: 2 }, { i: '1', j: 3 }, { i: '2', j: 3 }, { i: '3', j: 3 }, { i: '4', j: 3 }, { i: '5', j: 3 }, { i: '6', j: 3 }, { i: '7', j: 3 }, { i: '8', j: 3 }, { i: '1', j: 4 }, { i: '2', j: 4 }, { i: '3', j: 4 }, { i: '4', j: 4 }, { i: '5', j: 4 }, { i: '6', j: 4 }, { i: '7', j: 4 }, { i: '8', j: 4 }, { i: '1', j: 5 }, { i: '2', j: 5 }, { i: '3', j: 5 }, { i: '4', j: 5 }, { i: '5', j: 5 }, { i: '6', j: 5 }, { i: '7', j: 5 }, { i: '8', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '3', j: 6 }, { i: '4', j: 6 }, { i: '5', j: 6 }, { i: '6', j: 6 }, { i: '7', j: 6 }, { i: '8', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '3', j: 7 }, { i: '4', j: 7 }, { i: '5', j: 7 }, { i: '6', j: 7 }, { i: '7', j: 7 }, { i: '8', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '3', j: 8 }, { i: '4', j: 8 }, { i: '5', j: 8 }, { i: '6', j: 8 }, { i: '7', j: 8 }, { i: '8', j: 8 }, { i: '1', j: 9 }, { i: '2', j: 9 }, { i: '3', j: 9 }, { i: '4', j: 9 }, { i: '5', j: 9 }, { i: '6', j: 9 }, { i: '7', j: 9 }, { i: '8', j: 9 } ], css_id: 'tinytable_css_u0pyc7wy9xgakg1pblb4',}, 
+          { positions: [ { i: '0', j: 2 }, { i: '0', j: 3 }, { i: '0', j: 4 }, { i: '0', j: 5 }, { i: '0', j: 6 }, { i: '0', j: 7 }, { i: '0', j: 8 }, { i: '0', j: 9 } ], css_id: 'tinytable_css_68b8fngdkoqizh7r03h2',}, 
+          { positions: [ { i: '-1', j: 2 }, { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 7 }, { i: '-1', j: 8 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_vcie0vdf5un0hmlm0o2k',}, 
+          { positions: [ { i: '9', j: 1 } ], css_id: 'tinytable_css_uzc65c8up24h9u1sy5tb',}, 
+          { positions: [ { i: '2', j: 1 }, { i: '3', j: 1 }, { i: '5', j: 1 }, { i: '6', j: 1 }, { i: '8', j: 1 } ], css_id: 'tinytable_css_svao2h9wgjkkhkutlnmj',}, 
+          { positions: [ { i: '1', j: 1 }, { i: '4', j: 1 }, { i: '7', j: 1 } ], css_id: 'tinytable_css_eo5gcichbg1f282kp8pl',}, 
+          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_m1nokqjnegknjbx7qvjf',}, 
+          { positions: [ { i: '-1', j: 1 } ], css_id: 'tinytable_css_wndoz1rteh7i54050qcb',}, 
           ];
 
           // Loop over the arrays to style the cells
           cellsToStyle.forEach(function (group) {
               group.positions.forEach(function (cell) {
-                  tableFns_9nhqwo594jl82n5my68k.styleCell(cell.i, cell.j, group.css_id);
+                  tableFns_b4vcvxde8jpck7i4e0np.styleCell(cell.i, cell.j, group.css_id);
               });
           });
       });
@@ -1002,21 +1038,21 @@ line-height: var(--tt-line-height-footnote-tight);
 </style>
     <style>
 
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_prt4fjabfrqld4r40jfe, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_prt4fjabfrqld4r40jfe { text-align: right; white-space: nowrap; }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_kcrzql6wlesmgonlfmvc, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_kcrzql6wlesmgonlfmvc { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right; white-space: nowrap; }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_fjbjtaabeh206q5xedb0, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_fjbjtaabeh206q5xedb0 { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center; white-space: nowrap; }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_puy1g5ckfcyc5oliex31, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_puy1g5ckfcyc5oliex31 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_71gu1cmtbvuzqjl660v6, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_71gu1cmtbvuzqjl660v6 { text-align: right }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_6fihk5qfjn81v0r0qfry, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_6fihk5qfjn81v0r0qfry { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_vlvkntz9fhwdyefye0au, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_vlvkntz9fhwdyefye0au { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_jh9uuzdbcmw7zb7wqo79, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_jh9uuzdbcmw7zb7wqo79 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left; padding-left: 1em; padding-left: 0.8em; }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_0gxom282kschxfavetpp, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_0gxom282kschxfavetpp { text-align: left; padding-left: 1em; padding-left: 0.8em; }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_jayd1d9kqiwpzwtyso19, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_jayd1d9kqiwpzwtyso19 { text-align: left }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_ks73yhrc00xy457td736, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_ks73yhrc00xy457td736 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
-#tinytable_9nhqwo594jl82n5my68k td.tinytable_css_1ssfw9jjtsh0lm67s5x5, #tinytable_9nhqwo594jl82n5my68k th.tinytable_css_1ssfw9jjtsh0lm67s5x5 { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_6yzjrlgffdl477f7vb68, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_6yzjrlgffdl477f7vb68 { text-align: right; white-space: nowrap; }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_b2l9l71om9m05ush9x12, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_b2l9l71om9m05ush9x12 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right; white-space: nowrap; }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_gnaudru9sdwvzdppzfz3, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_gnaudru9sdwvzdppzfz3 { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center; white-space: nowrap; }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_ppj3nysigqicwnhoi0s1, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_ppj3nysigqicwnhoi0s1 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_u0pyc7wy9xgakg1pblb4, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_u0pyc7wy9xgakg1pblb4 { text-align: right }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_68b8fngdkoqizh7r03h2, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_68b8fngdkoqizh7r03h2 { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_vcie0vdf5un0hmlm0o2k, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_vcie0vdf5un0hmlm0o2k { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_uzc65c8up24h9u1sy5tb, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_uzc65c8up24h9u1sy5tb { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_svao2h9wgjkkhkutlnmj, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_svao2h9wgjkkhkutlnmj { text-align: left; padding-left: 1em; padding-left: 0.8em; }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_eo5gcichbg1f282kp8pl, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_eo5gcichbg1f282kp8pl { text-align: left }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_m1nokqjnegknjbx7qvjf, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_m1nokqjnegknjbx7qvjf { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
+#tinytable_b4vcvxde8jpck7i4e0np td.tinytable_css_wndoz1rteh7i54050qcb, #tinytable_b4vcvxde8jpck7i4e0np th.tinytable_css_wndoz1rteh7i54050qcb { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
 </style>
     <div class="container">
-      <table class="tinytable" id="tinytable_9nhqwo594jl82n5my68k" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
+      <table class="tinytable" id="tinytable_b4vcvxde8jpck7i4e0np" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
         
         <thead>
 <tr>
@@ -1058,7 +1094,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="1" data-col="11">.14</td>
                 </tr>
                 <tr>
-                  <td data-row="2" data-col="1">      No</td>
+                  <td data-row="2" data-col="1">    No</td>
                   <td data-row="2" data-col="2">179</td>
                   <td data-row="2" data-col="3">69.6</td>
                   <td data-row="2" data-col="4">415</td>
@@ -1071,7 +1107,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="2" data-col="11"></td>
                 </tr>
                 <tr>
-                  <td data-row="3" data-col="1">      Yes</td>
+                  <td data-row="3" data-col="1">    Yes</td>
                   <td data-row="3" data-col="2">78</td>
                   <td data-row="3" data-col="3">30.4</td>
                   <td data-row="3" data-col="4">112</td>
@@ -1097,7 +1133,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="4" data-col="11">.21</td>
                 </tr>
                 <tr>
-                  <td data-row="5" data-col="1">      No</td>
+                  <td data-row="5" data-col="1">    No</td>
                   <td data-row="5" data-col="2">177</td>
                   <td data-row="5" data-col="3">67.8</td>
                   <td data-row="5" data-col="4">310</td>
@@ -1110,7 +1146,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="5" data-col="11"></td>
                 </tr>
                 <tr>
-                  <td data-row="6" data-col="1">      Yes</td>
+                  <td data-row="6" data-col="1">    Yes</td>
                   <td data-row="6" data-col="2">84</td>
                   <td data-row="6" data-col="3">32.2</td>
                   <td data-row="6" data-col="4">229</td>
@@ -1136,7 +1172,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="7" data-col="11">.22</td>
                 </tr>
                 <tr>
-                  <td data-row="8" data-col="1">      No</td>
+                  <td data-row="8" data-col="1">    No</td>
                   <td data-row="8" data-col="2">113</td>
                   <td data-row="8" data-col="3">43.3</td>
                   <td data-row="8" data-col="4">174</td>
@@ -1149,7 +1185,7 @@ line-height: var(--tt-line-height-footnote-tight);
                   <td data-row="8" data-col="11"></td>
                 </tr>
                 <tr>
-                  <td data-row="9" data-col="1">      Yes</td>
+                  <td data-row="9" data-col="1">    Yes</td>
                   <td data-row="9" data-col="2">148</td>
                   <td data-row="9" data-col="3">56.7</td>
                   <td data-row="9" data-col="4">365</td>
@@ -1165,627 +1201,79 @@ line-height: var(--tt-line-height-footnote-tight);
       </table>
     </div>
 <!-- hack to avoid NA insertion in last line -->
-<p>Use <code>assoc_ci = TRUE</code> to display the confidence interval
-inline:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">table_apa</span>(</span>
+<p><code>table_continuous()</code> summarizes continuous variables,
+either overall or by a categorical <code>by</code> variable, and can
+also add group-comparison tests:</p>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">row_vars =</span> <span class="st">&quot;smoking&quot;</span>,</span>
-<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">group_var =</span> <span class="st">&quot;education&quot;</span>,</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span>,</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>  <span class="at">assoc_ci =</span> <span class="cn">TRUE</span></span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>)</span></code></pre></div>
-<!-- preamble start -->
-
-    <script>// TinyTable JavaScript Framework
-// Function factory for creating table-specific operations
-window.TinyTable = {
-  // Helper to create Tabulator instance with Luxon dependency
-  createTabulator: function(elementId, config) {
-    const { DateTime } = window.luxon || {};
-    return new Tabulator(elementId, {
-      dependencies: { DateTime },
-      ...config
-    });
-  },
-
-  createTableFunctions: function (tableId) {
-    const spans = []; // {top, left, rowspan, colspan}
-
-    function resolveToAnchor(i, j) {
-      // find if (i,j) is inside any span; return that span's anchor if so
-      for (const s of spans) {
-        if (
-          i >= s.top && i < s.top + s.rowspan &&
-          j >= s.left && j < s.left + s.colspan
-        ) {
-          return { i: s.top, j: s.left };
-        }
-      }
-      return { i, j };
-    }
-
-    return {
-      styleCell: function (i, j, css_id) {
-        // normalize possible string indices
-        i = +i; j = +j;
-
-        const table = document.getElementById(tableId);
-        const { i: ai, j: aj } = resolveToAnchor(i, j);
-        const cell = table.querySelector(`[data-row="${ai}"][data-col="${aj}"]`);
-        if (!cell) return; // silently skip if not found (e.g., removed)
-        cell.classList.add(css_id);
-      },
-
-      spanCell: function (i, j, rowspan, colspan) {
-        i = +i; j = +j;
-
-        const table = document.getElementById(tableId);
-        const targetCell = table.querySelector(`[data-row="${i}"][data-col="${j}"]`);
-        if (!targetCell) {
-          console.warn(`Cell at (${i}, ${j}) not found.`);
-          return;
-        }
-
-        // record span so future styleCell calls map to the anchor
-        spans.push({ top: i, left: j, rowspan, colspan });
-
-        // remove covered cells (except anchor)
-        const cellsToRemove = [];
-        for (let r = 0; r < rowspan; r++) {
-          for (let c = 0; c < colspan; c++) {
-            if (r === 0 && c === 0) continue;
-            const cell = table.querySelector(`[data-row="${i + r}"][data-col="${j + c}"]`);
-            if (cell) cellsToRemove.push(cell);
-          }
-        }
-        cellsToRemove.forEach(cell => cell.remove());
-
-        // set HTML attributes for clarity/serialization
-        targetCell.setAttribute('rowspan', rowspan);
-        targetCell.setAttribute('colspan', colspan);
-      }
-    };
-  }
-};
-
-// =============================================================================
-// TABULATOR CUSTOM FORMATTERS (revised)
-// =============================================================================
-
-// SVG sparkline
-function tinytable_sparkline(cell, p = {}) {
-  let values = cell.getValue() ?? [];
-  if (!Array.isArray(values)) values = [values];
-  // coerce to finite numbers & strip NaNs
-  values = values.map(Number).filter(Number.isFinite);
-  const n = values.length;
-  if (n === 0) return "";
-
-  const w = p.width ?? 120, h = p.height ?? 30, pad = p.pad ?? 2;
-  const color = p.color ?? "currentColor", sw = p.strokeWidth ?? 1.5;
-  const fill = p.fillArea ?? false;
-  const showDots = p.showDots ?? false;
-  const dotR = p.dotRadius ?? 1.75;
-  const ariaLabel = p.ariaLabel ?? `sparkline with ${n} points`;
-
-  // single pass for min/max
-  let min = Infinity, max = -Infinity;
-  for (let v of values) { if (v < min) min = v; if (v > max) max = v; }
-  const span = (max - min) || 1;
-
-  const x = i => pad + (i * (w - 2 * pad)) / Math.max(n - 1, 1);
-  const y = v => h - pad - ((v - min) * (h - 2 * pad)) / span;
-
-  let d = `M ${x(0)},${y(values[0])}`;
-  for (let i = 1; i < n; i++) d += ` L ${x(i)},${y(values[i])}`;
-
-  const NS = "http://www.w3.org/2000/svg";
-  const svg = document.createElementNS(NS, "svg");
-  svg.setAttribute("viewBox", `0 0 ${w} ${h}`);
-  svg.setAttribute("width", w);
-  svg.setAttribute("height", h);
-  svg.setAttribute("role", "img");
-  svg.setAttribute("aria-label", ariaLabel);
-
-  const path = document.createElementNS(NS, "path");
-  path.setAttribute("stroke", color);
-  path.setAttribute("stroke-width", sw);
-  path.setAttribute("vector-effect", "non-scaling-stroke");
-
-  if (fill) {
-    const area = document.createElementNS(NS, "path");
-    area.setAttribute("d", d + ` L ${x(n - 1)},${h - pad} L ${x(0)},${h - pad} Z`);
-    area.setAttribute("fill", color);
-    area.setAttribute("fill-opacity", p.fillOpacity ?? 0.25);
-    svg.appendChild(area);
-    path.setAttribute("d", d);
-    path.setAttribute("fill", "none");
-  } else {
-    path.setAttribute("d", d);
-    path.setAttribute("fill", "none");
-  }
-  svg.appendChild(path);
-
-  if (showDots) {
-    const dot = (i) => {
-      const c = document.createElementNS(NS, "circle");
-      c.setAttribute("cx", x(i));
-      c.setAttribute("cy", y(values[i]));
-      c.setAttribute("r", dotR);
-      c.setAttribute("fill", color);
-      return c;
-    };
-    if (p.dots === "end") svg.appendChild(dot(n - 1));
-    else if (p.dots === "minmax") {
-      const iMin = values.indexOf(min), iMax = values.indexOf(max);
-      svg.appendChild(dot(iMin)); svg.appendChild(dot(iMax));
-    } else if (p.dots === true) {
-      for (let i = 0; i < n; i++) svg.appendChild(dot(i));
-    }
-  }
-
-  if (p.title) {
-    const title = document.createElementNS(NS, "title");
-    title.textContent = p.title;
-    svg.appendChild(title);
-  }
-
-  return svg;
-}
-
-// Canvas histogram
-function tinytable_histogram(cell, p = {}) {
-  let data = cell.getValue() ?? [];
-  if (!Array.isArray(data)) data = [data];
-  data = data.map(Number).filter(Number.isFinite);
-  const n = data.length;
-  if (n === 0) return "";
-
-  const cssWidth = p.width ?? 120;
-  const cssHeight = p.height ?? 30;
-  const color = p.color ?? "currentColor";
-  const gap = p.gap ?? 1;         // px gap between bars
-  const pad = p.pad ?? 0;         // inner padding
-  const ariaLabel = p.ariaLabel ?? `histogram with ${n} observations`;
-
-  // robust bins: Sturges as default; allow override
-  const k = Math.max(1, Math.min(64, p.bins ?? Math.ceil(Math.log2(n) + 1)));
-
-  // stats
-  let min = Infinity, max = -Infinity;
-  for (let v of data) { if (v < min) min = v; if (v > max) max = v; }
-
-  // zero-range safeguard -> single centered bar
-  const range = max - min;
-  const binWidth = range > 0 ? range / k : 1;
-
-  const bins = new Array(k).fill(0);
-  if (range === 0) {
-    // put all mass in the middle bin
-    bins[Math.floor(k / 2)] = n;
-  } else {
-    for (let v of data) {
-      let idx = Math.floor((v - min) / binWidth);
-      if (idx >= k) idx = k - 1; // clamp max edge
-      bins[idx]++;
-    }
-  }
-  const maxCount = Math.max(...bins, 1);
-
-  // HiDPI / Retina crispness
-  const dpr = window.devicePixelRatio || 1;
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.round(cssWidth * dpr);
-  canvas.height = Math.round(cssHeight * dpr);
-  canvas.style.width = cssWidth + "px";
-  canvas.style.height = cssHeight + "px";
-  canvas.setAttribute("role", "img");
-  canvas.setAttribute("aria-label", ariaLabel);
-
-  const ctx = canvas.getContext("2d");
-  ctx.scale(dpr, dpr);
-  ctx.clearRect(0, 0, cssWidth, cssHeight);
-  ctx.fillStyle = color;
-
-  const innerW = cssWidth - pad * 2;
-  const innerH = cssHeight - pad * 2;
-  const barW = innerW / k;
-
-  for (let i = 0; i < k; i++) {
-    const h = (bins[i] / maxCount) * innerH;
-    const x = pad + i * barW;
-    const y = cssHeight - pad - h;
-    // 0.5 translate helps crisp vertical edges on some displays
-    ctx.fillRect(Math.round(x) + 0.5, Math.floor(y), Math.max(0, barW - gap), Math.ceil(h));
-  }
-
-  if (p.title) canvas.title = p.title;
-  return canvas;
-}
-
-// Unified sorter that uses hidden rank field
-function tinytable_rank_sorter(a, b, aRow, bRow, column, dir, sorterParams) {
-  const rankField = sorterParams.rankField;
-  const aVal = aRow.getData()[rankField] || 0;
-  const bVal = bRow.getData()[rankField] || 0;
-  return aVal - bVal;
-}
-</script>
-
-    <script>
-      // Create table-specific functions using external factory
-      const tableFns_gvxtc9exbmwso2t4jqpc = TinyTable.createTableFunctions("tinytable_gvxtc9exbmwso2t4jqpc");
-      // tinytable span after
-      window.addEventListener('load', function () {
-          var cellsToStyle = [
-            // tinytable style arrays after
-          { positions: [ { i: '1', j: 10 }, { i: '2', j: 10 }, { i: '1', j: 11 }, { i: '2', j: 11 } ], css_id: 'tinytable_css_ntxc4ubm7mnk5bvkqp7y',}, 
-          { positions: [ { i: '0', j: 10 }, { i: '3', j: 10 }, { i: '0', j: 11 }, { i: '3', j: 11 } ], css_id: 'tinytable_css_0mxfm7quvd98x3xrax6a',}, 
-          { positions: [ { i: '-1', j: 10 }, { i: '-1', j: 11 } ], css_id: 'tinytable_css_1eka262ds370iaburraj',}, 
-          { positions: [ { i: '3', j: 2 }, { i: '3', j: 3 }, { i: '3', j: 4 }, { i: '3', j: 5 }, { i: '3', j: 6 }, { i: '3', j: 7 }, { i: '3', j: 8 }, { i: '3', j: 9 } ], css_id: 'tinytable_css_z4chgjdtg92hgf4xfgqi',}, 
-          { positions: [ { i: '1', j: 2 }, { i: '2', j: 2 }, { i: '1', j: 3 }, { i: '2', j: 3 }, { i: '1', j: 4 }, { i: '2', j: 4 }, { i: '1', j: 5 }, { i: '2', j: 5 }, { i: '1', j: 6 }, { i: '2', j: 6 }, { i: '1', j: 7 }, { i: '2', j: 7 }, { i: '1', j: 8 }, { i: '2', j: 8 }, { i: '1', j: 9 }, { i: '2', j: 9 } ], css_id: 'tinytable_css_rv83h069req5wl9pxb56',}, 
-          { positions: [ { i: '0', j: 2 }, { i: '0', j: 3 }, { i: '0', j: 4 }, { i: '0', j: 5 }, { i: '0', j: 6 }, { i: '0', j: 7 }, { i: '0', j: 8 }, { i: '0', j: 9 } ], css_id: 'tinytable_css_hevydvyk2x1bwwu2xmnt',}, 
-          { positions: [ { i: '-1', j: 2 }, { i: '-1', j: 3 }, { i: '-1', j: 4 }, { i: '-1', j: 5 }, { i: '-1', j: 6 }, { i: '-1', j: 7 }, { i: '-1', j: 8 }, { i: '-1', j: 9 } ], css_id: 'tinytable_css_zk6f4cjcja1qnuclocrq',}, 
-          { positions: [ { i: '3', j: 1 } ], css_id: 'tinytable_css_blwrm9rqwqccb1bmcu8a',}, 
-          { positions: [ { i: '2', j: 1 } ], css_id: 'tinytable_css_xeojm9hgelz0ez7lmxqf',}, 
-          { positions: [ { i: '1', j: 1 } ], css_id: 'tinytable_css_w4875c6h5jvua7r997e1',}, 
-          { positions: [ { i: '0', j: 1 } ], css_id: 'tinytable_css_htj8nbelhw38myu8lh1u',}, 
-          { positions: [ { i: '-1', j: 1 } ], css_id: 'tinytable_css_fwu3h2meoxkw2v65n75n',}, 
-          ];
-
-          // Loop over the arrays to style the cells
-          cellsToStyle.forEach(function (group) {
-              group.positions.forEach(function (cell) {
-                  tableFns_gvxtc9exbmwso2t4jqpc.styleCell(cell.i, cell.j, group.css_id);
-              });
-          });
-      });
-    </script>
-
-    <style type="text/css">
-
-
-.tinytable {
-
---tt-text-color: inherit;
---tt-line-color: black;
---tt-border-color: var(--tt-line-color);
---tt-striped-bg: rgba(0, 0, 0, .05);
---tt-hover-bg: rgba(0, 0, 0, .075);
---tt-background-color: transparent;
---tt-footnote-bg: var(--tt-background-color);
-
---tt-cell-padding: .5rem;
---tt-cell-padding-sm: calc(var(--tt-cell-padding) / 2);
---tt-table-margin: .5rem 0;
---tt-caption-padding: .5rem 0;
---tt-footnote-padding: .2rem .5rem;
---tt-footnote-first-padding-top: .5rem;
---tt-footnote-gap: .1rem;
---tt-container-padding: 10px;
-
---tt-font-size-footnote: 0.875rem;
---tt-font-size-caption: 1rem;
---tt-font-size-sup: 0.75em;
---tt-line-height-footnote: 1.25;
---tt-line-height-footnote-tight: 1.2;
---tt-font-weight-header: normal;
-
---tt-cell-valign: top;
---tt-header-align: left;
---tt-header-valign: bottom;
---tt-caption-align: var(--tt-header-align);
---tt-caption-side: top;
-
---tt-table-width: 100%;
-
---tt-border-width: 1px;
---tt-border-width-tbody: 2px;
-}
-
-.tinytable {
-width: var(--tt-table-width);
-margin: var(--tt-table-margin);
-border-collapse: collapse;
-background-color: var(--tt-background-color);
-color: var(--tt-text-color);
-font-family: inherit;
--webkit-font-smoothing: antialiased;
--moz-osx-font-smoothing: grayscale;
-}
-.tinytable *:not(mjx-container):not(mjx-container *) {
-font-family: inherit;
-}
-
-.tinytable th,
-.tinytable td {
-position: relative;
-padding: var(--tt-cell-padding);
-vertical-align: var(--tt-cell-valign);
-}
-.tinytable thead th {
-text-align: var(--tt-header-align);
-vertical-align: var(--tt-header-valign);
-font-weight: var(--tt-font-weight-header);
-border-bottom: none;
-}
-.tinytable thead th[align="center"] {
-text-align: center;
-}
-.tinytable tbody + tbody {
-border-top: var(--tt-border-width-tbody) solid var(--tt-border-color);
-}
-
-
-.tinytable-sm th,
-.tinytable-sm td {
-padding: var(--tt-cell-padding-sm);
-}
-
-.tinytable-bordered {
-border: var(--tt-border-width) solid var(--tt-border-color);
-}
-.tinytable-bordered th,
-.tinytable-bordered td {
-border: var(--tt-border-width) solid var(--tt-border-color);
-}
-
-.tinytable-striped tbody tr:nth-of-type(odd) {
-background-color: var(--tt-striped-bg);
-}
-
-.tinytable-hover tbody tr:hover {
-background-color: var(--tt-hover-bg);
-}
-
-.tinytable-responsive {
-width: var(--tt-table-width);
-overflow-x: auto;
--webkit-overflow-scrolling: touch;
-}
-
-.tinytable :is(td, th)[class*="tinytable_css_"] {
-position: relative;
-
---border-top: 0;
---border-right: 0;
---border-bottom: 0;
---border-left: 0;
-
---line-color-top: currentColor;
---line-color-right: currentColor;
---line-color-bottom: currentColor;
---line-color-left: currentColor;
-
---line-width-top: 0.1em;
---line-width-right: 0.1em;
---line-width-bottom: 0.1em;
---line-width-left: 0.1em;
-
---trim-top-left: 0%;
---trim-top-right: 0%;
---trim-right-top: 0%;
---trim-right-bottom: 0%;
---trim-bottom-left: 0%;
---trim-bottom-right: 0%;
---trim-left-top: 0%;
---trim-left-bottom: 0%;
-}
-
-.tinytable :is(td, th)[class*="tinytable_css_"]::before {
-content: "";
-position: absolute;
-top: var(--trim-top-left, var(--trim-top-right, 0));
-left: var(--trim-left-top, 0);
-right: var(--trim-right-top, 0);
-bottom: 0;
-pointer-events: none;
-z-index: 1;
-border-top: calc(var(--border-top) * var(--line-width-top)) solid var(--line-color-top);
-border-right: calc(var(--border-right) * var(--line-width-right)) solid var(--line-color-right);
-border-left: calc(var(--border-left) * var(--line-width-left)) solid var(--line-color-left);
-}
-
-.tinytable :is(td, th)[class*="tinytable_css_"]::after {
-content: "";
-position: absolute;
-left: var(--trim-bottom-left, 0);
-right: var(--trim-bottom-right, 0);
-bottom: var(--trim-left-bottom, var(--trim-right-bottom, 0));
-height: calc(var(--border-bottom) * var(--line-width-bottom));
-background: var(--line-color-bottom);
-pointer-events: none;
-z-index: 2;
-}
-
-.tinytable-container {
-padding: var(--tt-container-padding);
-overflow-x: auto;
-overflow-y: auto;
-width: auto;
-height: auto;
-}
-
-.tinytable caption {
-padding: var(--tt-caption-padding);
-caption-side: var(--tt-caption-side);
-font-size: var(--tt-font-size-caption);
-text-align: var(--tt-caption-align);
-}
-
-.tinytable tfoot tr:first-child td {
-padding-top: var(--tt-footnote-first-padding-top);
-}
-.tinytable tfoot td {
-padding: var(--tt-footnote-padding);
-font-size: var(--tt-font-size-footnote);
-line-height: var(--tt-line-height-footnote);
-background-color: var(--tt-footnote-bg);
-}
-
-.tinytable tfoot tr + tr td {
-padding-top: var(--tt-footnote-gap);
-}
-
-.tinytable tfoot sup {
-font-size: var(--tt-font-size-sup);
-line-height: 0;
-vertical-align: text-top;
-}
-
-.tinytable tfoot tr:nth-child(n+2) td {
-line-height: var(--tt-line-height-footnote-tight);
-}
-</style>
-    <style>
-
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_ntxc4ubm7mnk5bvkqp7y, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_ntxc4ubm7mnk5bvkqp7y { text-align: right; white-space: nowrap; }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_0mxfm7quvd98x3xrax6a, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_0mxfm7quvd98x3xrax6a { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right; white-space: nowrap; }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_1eka262ds370iaburraj, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_1eka262ds370iaburraj { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center; white-space: nowrap; }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_z4chgjdtg92hgf4xfgqi, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_z4chgjdtg92hgf4xfgqi { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: right }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_rv83h069req5wl9pxb56, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_rv83h069req5wl9pxb56 { text-align: right }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_hevydvyk2x1bwwu2xmnt, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_hevydvyk2x1bwwu2xmnt { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_zk6f4cjcja1qnuclocrq, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_zk6f4cjcja1qnuclocrq { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: center }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_blwrm9rqwqccb1bmcu8a, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_blwrm9rqwqccb1bmcu8a { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left; padding-left: 1em; padding-left: 0.8em; }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_xeojm9hgelz0ez7lmxqf, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_xeojm9hgelz0ez7lmxqf { text-align: left; padding-left: 1em; padding-left: 0.8em; }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_w4875c6h5jvua7r997e1, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_w4875c6h5jvua7r997e1 { text-align: left }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_htj8nbelhw38myu8lh1u, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_htj8nbelhw38myu8lh1u { position: relative; --border-bottom: 1; --border-left: 0; --border-right: 0; --border-top: 0; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.06em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.1em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
-#tinytable_gvxtc9exbmwso2t4jqpc td.tinytable_css_fwu3h2meoxkw2v65n75n, #tinytable_gvxtc9exbmwso2t4jqpc th.tinytable_css_fwu3h2meoxkw2v65n75n { position: relative; --border-bottom: 0; --border-left: 0; --border-right: 0; --border-top: 1; --line-color-bottom: var(--tt-line-color); --line-color-left: var(--tt-line-color); --line-color-right: var(--tt-line-color); --line-color-top: var(--tt-line-color); --line-width-bottom: 0.1em; --line-width-left: 0.1em; --line-width-right: 0.1em; --line-width-top: 0.06em; --trim-bottom-left: 0%; --trim-bottom-right: 0%; --trim-left-bottom: 0%; --trim-left-top: 0%; --trim-right-bottom: 0%; --trim-right-top: 0%; --trim-top-left: 0%; --trim-top-right: 0%; ; text-align: left }
-</style>
-    <div class="container">
-      <table class="tinytable" id="tinytable_gvxtc9exbmwso2t4jqpc" style="width: auto; margin-left: auto; margin-right: auto;" data-quarto-disable-processing="true">
-        
-        <thead>
-<tr>
-<th scope="col" align="center" colspan="1" data-row="-1" data-col="1">Variable</th>
-<th scope="col" align="center" colspan="2" data-row="-1" data-col="2">Lower secondary</th>
-<th scope="col" align="center" colspan="2" data-row="-1" data-col="4">Upper secondary</th>
-<th scope="col" align="center" colspan="2" data-row="-1" data-col="6">Tertiary</th>
-<th scope="col" align="center" colspan="2" data-row="-1" data-col="8">Total</th>
-<th scope="col" align="center" colspan="1" data-row="-1" data-col="10">p</th>
-<th scope="col" align="center" colspan="1" data-row="-1" data-col="11">Cramer&#39;s V</th>
-</tr>
-              <tr>
-                <th scope="col" data-row="0" data-col="1"></th>
-                <th scope="col" data-row="0" data-col="2">n</th>
-                <th scope="col" data-row="0" data-col="3">%</th>
-                <th scope="col" data-row="0" data-col="4">n</th>
-                <th scope="col" data-row="0" data-col="5">%</th>
-                <th scope="col" data-row="0" data-col="6">n</th>
-                <th scope="col" data-row="0" data-col="7">%</th>
-                <th scope="col" data-row="0" data-col="8">n</th>
-                <th scope="col" data-row="0" data-col="9">%</th>
-                <th scope="col" data-row="0" data-col="10"></th>
-                <th scope="col" data-row="0" data-col="11"></th>
-              </tr>
-        </thead>
-        
-        <tbody>
-                <tr>
-                  <td data-row="1" data-col="1">smoking</td>
-                  <td data-row="1" data-col="2"></td>
-                  <td data-row="1" data-col="3"></td>
-                  <td data-row="1" data-col="4"></td>
-                  <td data-row="1" data-col="5"></td>
-                  <td data-row="1" data-col="6"></td>
-                  <td data-row="1" data-col="7"></td>
-                  <td data-row="1" data-col="8"></td>
-                  <td data-row="1" data-col="9"></td>
-                  <td data-row="1" data-col="10">&lt; .001</td>
-                  <td data-row="1" data-col="11">.14 [.08, .19]</td>
-                </tr>
-                <tr>
-                  <td data-row="2" data-col="1">      No</td>
-                  <td data-row="2" data-col="2">179</td>
-                  <td data-row="2" data-col="3">69.6</td>
-                  <td data-row="2" data-col="4">415</td>
-                  <td data-row="2" data-col="5">78.7</td>
-                  <td data-row="2" data-col="6">332</td>
-                  <td data-row="2" data-col="7">84.9</td>
-                  <td data-row="2" data-col="8">926</td>
-                  <td data-row="2" data-col="9">78.8</td>
-                  <td data-row="2" data-col="10"></td>
-                  <td data-row="2" data-col="11"></td>
-                </tr>
-                <tr>
-                  <td data-row="3" data-col="1">      Yes</td>
-                  <td data-row="3" data-col="2">78</td>
-                  <td data-row="3" data-col="3">30.4</td>
-                  <td data-row="3" data-col="4">112</td>
-                  <td data-row="3" data-col="5">21.3</td>
-                  <td data-row="3" data-col="6">59</td>
-                  <td data-row="3" data-col="7">15.1</td>
-                  <td data-row="3" data-col="8">249</td>
-                  <td data-row="3" data-col="9">21.2</td>
-                  <td data-row="3" data-col="10"></td>
-                  <td data-row="3" data-col="11"></td>
-                </tr>
-        </tbody>
-      </table>
-    </div>
-<!-- hack to avoid NA insertion in last line -->
-<p>Other formats include <code>&quot;gt&quot;</code>, <code>&quot;flextable&quot;</code>,
-<code>&quot;excel&quot;</code>, <code>&quot;clipboard&quot;</code>, and <code>&quot;word&quot;</code>.
-The <code>&quot;wide&quot;</code> and <code>&quot;long&quot;</code> formats return data
-frames for further processing:</p>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">table_apa</span>(</span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">row_vars =</span> <span class="fu">c</span>(<span class="st">&quot;smoking&quot;</span>, <span class="st">&quot;physical_activity&quot;</span>),</span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">group_var =</span> <span class="st">&quot;education&quot;</span>,</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;wide&quot;</span></span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>)</span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a><span class="co">#&gt;            Variable Level Lower secondary n Lower secondary % Upper secondary n</span></span>
-<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="co">#&gt; 1           smoking    No               179              69.6               415</span></span>
-<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="co">#&gt; 2           smoking   Yes                78              30.4               112</span></span>
-<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt; 3 physical_activity    No               177              67.8               310</span></span>
-<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; 4 physical_activity   Yes                84              32.2               229</span></span>
-<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt;   Upper secondary % Tertiary n Tertiary % Total n Total %            p</span></span>
-<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co">#&gt; 1              78.7        332       84.9     926    78.8 2.012877e-05</span></span>
-<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt; 2              21.3         59       15.1     249    21.2 2.012877e-05</span></span>
-<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co">#&gt; 3              57.5        163       40.8     650    54.2 8.333584e-12</span></span>
-<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="co">#&gt; 4              42.5        237       59.2     550    45.8 8.333584e-12</span></span>
-<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="co">#&gt;   Cramer&#39;s V</span></span>
-<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="co">#&gt; 1  0.1356677</span></span>
-<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="co">#&gt; 2  0.1356677</span></span>
-<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="co">#&gt; 3  0.2061986</span></span>
-<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="co">#&gt; 4  0.2061986</span></span></code></pre></div>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, life_sat_health),</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">by =</span> education</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>)</span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group              M     SD    Min    Max  </span></span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────────</span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  28.09  3.47  18.20  38.90 </span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  26.02  3.43  16.00  37.10 </span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         24.39  3.52  16.00  33.00 </span></span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  2.71   1.20  1.00   5.00  </span></span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  3.53   1.19  1.00   5.00  </span></span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         4.11   1.04  1.00   5.00  </span></span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-18"><a href="#cb13-18" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group            95% CI LL  95% CI UL    n </span></span>
+<span id="cb13-19"><a href="#cb13-19" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────────</span></span>
+<span id="cb13-20"><a href="#cb13-20" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary    27.66      28.51    260 </span></span>
+<span id="cb13-21"><a href="#cb13-21" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    25.73      26.31    534 </span></span>
+<span id="cb13-22"><a href="#cb13-22" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           24.04      24.74    394 </span></span>
+<span id="cb13-23"><a href="#cb13-23" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb13-24"><a href="#cb13-24" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary    2.57       2.86     259 </span></span>
+<span id="cb13-25"><a href="#cb13-25" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    3.43       3.63     534 </span></span>
+<span id="cb13-26"><a href="#cb13-26" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           4.01       4.21     399</span></span></code></pre></div>
+<p>For detailed guidance, see the dedicated articles on
+<code>table_categorical()</code>, <code>table_continuous()</code>, and
+the final reporting overview for APA-style summary tables.</p>
 </div>
 <div id="row-wise-summaries" class="section level2">
 <h2>Row-wise summaries</h2>
 <p><code>mean_n()</code>, <code>sum_n()</code>, and
 <code>count_n()</code> compute row-wise statistics across selected
 columns, with automatic handling of missing values.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>sochealth <span class="sc">|&gt;</span></span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>    <span class="at">mean_sat  =</span> <span class="fu">mean_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>)),</span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>    <span class="at">sum_sat   =</span> <span class="fu">sum_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">min_valid =</span> <span class="dv">2</span>),</span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>    <span class="at">n_missing =</span> <span class="fu">count_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">special =</span> <span class="st">&quot;NA&quot;</span>)</span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), mean_sat, sum_sat, n_missing) <span class="sc">|&gt;</span></span>
-<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  <span class="fu">head</span>() <span class="sc">|&gt;</span></span>
-<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
-<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt;   life_sat_health life_sat_work life_sat_relationships life_sat_standard</span></span>
-<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt; 1               5             3                      5                 5</span></span>
-<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt; 2               4             4                      5                 5</span></span>
-<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt; 3               3             2                      5                 3</span></span>
-<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt; 4               3             4                      3                 2</span></span>
-<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co">#&gt; 5               4             5                      4                 4</span></span>
-<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="co">#&gt; 6               5             5                      5                 3</span></span>
-<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt;   mean_sat sum_sat n_missing</span></span>
-<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt; 1     4.50      18         0</span></span>
-<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt; 2     4.50      18         0</span></span>
-<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt; 3     3.25      13         0</span></span>
-<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt; 4     3.00      12         0</span></span>
-<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="co">#&gt; 5     4.25      17         0</span></span>
-<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a><span class="co">#&gt; 6     4.50      18         0</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>sochealth <span class="sc">|&gt;</span></span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>    <span class="at">mean_sat  =</span> <span class="fu">mean_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>)),</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>    <span class="at">sum_sat   =</span> <span class="fu">sum_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">min_valid =</span> <span class="dv">2</span>),</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>    <span class="at">n_missing =</span> <span class="fu">count_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">special =</span> <span class="st">&quot;NA&quot;</span>)</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), mean_sat, sum_sat, n_missing) <span class="sc">|&gt;</span></span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>  <span class="fu">head</span>() <span class="sc">|&gt;</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt;   life_sat_health life_sat_work life_sat_relationships life_sat_standard</span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; 1               5             3                      5                 5</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt; 2               4             4                      5                 5</span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co">#&gt; 3               3             2                      5                 3</span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt; 4               3             4                      3                 2</span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co">#&gt; 5               4             5                      4                 4</span></span>
+<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="co">#&gt; 6               5             5                      5                 3</span></span>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="co">#&gt;   mean_sat sum_sat n_missing</span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="co">#&gt; 1     4.50      18         0</span></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="co">#&gt; 2     4.50      18         0</span></span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="co">#&gt; 3     3.25      13         0</span></span>
+<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="co">#&gt; 4     3.00      12         0</span></span>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="co">#&gt; 5     4.25      17         0</span></span>
+<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a><span class="co">#&gt; 6     4.50      18         0</span></span></code></pre></div>
 </div>
 <div id="learn-more" class="section level2">
 <h2>Learn more</h2>
 <ul>
+<li>See <code>?varlist</code> to inspect variables, labels, values, and
+missing data.</li>
 <li>See <code>?cross_tab</code> for the full list of arguments (weights,
 simulation, association measures).</li>
-<li>See <code>?table_apa</code> for all output formats and customization
-options.</li>
+<li>See <code>?table_categorical</code> for grouped or one-way
+categorical tables.</li>
+<li>See <code>?table_continuous</code> for continuous summaries and
+group comparisons.</li>
 <li>See <code>?assoc_measures</code> for the complete list of
 association statistics.</li>
 <li>See <code>?code_book</code> to generate an interactive HTML
