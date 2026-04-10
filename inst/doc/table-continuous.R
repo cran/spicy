@@ -4,6 +4,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 pkgdown_dark_gt <- function(tab) {
   tab |>
     gt::opt_css(
@@ -36,6 +38,14 @@ table_continuous(
   sochealth,
   select = c(bmi, wellbeing_score, life_sat_health),
   by = education
+)
+
+## ----lm-companion-------------------------------------------------------------
+table_continuous_lm(
+  sochealth,
+  select = c(bmi, wellbeing_score, life_sat_health),
+  by = education,
+  vcov = "HC3"
 )
 
 ## ----pvalue-effect------------------------------------------------------------
@@ -94,28 +104,28 @@ table_continuous(
   by = sex
 )
 
-## ----labels-------------------------------------------------------------------
-pkgdown_dark_gt(
-  table_continuous(
-    sochealth,
-    select = c(bmi, wellbeing_score, life_sat_health),
-    by = education,
-    labels = c(
-      bmi = "Body mass index",
-      wellbeing_score = "Well-being score",
-      life_sat_health = "Satisfaction with health"
-    ),
-    output = "gt"
-  )
-)
+## ----labels, eval = build_rich_tables-----------------------------------------
+# pkgdown_dark_gt(
+#   table_continuous(
+#     sochealth,
+#     select = c(bmi, wellbeing_score, life_sat_health),
+#     by = education,
+#     labels = c(
+#       bmi = "Body mass index",
+#       wellbeing_score = "Well-being score",
+#       life_sat_health = "Satisfaction with health"
+#     ),
+#     output = "gt"
+#   )
+# )
 
-## ----tinytable----------------------------------------------------------------
-table_continuous(
-  sochealth,
-  select = c(bmi, wellbeing_score, life_sat_health),
-  by = education,
-  output = "tinytable"
-)
+## ----tinytable, eval = build_rich_tables--------------------------------------
+# table_continuous(
+#   sochealth,
+#   select = c(bmi, wellbeing_score, life_sat_health),
+#   by = education,
+#   output = "tinytable"
+# )
 
 ## ----export, eval = FALSE-----------------------------------------------------
 # table_continuous(

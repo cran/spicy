@@ -4,6 +4,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 pkgdown_dark_gt <- function(tab) {
   tab |>
     gt::opt_css(
@@ -36,23 +38,23 @@ table_categorical(
   output = "default"
 )
 
-## ----gt-----------------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = c(smoking, physical_activity, dentist_12m),
-    by = education,
-    output = "gt"
-  )
-)
+## ----gt, eval = build_rich_tables---------------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = c(smoking, physical_activity, dentist_12m),
+#     by = education,
+#     output = "gt"
+#   )
+# )
 
-## ----tinytable----------------------------------------------------------------
-table_categorical(
-  sochealth,
-  select = c(smoking, physical_activity),
-  by = sex,
-  output = "tinytable"
-)
+## ----tinytable, eval = build_rich_tables--------------------------------------
+# table_categorical(
+#   sochealth,
+#   select = c(smoking, physical_activity),
+#   by = sex,
+#   output = "tinytable"
+# )
 
 ## ----data-frame---------------------------------------------------------------
 table_categorical(
@@ -62,36 +64,36 @@ table_categorical(
   output = "data.frame"
 )
 
-## ----labels-------------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = c(smoking, physical_activity),
-    by = education,
-    labels = c("Smoking status", "Regular physical activity"),
-    output = "gt"
-  )
-)
+## ----labels, eval = build_rich_tables-----------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = c(smoking, physical_activity),
+#     by = education,
+#     labels = c("Smoking status", "Regular physical activity"),
+#     output = "gt"
+#   )
+# )
 
-## ----assoc-measure------------------------------------------------------------
-table_categorical(
-  sochealth,
-  select = smoking,
-  by = education,
-  assoc_measure = "lambda",
-  output = "tinytable"
-)
+## ----assoc-measure, eval = build_rich_tables----------------------------------
+# table_categorical(
+#   sochealth,
+#   select = smoking,
+#   by = education,
+#   assoc_measure = "lambda",
+#   output = "tinytable"
+# )
 
-## ----ci-rendered--------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = c(smoking, physical_activity),
-    by = education,
-    assoc_ci = TRUE,
-    output = "gt"
-  )
-)
+## ----ci-rendered, eval = build_rich_tables------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = c(smoking, physical_activity),
+#     by = education,
+#     assoc_ci = TRUE,
+#     output = "gt"
+#   )
+# )
 
 ## ----ci-data------------------------------------------------------------------
 table_categorical(
@@ -102,51 +104,51 @@ table_categorical(
   output = "data.frame"
 )
 
-## ----weighted-----------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = c(smoking, physical_activity),
-    by = education,
-    weights = "weight",
-    rescale = TRUE,
-    output = "gt"
-  )
-)
+## ----weighted, eval = build_rich_tables---------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = c(smoking, physical_activity),
+#     by = education,
+#     weights = "weight",
+#     rescale = TRUE,
+#     output = "gt"
+#   )
+# )
 
-## ----missing------------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = income_group,
-    by = education,
-    drop_na = FALSE,
-    output = "gt"
-  )
-)
+## ----missing, eval = build_rich_tables----------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = income_group,
+#     by = education,
+#     drop_na = FALSE,
+#     output = "gt"
+#   )
+# )
 
-## ----levels-keep--------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = income_group,
-    by = education,
-    drop_na = FALSE,
-    levels_keep = c("(Missing)", "Low", "High"),
-    output = "gt"
-  )
-)
+## ----levels-keep, eval = build_rich_tables------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = income_group,
+#     by = education,
+#     drop_na = FALSE,
+#     levels_keep = c("(Missing)", "Low", "High"),
+#     output = "gt"
+#   )
+# )
 
-## ----formatting---------------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = smoking,
-    by = education,
-    percent_digits = 2,
-    p_digits = 4,
-    v_digits = 3,
-    output = "gt"
-  )
-)
+## ----formatting, eval = build_rich_tables-------------------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = smoking,
+#     by = education,
+#     percent_digits = 2,
+#     p_digits = 4,
+#     v_digits = 3,
+#     output = "gt"
+#   )
+# )
 

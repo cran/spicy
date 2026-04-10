@@ -18,6 +18,7 @@ table_continuous(
   labels = NULL,
   ci_level = 0.95,
   digits = 2,
+  effect_size_digits = 2,
   decimal_mark = ".",
   output = c("default", "data.frame", "tinytable", "gt", "flextable", "excel",
     "clipboard", "word"),
@@ -100,8 +101,11 @@ labels); if none are found, the column name is used.}
 \item{ci_level}{Confidence level for the mean confidence interval
 (default: \code{0.95}). Must be between 0 and 1 exclusive.}
 
-\item{digits}{Number of decimal places for numeric output
-(default: \code{2}).}
+\item{digits}{Number of decimal places for descriptive values and test
+statistics (default: \code{2}).}
+
+\item{effect_size_digits}{Number of decimal places for effect-size values
+in formatted displays (default: \code{2}).}
 
 \item{decimal_mark}{Character used as decimal separator.
 Either \code{"."} (default) or \code{","}.}
@@ -195,109 +199,87 @@ Optional output engines require suggested packages:
 }
 }
 \examples{
-# Basic usage with all numeric columns
-table_continuous(iris, output = "data.frame")
+table_continuous(
+  sochealth,
+  select = c(bmi, wellbeing_score)
+)
 
-# Select specific columns with tidyselect
-table_continuous(iris, select = c(Sepal.Length, Petal.Width), output = "data.frame")
+table_continuous(
+  sochealth,
+  select = c(bmi, wellbeing_score),
+  output = "data.frame"
+)
 
-# Grouped descriptives
-table_continuous(iris, select = c(Sepal.Length, Sepal.Width),
-           by = Species, output = "data.frame")
+table_continuous(
+  sochealth,
+  select = c(bmi, wellbeing_score),
+  by = education
+)
 
-# Grouped descriptives with p-value
-table_continuous(iris, select = c(Sepal.Length, Sepal.Width),
-           by = Species, p_value = TRUE, output = "data.frame")
+table_continuous(
+  sochealth,
+  select = c(bmi, wellbeing_score),
+  by = education,
+  p_value = TRUE,
+  statistic = TRUE
+)
 
-# Grouped descriptives with test statistic only
-table_continuous(iris, select = c(Sepal.Length, Sepal.Width),
-           by = Species, statistic = TRUE, output = "data.frame")
+table_continuous(
+  sochealth,
+  select = wellbeing_score,
+  by = education,
+  effect_size_ci = TRUE,
+  effect_size_digits = 3
+)
 
-# Grouped descriptives with both p-value and test statistic
-table_continuous(iris, select = c(Sepal.Length, Sepal.Width),
-           by = Species, p_value = TRUE, statistic = TRUE,
-           output = "data.frame")
+table_continuous(
+  sochealth,
+  select = wellbeing_score,
+  by = sex,
+  effect_size_ci = TRUE
+)
 
-# Student t-test / classic ANOVA (assumes equal variances)
-table_continuous(iris, select = Sepal.Length, by = Species,
-           test = "student", p_value = TRUE, output = "data.frame")
+table_continuous(
+  sochealth,
+  select = "^life_sat",
+  regex = TRUE
+)
 
-# Nonparametric test (Kruskal-Wallis for 3+ groups)
-table_continuous(iris, select = Sepal.Length, by = Species,
-           test = "nonparametric", p_value = TRUE,
-           statistic = TRUE, output = "data.frame")
-
-# Effect size (eta-squared for 3 groups)
-table_continuous(iris, select = Sepal.Length, by = Species,
-           effect_size = TRUE, output = "data.frame")
-
-# Effect size with confidence interval
-table_continuous(iris, select = Sepal.Length, by = Species,
-           p_value = TRUE, effect_size_ci = TRUE,
-           output = "data.frame")
-
-# Nonparametric effect size (epsilon-squared with bootstrap CI)
-\donttest{
-table_continuous(iris, select = Sepal.Length, by = Species,
-           test = "nonparametric", effect_size_ci = TRUE,
-           output = "data.frame")
-}
-
-# Hedges' g for 2 groups
-table_continuous(iris[iris$Species != "virginica", ],
-           select = Sepal.Length, by = Species,
-           effect_size_ci = TRUE, output = "data.frame")
-
-# Regex column selection
-table_continuous(iris, select = "^Sepal", regex = TRUE, output = "data.frame")
-
-# Custom labels
-table_continuous(iris,
-           select = c(Sepal.Length, Petal.Length),
-           labels = c(Sepal.Length = "Sepal length (cm)",
-                      Petal.Length = "Petal length (cm)"),
-           output = "data.frame")
+table_continuous(
+  sochealth,
+  select = c(bmi, life_sat_health),
+  labels = c(
+    bmi = "Body mass index",
+    life_sat_health = "Satisfaction with health"
+  )
+)
 
 \donttest{
-# ASCII table (default)
-table_continuous(iris, select = starts_with("Sepal"))
-
-# Grouped ASCII table
-table_continuous(iris, select = starts_with("Sepal"), by = Species)
-
-# tinytable output
 if (requireNamespace("tinytable", quietly = TRUE)) {
-  table_continuous(iris, output = "tinytable")
-  table_continuous(iris, select = starts_with("Sepal"),
-             by = Species, output = "tinytable")
+  table_continuous(
+    sochealth,
+    select = starts_with("life_sat"),
+    by = education,
+    output = "tinytable"
+  )
 }
 
-# gt output
 if (requireNamespace("gt", quietly = TRUE)) {
-  table_continuous(iris, output = "gt")
-  table_continuous(iris, select = starts_with("Sepal"),
-             by = Species, output = "gt")
+  table_continuous(
+    sochealth,
+    select = starts_with("life_sat"),
+    by = education,
+    output = "gt"
+  )
 }
 
-# flextable output
 if (requireNamespace("flextable", quietly = TRUE)) {
-  table_continuous(iris, output = "flextable")
-  table_continuous(iris, by = Species, output = "flextable")
-}
-
-# Word output
-if (requireNamespace("flextable", quietly = TRUE) &&
-    requireNamespace("officer", quietly = TRUE)) {
-  table_continuous(iris, select = starts_with("Sepal"),
-             by = Species, output = "word",
-             word_path = tempfile(fileext = ".docx"))
-}
-
-# Excel output
-if (requireNamespace("openxlsx2", quietly = TRUE)) {
-  table_continuous(iris, select = starts_with("Sepal"),
-             by = Species, output = "excel",
-             excel_path = tempfile(fileext = ".xlsx"))
+  table_continuous(
+    sochealth,
+    select = starts_with("life_sat"),
+    by = education,
+    output = "flextable"
+  )
 }
 }
 

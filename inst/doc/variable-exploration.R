@@ -4,6 +4,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 ## ----setup--------------------------------------------------------------------
 library(spicy)
 
@@ -44,13 +46,13 @@ varlist(sochealth, where(is.numeric), tbl = TRUE)
 ## ----vl-example---------------------------------------------------------------
 vl(sochealth, starts_with("bmi"), tbl = TRUE)
 
-## ----code-book-basic----------------------------------------------------------
-if (requireNamespace("DT", quietly = TRUE)) {
-  code_book(sochealth)
-}
+## ----code-book-basic, eval = build_rich_tables--------------------------------
+# if (requireNamespace("DT", quietly = TRUE)) {
+#   code_book(sochealth)
+# }
 
-## ----code-book-values---------------------------------------------------------
-if (requireNamespace("DT", quietly = TRUE)) {
-  code_book(sochealth, values = TRUE, include_na = TRUE)
-}
+## ----code-book-values, eval = build_rich_tables-------------------------------
+# if (requireNamespace("DT", quietly = TRUE)) {
+#   code_book(sochealth, values = TRUE, include_na = TRUE)
+# }
 

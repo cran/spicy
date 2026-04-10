@@ -17,6 +17,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 pkgdown_dark_gt <- function(tab) {
   tab |>
     gt::opt_css(
@@ -75,6 +77,19 @@ table_continuous(
 
 This is the main pattern for reporting continuous variables across
 groups such as education, sex, treatment arm, or survey wave.
+
+If you want the same outcomes reported in a linear-model workflow, with
+heteroskedasticity-consistent standard errors or case weights, use
+`table_continuous_lm()` instead:
+
+```{r lm-companion}
+table_continuous_lm(
+  sochealth,
+  select = c(bmi, wellbeing_score, life_sat_health),
+  by = education,
+  vcov = "HC3"
+)
+```
 
 ## Add group-comparison results
 
@@ -162,7 +177,7 @@ table_continuous(
 
 Use `labels` to replace technical variable names with reporting labels:
 
-```{r labels}
+```{r labels, eval = build_rich_tables}
 pkgdown_dark_gt(
   table_continuous(
     sochealth,
@@ -193,7 +208,7 @@ pkgdown_dark_gt(
 
 For example, `tinytable` works well in Quarto and R Markdown documents:
 
-```{r tinytable}
+```{r tinytable, eval = build_rich_tables}
 table_continuous(
   sochealth,
   select = c(bmi, wellbeing_score, life_sat_health),
@@ -228,5 +243,8 @@ table_continuous(
 
 - See `vignette("table-categorical", package = "spicy")` for grouped
   tables of categorical variables.
+- See `vignette("table-continuous-lm", package = "spicy")` for
+  model-based continuous summary tables with robust standard errors or
+  case weights.
 - See `vignette("summary-tables-reporting", package = "spicy")` for a
   cross-function reporting workflow using both summary-table helpers.

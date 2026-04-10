@@ -4,6 +4,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 ## ----setup--------------------------------------------------------------------
 library(spicy)
 
@@ -38,19 +40,27 @@ assoc_measures(tbl)
 ## ----cramer-detail------------------------------------------------------------
 cramer_v(tbl, detail = TRUE)
 
-## ----table-categorical-tt-----------------------------------------------------
-table_categorical(
-  sochealth,
-  select = c(smoking, physical_activity, dentist_12m),
-  by = education,
-  output = "tinytable"
-)
+## ----table-categorical-tt, eval = build_rich_tables---------------------------
+# table_categorical(
+#   sochealth,
+#   select = c(smoking, physical_activity, dentist_12m),
+#   by = education,
+#   output = "tinytable"
+# )
 
 ## ----table-continuous---------------------------------------------------------
 table_continuous(
   sochealth,
   select = c(bmi, life_sat_health),
   by = education
+)
+
+## ----table-continuous-lm------------------------------------------------------
+table_continuous_lm(
+  sochealth,
+  select = c(wellbeing_score, bmi),
+  by = sex,
+  vcov = "HC3"
 )
 
 ## ----mean-n-------------------------------------------------------------------

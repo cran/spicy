@@ -4,6 +4,8 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
+build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
+
 pkgdown_dark_gt <- function(tab) {
   tab |>
     gt::opt_css(
@@ -44,37 +46,57 @@ table_continuous(
   output = "tinytable"
 )
 
-## ----report-categorical-------------------------------------------------------
-pkgdown_dark_gt(
-  table_categorical(
-    sochealth,
-    select = c(smoking, physical_activity, dentist_12m),
-    by = education,
-    labels = c(
-      "Smoking status",
-      "Regular physical activity",
-      "Visited a dentist in the last 12 months"
-    ),
-    output = "gt"
-  )
+## ----grammar-continuous-lm----------------------------------------------------
+table_continuous_lm(
+  sochealth,
+  select = c(bmi, wellbeing_score, life_sat_health),
+  by = education,
+  weights = weight
 )
 
-## ----report-continuous--------------------------------------------------------
-pkgdown_dark_gt(
-  table_continuous(
-    sochealth,
-    select = c(bmi, wellbeing_score, life_sat_health),
-    by = education,
-    labels = c(
-      bmi = "Body mass index",
-      wellbeing_score = "Well-being score",
-      life_sat_health = "Satisfaction with health"
-    ),
-    p_value = TRUE,
-    effect_size = TRUE,
-    output = "gt"
-  )
-)
+## ----report-categorical, eval = build_rich_tables-----------------------------
+# pkgdown_dark_gt(
+#   table_categorical(
+#     sochealth,
+#     select = c(smoking, physical_activity, dentist_12m),
+#     by = education,
+#     labels = c(
+#       "Smoking status",
+#       "Regular physical activity",
+#       "Visited a dentist in the last 12 months"
+#     ),
+#     output = "gt"
+#   )
+# )
+
+## ----report-continuous, eval = build_rich_tables------------------------------
+# pkgdown_dark_gt(
+#   table_continuous(
+#     sochealth,
+#     select = c(bmi, wellbeing_score, life_sat_health),
+#     by = education,
+#     labels = c(
+#       bmi = "Body mass index",
+#       wellbeing_score = "Well-being score",
+#       life_sat_health = "Satisfaction with health"
+#     ),
+#     p_value = TRUE,
+#     effect_size = TRUE,
+#     output = "gt"
+#   )
+# )
+
+## ----report-continuous-lm, eval = build_rich_tables---------------------------
+# pkgdown_dark_gt(
+#   table_continuous_lm(
+#     sochealth,
+#     select = c(bmi, wellbeing_score, life_sat_health),
+#     by = sex,
+#     vcov = "HC3",
+#     statistic = TRUE,
+#     output = "gt"
+#   )
+# )
 
 ## ----output-flextable, eval = FALSE-------------------------------------------
 # if (requireNamespace("flextable", quietly = TRUE)) {
@@ -86,41 +108,41 @@ pkgdown_dark_gt(
 #   )
 # }
 
-## ----postprocess-gt-----------------------------------------------------------
-tab <- pkgdown_dark_gt(table_categorical(
-  sochealth,
-  select = c(smoking, physical_activity),
-  by = education,
-  labels = c("Smoking status", "Regular physical activity"),
-  output = "gt"
-))
+## ----postprocess-gt, eval = build_rich_tables---------------------------------
+# tab <- pkgdown_dark_gt(table_categorical(
+#   sochealth,
+#   select = c(smoking, physical_activity),
+#   by = education,
+#   labels = c("Smoking status", "Regular physical activity"),
+#   output = "gt"
+# ))
+# 
+# tab |>
+#   gt::tab_header(
+#     title = "Health behaviors by education",
+#     subtitle = "Categorical summary table"
+#   ) |>
+#   gt::tab_source_note(
+#     gt::md("*Percentages are computed within each education group.*")
+#   )
 
-tab |>
-  gt::tab_header(
-    title = "Health behaviors by education",
-    subtitle = "Categorical summary table"
-  ) |>
-  gt::tab_source_note(
-    gt::md("*Percentages are computed within each education group.*")
-  )
-
-## ----postprocess-tinytable----------------------------------------------------
-tab <- table_categorical(
-  sochealth,
-  select = c(smoking, physical_activity),
-  by = education,
-  labels = c("Smoking status", "Regular physical activity"),
-  output = "tinytable"
-)
-
-tab |>
-  tinytable::style_tt(
-    i = 2:3,
-    j = 2:5,
-    background = "red",
-    color = "white",
-    bold = TRUE
-  )
+## ----postprocess-tinytable, eval = build_rich_tables--------------------------
+# tab <- table_categorical(
+#   sochealth,
+#   select = c(smoking, physical_activity),
+#   by = education,
+#   labels = c("Smoking status", "Regular physical activity"),
+#   output = "tinytable"
+# )
+# 
+# tab |>
+#   tinytable::style_tt(
+#     i = 2:3,
+#     j = 2:5,
+#     background = "red",
+#     color = "white",
+#     bold = TRUE
+#   )
 
 ## ----postprocess-flextable, eval = FALSE--------------------------------------
 # if (requireNamespace("flextable", quietly = TRUE)) {

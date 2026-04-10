@@ -24,12 +24,13 @@ workflows.
 
 ## What is spicy?
 
-spicy helps you explore categorical and labelled data in R with
-readable, console-first outputs. It is designed for survey research,
-descriptive statistics, and reporting workflows, with tools for
-frequency tables, cross-tabulations with chi-squared tests and effect
-sizes, categorical and continuous summary tables, variable inspection,
-and codebooks.
+spicy helps you explore categorical, quantitative, and numeric data in
+R, with tools for labelled variables, frequency tables,
+cross-tabulations, and summary tables. It provides readable,
+console-first outputs. It is designed for survey research, descriptive
+statistics, and reporting workflows, with tools for frequency tables,
+cross-tabulations with chi-squared tests and effect sizes, categorical
+and continuous summary tables, variable inspection, and codebooks.
 
 With spicy, you can:
 
@@ -44,6 +45,10 @@ With spicy, you can:
   for gt, tinytable, flextable, Excel, Word, or clipboard export.
 - **Build continuous summary tables in R** with `table_continuous()` for
   console, gt, tinytable, flextable, Excel, Word, or clipboard output.
+- **Build model-based continuous summary tables in R** with
+  `table_continuous_lm()` for linear regression reporting, robust
+  standard errors, weighted mean comparisons, and console, gt,
+  tinytable, flextable, Excel, Word, or clipboard output.
 - **Generate codebooks** with `code_book()` for labelled and
   survey-style datasets.
 - **Extract variable labels** with `label_from_names()`, including
@@ -283,11 +288,33 @@ table_continuous(
 #>                                 │ Tertiary           4.01       4.21     399
 ```
 
+``` r
+table_continuous_lm(
+  sochealth,
+  select = c(wellbeing_score, bmi),
+  by = sex,
+  vcov = "HC3",
+  output = "data.frame"
+)
+#>                                      Variable M (Female) M (Male)
+#> wellbeing_score WHO-5 wellbeing index (0-100)   67.16194 71.04879
+#> bmi                           Body mass index   25.68506 26.19685
+#>                 Δ (Male - Female)  95% CI LL 95% CI UL            p          R²
+#> wellbeing_score         3.8868576 2.12265210 5.6510631 1.670572e-05 0.015475137
+#> bmi                     0.5117882 0.08904596 0.9345305 1.769614e-02 0.004728908
+#>                    n
+#> wellbeing_score 1200
+#> bmi             1188
+```
+
 See [Categorical summary tables in
 R](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
 for categorical summaries, [Continuous summary tables in
 R](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
-for continuous summaries and group comparisons, and [Summary tables for
+for continuous summaries and group comparisons, [Model-based continuous
+summary tables in
+R](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
+for weighted or robust linear-model reporting, and [Summary tables for
 APA-style
 reporting](https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html)
 for an overview of summary tables.
@@ -352,6 +379,8 @@ If you are looking for a specific workflow, start with these vignettes:
   R](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
 - [Continuous summary tables in
   R](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
+- [Model-based continuous summary tables in
+  R](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
 - [Summary tables for APA-style
   reporting](https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html)
 
@@ -373,6 +402,8 @@ Key reference pages:
   `table_categorical()`](https://amaltawfik.github.io/spicy/reference/table_categorical.html)
 - [Reference for
   `table_continuous()`](https://amaltawfik.github.io/spicy/reference/table_continuous.html)
+- [Reference for
+  `table_continuous_lm()`](https://amaltawfik.github.io/spicy/reference/table_continuous_lm.html)
 - [Reference for
   `mean_n()`](https://amaltawfik.github.io/spicy/reference/mean_n.html)
 - [Reference for
