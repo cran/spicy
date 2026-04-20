@@ -53,7 +53,6 @@ table_continuous(
   sochealth,
   select = c(bmi, wellbeing_score, life_sat_health),
   by = education,
-  p_value = TRUE,
   statistic = TRUE,
   effect_size_ci = TRUE
 )
@@ -64,7 +63,6 @@ table_continuous(
   select = c(bmi, wellbeing_score),
   by = education,
   test = "nonparametric",
-  p_value = TRUE,
   statistic = TRUE,
   effect_size = TRUE
 )
@@ -74,7 +72,6 @@ table_continuous(
   sochealth,
   select = c(bmi, wellbeing_score),
   by = education,
-  p_value = TRUE,
   statistic = TRUE,
   effect_size = TRUE,
   output = "data.frame"

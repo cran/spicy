@@ -155,6 +155,10 @@ sample size.
 \item \code{"excel"} / \code{"word"}: writes to disk and returns the file path.
 \item \code{"clipboard"}: copies the wide table and returns it invisibly.
 }
+
+If no numeric outcome columns remain after applying \code{select}, \code{exclude},
+and \code{regex}, the function emits a warning and returns an empty
+\code{data.frame()} regardless of \code{output}.
 }
 \description{
 Builds APA-style summary tables from a series of simple linear models for
@@ -179,13 +183,24 @@ continuous outcome. The model fit is always \code{lm(outcome ~ by, ...)}.
 
 For categorical predictors, the reported means are model-based fitted means
 for each level of \code{by}, and the reported contrasts are derived from the same
-fitted linear model.
+fitted linear model. For an unweighted \code{lm(y ~ factor)} with classical
+variance, these fitted means coincide numerically with the empirical
+subgroup means; the "model-based" qualifier matters because (a) under
+\code{weights}, the means become weighted least-squares estimates, (b) their
+confidence intervals are derived from the model \code{vcov} (classical or \verb{HC*})
+rather than from a separate empirical standard error, and (c) the reported
+tests, \code{p}-values, and effect sizes all come from the same fitted model,
+so means, contrasts, and inference stay internally consistent.
 
 Compared with \code{\link[=table_continuous]{table_continuous()}}, this function is the model-based
 companion for users who want to report bivariate mean comparisons in a
 linear-model framework. In practice, it is the better choice when you
 want heteroskedasticity-consistent standard errors (\code{vcov = "HC*"}),
 model fit statistics, or case weights via \code{lm(..., weights = ...)}.
+Because the function exists to report a fitted model, its inferential
+output is part of the default display: \code{p_value = TRUE} is on by default,
+and the model \code{R2} is shown unless explicitly disabled with \code{r2 = "none"}.
+Set \code{p_value = FALSE} or \code{r2 = "none"} to suppress them.
 
 Effect size is reported as Cohen's \code{f2}, computed from the model \code{R2} as
 \code{R2 / (1 - R2)}. When \code{vcov != "classical"}, standard errors, confidence

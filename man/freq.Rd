@@ -13,7 +13,7 @@ freq(
   cum = FALSE,
   sort = "",
   na_val = NULL,
-  labelled_levels = c("prefixed", "labels", "values", "p", "l", "v"),
+  labelled_levels = c("prefixed", "labels", "values"),
   rescale = TRUE,
   styled = TRUE,
   ...
@@ -21,12 +21,15 @@ freq(
 }
 \arguments{
 \item{data}{A \code{data.frame}, vector, or factor. If a data frame is provided,
-specify the target variable \code{x}.}
+specify the target variable \code{x}. If both \code{data} and \code{x} are supplied as
+vectors, \code{data} is ignored with a warning.}
 
 \item{x}{A variable from \code{data} (unquoted).}
 
 \item{weights}{Optional numeric vector of weights (same length as \code{x}).
-The variable may be referenced as a bare name when it belongs to \code{data}.}
+The variable may be referenced as a bare name when it belongs to \code{data},
+or as a qualified expression like \code{other$w} (evaluated in the calling
+environment), which always takes precedence over \code{data} lookup.}
 
 \item{digits}{Number of decimal digits to display for percentages (default: \code{1}).}
 
@@ -73,7 +76,8 @@ If \code{FALSE}, return a plain \code{data.frame} with frequency values.}
 \item{...}{Additional arguments passed to \code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}.}
 }
 \value{
-A \code{data.frame} with columns:
+With \code{styled = FALSE}, a plain \code{data.frame} with no extra attributes
+and columns:
 \itemize{
 \item \code{value} - unique values or factor levels
 \item \code{n} - frequency count (weighted if applicable)
@@ -82,7 +86,12 @@ A \code{data.frame} with columns:
 \item \code{cum_prop}, \code{cum_valid_prop} - cumulative percentages (if \code{cum = TRUE})
 }
 
-If \code{styled = TRUE}, prints the formatted table to the console and returns it invisibly.
+With \code{styled = TRUE} (default), prints the formatted table to the
+console and invisibly returns a \code{spicy_freq_table} object: the same
+\code{data.frame} carrying rendering metadata as attributes (\code{digits},
+\code{data_name}, \code{var_name}, \code{var_label}, \code{class_name}, \code{n_total},
+\code{n_valid}, \code{weighted}, \code{rescaled}, \code{weight_var}) used by
+\code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}.
 }
 \description{
 Creates a frequency table for a vector or variable from a data frame, with
@@ -122,6 +131,9 @@ library(labelled)
 # Simple numeric vector
 x <- c(1, 2, 2, 3, 3, 3, NA)
 freq(x)
+
+# Plain vector with a sentinel value recoded as missing
+freq(c(1, 2, 3, 99, 99), na_val = 99)
 
 # Labelled variable (haven-style)
 x_lbl <- labelled(

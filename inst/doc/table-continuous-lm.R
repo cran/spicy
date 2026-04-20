@@ -45,7 +45,8 @@ table_continuous_lm(
   sochealth,
   select = c(wellbeing_score, bmi),
   by = education,
-  weights = weight
+  weights = weight,
+  show_weighted_n = TRUE
 )
 
 ## ----numeric-by---------------------------------------------------------------
@@ -53,8 +54,7 @@ table_continuous_lm(
   sochealth,
   select = c(wellbeing_score, bmi),
   by = age,
-  vcov = "HC3",
-  output = "long"
+  vcov = "HC3"
 )
 
 ## ----gt-output, eval = build_rich_tables--------------------------------------

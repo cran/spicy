@@ -415,7 +415,8 @@ scans the data frame and keeps numeric columns:</p>
 <div id="grouped-summaries" class="section level2">
 <h2>Grouped summaries</h2>
 <p>Add <code>by</code> to summarize the same variables across
-categories:</p>
+categories. When <code>by</code> is supplied, a Welch-test
+<em>p</em>-value column is added automatically:</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score, life_sat_health),</span>
@@ -449,9 +450,25 @@ categories:</p>
 <span id="cb4-31"><a href="#cb4-31" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
 <span id="cb4-32"><a href="#cb4-32" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary    2.57       2.86     259 </span></span>
 <span id="cb4-33"><a href="#cb4-33" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    3.43       3.63     534 </span></span>
-<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           4.01       4.21     399</span></span></code></pre></div>
+<span id="cb4-34"><a href="#cb4-34" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           4.01       4.21     399 </span></span>
+<span id="cb4-35"><a href="#cb4-35" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-36"><a href="#cb4-36" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                 p </span></span>
+<span id="cb4-37"><a href="#cb4-37" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼─────────────────────────</span></span>
+<span id="cb4-38"><a href="#cb4-38" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  &lt; .001 </span></span>
+<span id="cb4-39"><a href="#cb4-39" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb4-40"><a href="#cb4-40" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
+<span id="cb4-41"><a href="#cb4-41" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb4-42"><a href="#cb4-42" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  &lt; .001 </span></span>
+<span id="cb4-43"><a href="#cb4-43" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb4-44"><a href="#cb4-44" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
+<span id="cb4-45"><a href="#cb4-45" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb4-46"><a href="#cb4-46" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  &lt; .001 </span></span>
+<span id="cb4-47"><a href="#cb4-47" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb4-48"><a href="#cb4-48" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary</span></span></code></pre></div>
 <p>This is the main pattern for reporting continuous variables across
-groups such as education, sex, treatment arm, or survey wave.</p>
+groups such as education, sex, treatment arm, or survey wave. Pass
+<code>p_value = FALSE</code> to suppress the test column and keep the
+output strictly descriptive.</p>
 <p>If you want the same outcomes reported in a linear-model workflow,
 with heteroskedasticity-consistent standard errors or case weights, use
 <code>table_continuous_lm()</code> instead:</p>
@@ -475,90 +492,89 @@ with heteroskedasticity-consistent standard errors or case weights, use
 <span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │    66.10      &lt;.001  0.21  1200 </span></span>
 <span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │     3.35      &lt;.001  0.16  1192</span></span></code></pre></div>
 </div>
-<div id="add-group-comparison-results" class="section level2">
-<h2>Add group-comparison results</h2>
-<p>Grouped tables can include inferential results directly in the same
-table. The default test is Welch’s test:</p>
+<div id="add-test-statistics-and-effect-sizes" class="section level2">
+<h2>Add test statistics and effect sizes</h2>
+<p>Grouped tables can also report the test statistic and an effect size
+alongside the default <em>p</em>-value column:</p>
 <div class="sourceCode" id="cb6"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb6-2"><a href="#cb6-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb6-3"><a href="#cb6-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score, life_sat_health),</span>
 <span id="cb6-4"><a href="#cb6-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
-<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">p_value =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
-<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a>)</span>
-<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; Warning: `effect_size_ci` implies `effect_size = TRUE`.</span></span>
-<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
-<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group              M     SD     Min    Max   </span></span>
-<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼──────────────────────────────────────────────</span></span>
-<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  28.09  3.47   18.20  38.90  </span></span>
-<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  26.02  3.43   16.00  37.10  </span></span>
-<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         24.39  3.52   16.00  33.00  </span></span>
-<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  57.22  15.44  18.70  97.90  </span></span>
-<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  68.97  13.62  26.70  100.00 </span></span>
-<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         76.85  13.23  40.40  100.00 </span></span>
-<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  2.71   1.20   1.00    5.00  </span></span>
-<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  3.53   1.19   1.00    5.00  </span></span>
-<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         4.11   1.04   1.00    5.00  </span></span>
-<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group            95% CI LL  95% CI UL    n </span></span>
-<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────────</span></span>
-<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary    27.66      28.51    260 </span></span>
-<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    25.73      26.31    534 </span></span>
-<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           24.04      24.74    394 </span></span>
-<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary    55.33      59.10    261 </span></span>
-<span id="cb6-33"><a href="#cb6-33" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    67.82      70.12    539 </span></span>
-<span id="cb6-34"><a href="#cb6-34" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           75.55      78.15    400 </span></span>
-<span id="cb6-35"><a href="#cb6-35" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-36"><a href="#cb6-36" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary    2.57       2.86     259 </span></span>
-<span id="cb6-37"><a href="#cb6-37" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    3.43       3.63     534 </span></span>
-<span id="cb6-38"><a href="#cb6-38" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           4.01       4.21     399 </span></span>
-<span id="cb6-39"><a href="#cb6-39" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-40"><a href="#cb6-40" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                    Test          </span></span>
-<span id="cb6-41"><a href="#cb6-41" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────</span></span>
-<span id="cb6-42"><a href="#cb6-42" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  F(2, 654.48) = 87.96  </span></span>
-<span id="cb6-43"><a href="#cb6-43" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
-<span id="cb6-44"><a href="#cb6-44" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
-<span id="cb6-45"><a href="#cb6-45" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-46"><a href="#cb6-46" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  F(2, 638.59) = 144.35 </span></span>
-<span id="cb6-47"><a href="#cb6-47" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
-<span id="cb6-48"><a href="#cb6-48" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
-<span id="cb6-49"><a href="#cb6-49" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-50"><a href="#cb6-50" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  F(2, 652.08) = 118.74 </span></span>
-<span id="cb6-51"><a href="#cb6-51" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
-<span id="cb6-52"><a href="#cb6-52" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
-<span id="cb6-53"><a href="#cb6-53" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-54"><a href="#cb6-54" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                 p </span></span>
-<span id="cb6-55"><a href="#cb6-55" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼─────────────────────────</span></span>
-<span id="cb6-56"><a href="#cb6-56" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  &lt; .001 </span></span>
-<span id="cb6-57"><a href="#cb6-57" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
-<span id="cb6-58"><a href="#cb6-58" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
-<span id="cb6-59"><a href="#cb6-59" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-60"><a href="#cb6-60" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  &lt; .001 </span></span>
-<span id="cb6-61"><a href="#cb6-61" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
-<span id="cb6-62"><a href="#cb6-62" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
-<span id="cb6-63"><a href="#cb6-63" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-64"><a href="#cb6-64" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  &lt; .001 </span></span>
-<span id="cb6-65"><a href="#cb6-65" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
-<span id="cb6-66"><a href="#cb6-66" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
-<span id="cb6-67"><a href="#cb6-67" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb6-68"><a href="#cb6-68" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                      ES           </span></span>
-<span id="cb6-69"><a href="#cb6-69" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼─────────────────────────────────────────</span></span>
-<span id="cb6-70"><a href="#cb6-70" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  η² = 0.13 [0.10, 0.17] </span></span>
-<span id="cb6-71"><a href="#cb6-71" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
-<span id="cb6-72"><a href="#cb6-72" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                                </span></span>
-<span id="cb6-73"><a href="#cb6-73" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-74"><a href="#cb6-74" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  η² = 0.21 [0.17, 0.25] </span></span>
-<span id="cb6-75"><a href="#cb6-75" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
-<span id="cb6-76"><a href="#cb6-76" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                                </span></span>
-<span id="cb6-77"><a href="#cb6-77" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb6-78"><a href="#cb6-78" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  η² = 0.16 [0.13, 0.20] </span></span>
-<span id="cb6-79"><a href="#cb6-79" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
-<span id="cb6-80"><a href="#cb6-80" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary</span></span></code></pre></div>
+<span id="cb6-5"><a href="#cb6-5" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
+<span id="cb6-7"><a href="#cb6-7" tabindex="-1"></a>)</span>
+<span id="cb6-8"><a href="#cb6-8" tabindex="-1"></a><span class="co">#&gt; Warning: `effect_size_ci` implies `effect_size = TRUE`.</span></span>
+<span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
+<span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group              M     SD     Min    Max   </span></span>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼──────────────────────────────────────────────</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  28.09  3.47   18.20  38.90  </span></span>
+<span id="cb6-14"><a href="#cb6-14" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  26.02  3.43   16.00  37.10  </span></span>
+<span id="cb6-15"><a href="#cb6-15" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         24.39  3.52   16.00  33.00  </span></span>
+<span id="cb6-16"><a href="#cb6-16" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-17"><a href="#cb6-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  57.22  15.44  18.70  97.90  </span></span>
+<span id="cb6-18"><a href="#cb6-18" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  68.97  13.62  26.70  100.00 </span></span>
+<span id="cb6-19"><a href="#cb6-19" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         76.85  13.23  40.40  100.00 </span></span>
+<span id="cb6-20"><a href="#cb6-20" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-21"><a href="#cb6-21" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  2.71   1.20   1.00    5.00  </span></span>
+<span id="cb6-22"><a href="#cb6-22" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary  3.53   1.19   1.00    5.00  </span></span>
+<span id="cb6-23"><a href="#cb6-23" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary         4.11   1.04   1.00    5.00  </span></span>
+<span id="cb6-24"><a href="#cb6-24" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-25"><a href="#cb6-25" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group            95% CI LL  95% CI UL    n </span></span>
+<span id="cb6-26"><a href="#cb6-26" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────────</span></span>
+<span id="cb6-27"><a href="#cb6-27" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary    27.66      28.51    260 </span></span>
+<span id="cb6-28"><a href="#cb6-28" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    25.73      26.31    534 </span></span>
+<span id="cb6-29"><a href="#cb6-29" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           24.04      24.74    394 </span></span>
+<span id="cb6-30"><a href="#cb6-30" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-31"><a href="#cb6-31" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary    55.33      59.10    261 </span></span>
+<span id="cb6-32"><a href="#cb6-32" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    67.82      70.12    539 </span></span>
+<span id="cb6-33"><a href="#cb6-33" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           75.55      78.15    400 </span></span>
+<span id="cb6-34"><a href="#cb6-34" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-35"><a href="#cb6-35" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary    2.57       2.86     259 </span></span>
+<span id="cb6-36"><a href="#cb6-36" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary    3.43       3.63     534 </span></span>
+<span id="cb6-37"><a href="#cb6-37" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary           4.01       4.21     399 </span></span>
+<span id="cb6-38"><a href="#cb6-38" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-39"><a href="#cb6-39" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                    Test          </span></span>
+<span id="cb6-40"><a href="#cb6-40" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────</span></span>
+<span id="cb6-41"><a href="#cb6-41" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  F(2, 654.48) = 87.96  </span></span>
+<span id="cb6-42"><a href="#cb6-42" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
+<span id="cb6-43"><a href="#cb6-43" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
+<span id="cb6-44"><a href="#cb6-44" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-45"><a href="#cb6-45" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  F(2, 638.59) = 144.35 </span></span>
+<span id="cb6-46"><a href="#cb6-46" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
+<span id="cb6-47"><a href="#cb6-47" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
+<span id="cb6-48"><a href="#cb6-48" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-49"><a href="#cb6-49" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  F(2, 652.08) = 118.74 </span></span>
+<span id="cb6-50"><a href="#cb6-50" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                        </span></span>
+<span id="cb6-51"><a href="#cb6-51" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                               </span></span>
+<span id="cb6-52"><a href="#cb6-52" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-53"><a href="#cb6-53" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                 p </span></span>
+<span id="cb6-54"><a href="#cb6-54" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼─────────────────────────</span></span>
+<span id="cb6-55"><a href="#cb6-55" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  &lt; .001 </span></span>
+<span id="cb6-56"><a href="#cb6-56" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb6-57"><a href="#cb6-57" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
+<span id="cb6-58"><a href="#cb6-58" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-59"><a href="#cb6-59" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  &lt; .001 </span></span>
+<span id="cb6-60"><a href="#cb6-60" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb6-61"><a href="#cb6-61" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
+<span id="cb6-62"><a href="#cb6-62" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-63"><a href="#cb6-63" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  &lt; .001 </span></span>
+<span id="cb6-64"><a href="#cb6-64" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary         </span></span>
+<span id="cb6-65"><a href="#cb6-65" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                </span></span>
+<span id="cb6-66"><a href="#cb6-66" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb6-67"><a href="#cb6-67" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group                      ES           </span></span>
+<span id="cb6-68"><a href="#cb6-68" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb6-69"><a href="#cb6-69" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Lower secondary  η² = 0.13 [0.10, 0.17] </span></span>
+<span id="cb6-70"><a href="#cb6-70" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
+<span id="cb6-71"><a href="#cb6-71" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                                </span></span>
+<span id="cb6-72"><a href="#cb6-72" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-73"><a href="#cb6-73" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Lower secondary  η² = 0.21 [0.17, 0.25] </span></span>
+<span id="cb6-74"><a href="#cb6-74" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
+<span id="cb6-75"><a href="#cb6-75" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary                                </span></span>
+<span id="cb6-76"><a href="#cb6-76" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb6-77"><a href="#cb6-77" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  η² = 0.16 [0.13, 0.20] </span></span>
+<span id="cb6-78"><a href="#cb6-78" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary                         </span></span>
+<span id="cb6-79"><a href="#cb6-79" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary</span></span></code></pre></div>
 <p>Use <code>test = &quot;student&quot;</code> for equal-variance parametric tests
 or <code>test = &quot;nonparametric&quot;</code> for rank-based comparisons:</p>
 <div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
@@ -566,83 +582,81 @@ or <code>test = &quot;nonparametric&quot;</code> for rank-based comparisons:</p>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score),</span>
 <span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
 <span id="cb7-5"><a href="#cb7-5" tabindex="-1"></a>  <span class="at">test =</span> <span class="st">&quot;nonparametric&quot;</span>,</span>
-<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="at">p_value =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="cn">TRUE</span></span>
-<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a>)</span>
-<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
-<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group              M     SD     Min    Max   </span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────────</span></span>
-<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  28.09  3.47   18.20  38.90  </span></span>
-<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary  26.02  3.43   16.00  37.10  </span></span>
-<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary         24.39  3.52   16.00  33.00  </span></span>
-<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  57.22  15.44  18.70  97.90  </span></span>
-<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary  68.97  13.62  26.70  100.00 </span></span>
-<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary         76.85  13.23  40.40  100.00 </span></span>
-<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group            95% CI LL  95% CI UL    n </span></span>
-<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────────</span></span>
-<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary    27.66      28.51    260 </span></span>
-<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary    25.73      26.31    534 </span></span>
-<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary           24.04      24.74    394 </span></span>
-<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary    55.33      59.10    261 </span></span>
-<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary    67.82      70.12    539 </span></span>
-<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary           75.55      78.15    400 </span></span>
-<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group                Test            p </span></span>
-<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────</span></span>
-<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  H(2) = 144.63  &lt; .001 </span></span>
-<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary                        </span></span>
-<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                               </span></span>
-<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  H(2) = 233.53  &lt; .001 </span></span>
-<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary                        </span></span>
-<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                               </span></span>
-<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group               ES     </span></span>
-<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────</span></span>
-<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  ε² = 0.12 </span></span>
-<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary            </span></span>
-<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                   </span></span>
-<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  ε² = 0.19 </span></span>
-<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary            </span></span>
-<span id="cb7-50"><a href="#cb7-50" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary</span></span></code></pre></div>
+<span id="cb7-6"><a href="#cb7-6" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb7-7"><a href="#cb7-7" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="cn">TRUE</span></span>
+<span id="cb7-8"><a href="#cb7-8" tabindex="-1"></a>)</span>
+<span id="cb7-9"><a href="#cb7-9" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
+<span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group              M     SD     Min    Max   </span></span>
+<span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────────</span></span>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  28.09  3.47   18.20  38.90  </span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary  26.02  3.43   16.00  37.10  </span></span>
+<span id="cb7-15"><a href="#cb7-15" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary         24.39  3.52   16.00  33.00  </span></span>
+<span id="cb7-16"><a href="#cb7-16" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb7-17"><a href="#cb7-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  57.22  15.44  18.70  97.90  </span></span>
+<span id="cb7-18"><a href="#cb7-18" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary  68.97  13.62  26.70  100.00 </span></span>
+<span id="cb7-19"><a href="#cb7-19" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary         76.85  13.23  40.40  100.00 </span></span>
+<span id="cb7-20"><a href="#cb7-20" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-21"><a href="#cb7-21" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group            95% CI LL  95% CI UL    n </span></span>
+<span id="cb7-22"><a href="#cb7-22" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────────</span></span>
+<span id="cb7-23"><a href="#cb7-23" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary    27.66      28.51    260 </span></span>
+<span id="cb7-24"><a href="#cb7-24" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary    25.73      26.31    534 </span></span>
+<span id="cb7-25"><a href="#cb7-25" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary           24.04      24.74    394 </span></span>
+<span id="cb7-26"><a href="#cb7-26" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb7-27"><a href="#cb7-27" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary    55.33      59.10    261 </span></span>
+<span id="cb7-28"><a href="#cb7-28" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary    67.82      70.12    539 </span></span>
+<span id="cb7-29"><a href="#cb7-29" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary           75.55      78.15    400 </span></span>
+<span id="cb7-30"><a href="#cb7-30" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-31"><a href="#cb7-31" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group                Test            p </span></span>
+<span id="cb7-32"><a href="#cb7-32" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────</span></span>
+<span id="cb7-33"><a href="#cb7-33" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  H(2) = 144.63  &lt; .001 </span></span>
+<span id="cb7-34"><a href="#cb7-34" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary                        </span></span>
+<span id="cb7-35"><a href="#cb7-35" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                               </span></span>
+<span id="cb7-36"><a href="#cb7-36" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb7-37"><a href="#cb7-37" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  H(2) = 233.53  &lt; .001 </span></span>
+<span id="cb7-38"><a href="#cb7-38" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary                        </span></span>
+<span id="cb7-39"><a href="#cb7-39" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                               </span></span>
+<span id="cb7-40"><a href="#cb7-40" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb7-41"><a href="#cb7-41" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ Group               ES     </span></span>
+<span id="cb7-42"><a href="#cb7-42" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────</span></span>
+<span id="cb7-43"><a href="#cb7-43" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ Lower secondary  ε² = 0.12 </span></span>
+<span id="cb7-44"><a href="#cb7-44" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary            </span></span>
+<span id="cb7-45"><a href="#cb7-45" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary                   </span></span>
+<span id="cb7-46"><a href="#cb7-46" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb7-47"><a href="#cb7-47" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ Lower secondary  ε² = 0.19 </span></span>
+<span id="cb7-48"><a href="#cb7-48" tabindex="-1"></a><span class="co">#&gt;                                │ Upper secondary            </span></span>
+<span id="cb7-49"><a href="#cb7-49" tabindex="-1"></a><span class="co">#&gt;                                │ Tertiary</span></span></code></pre></div>
 <p>When you need the underlying columns for further processing, use
 <code>output = &quot;data.frame&quot;</code>:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, wellbeing_score),</span>
 <span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">p_value =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;data.frame&quot;</span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a>)</span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt;          variable                         label           group     mean</span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; 1             bmi               Body mass index Lower secondary 28.08731</span></span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; 2             bmi               Body mass index Upper secondary 26.01891</span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; 3             bmi               Body mass index        Tertiary 24.39036</span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; 4 wellbeing_score WHO-5 wellbeing index (0-100) Lower secondary 57.21571</span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; 5 wellbeing_score WHO-5 wellbeing index (0-100) Upper secondary 68.96920</span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt; 6 wellbeing_score WHO-5 wellbeing index (0-100)        Tertiary 76.85250</span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt;          sd  min   max ci_lower ci_upper   n   test_type statistic df1      df2</span></span>
-<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt; 1  3.471744 18.2  38.9 27.66333 28.51129 260 welch_anova  87.95902   2 654.4758</span></span>
-<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt; 2  3.434736 16.0  37.1 25.72693 26.31090 534        &lt;NA&gt;        NA  NA       NA</span></span>
-<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; 3  3.520150 16.0  33.0 24.04170 24.73901 394        &lt;NA&gt;        NA  NA       NA</span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt; 4 15.444587 18.7  97.9 55.33323 59.09819 261 welch_anova 144.35083   2 638.5873</span></span>
-<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt; 5 13.621193 26.7 100.0 67.81669 70.12172 539        &lt;NA&gt;        NA  NA       NA</span></span>
-<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt; 6 13.226818 40.4 100.0 75.55235 78.15265 400        &lt;NA&gt;        NA  NA       NA</span></span>
-<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt;        p.value es_type  es_value es_ci_lower es_ci_upper</span></span>
-<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a><span class="co">#&gt; 1 1.467916e-34  eta_sq 0.1307679  0.09667861   0.1654516</span></span>
-<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="co">#&gt; 2           NA    &lt;NA&gt;        NA          NA          NA</span></span>
-<span id="cb8-27"><a href="#cb8-27" tabindex="-1"></a><span class="co">#&gt; 3           NA    &lt;NA&gt;        NA          NA          NA</span></span>
-<span id="cb8-28"><a href="#cb8-28" tabindex="-1"></a><span class="co">#&gt; 4 1.888362e-52  eta_sq 0.2081970  0.16901207   0.2461732</span></span>
-<span id="cb8-29"><a href="#cb8-29" tabindex="-1"></a><span class="co">#&gt; 5           NA    &lt;NA&gt;        NA          NA          NA</span></span>
-<span id="cb8-30"><a href="#cb8-30" tabindex="-1"></a><span class="co">#&gt; 6           NA    &lt;NA&gt;        NA          NA          NA</span></span></code></pre></div>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;data.frame&quot;</span></span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a>)</span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;          variable                         label           group     mean</span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; 1             bmi               Body mass index Lower secondary 28.08731</span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; 2             bmi               Body mass index Upper secondary 26.01891</span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; 3             bmi               Body mass index        Tertiary 24.39036</span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; 4 wellbeing_score WHO-5 wellbeing index (0-100) Lower secondary 57.21571</span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; 5 wellbeing_score WHO-5 wellbeing index (0-100) Upper secondary 68.96920</span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; 6 wellbeing_score WHO-5 wellbeing index (0-100)        Tertiary 76.85250</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt;          sd  min   max ci_lower ci_upper   n   test_type statistic df1      df2</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt; 1  3.471744 18.2  38.9 27.66333 28.51129 260 welch_anova  87.95902   2 654.4758</span></span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt; 2  3.434736 16.0  37.1 25.72693 26.31090 534        &lt;NA&gt;        NA  NA       NA</span></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt; 3  3.520150 16.0  33.0 24.04170 24.73901 394        &lt;NA&gt;        NA  NA       NA</span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; 4 15.444587 18.7  97.9 55.33323 59.09819 261 welch_anova 144.35083   2 638.5873</span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt; 5 13.621193 26.7 100.0 67.81669 70.12172 539        &lt;NA&gt;        NA  NA       NA</span></span>
+<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt; 6 13.226818 40.4 100.0 75.55235 78.15265 400        &lt;NA&gt;        NA  NA       NA</span></span>
+<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt;        p.value es_type  es_value es_ci_lower es_ci_upper</span></span>
+<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; 1 1.467916e-34  eta_sq 0.1307679  0.09667861   0.1654516</span></span>
+<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a><span class="co">#&gt; 2           NA    &lt;NA&gt;        NA          NA          NA</span></span>
+<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="co">#&gt; 3           NA    &lt;NA&gt;        NA          NA          NA</span></span>
+<span id="cb8-27"><a href="#cb8-27" tabindex="-1"></a><span class="co">#&gt; 4 1.888362e-52  eta_sq 0.2081970  0.16901207   0.2461732</span></span>
+<span id="cb8-28"><a href="#cb8-28" tabindex="-1"></a><span class="co">#&gt; 5           NA    &lt;NA&gt;        NA          NA          NA</span></span>
+<span id="cb8-29"><a href="#cb8-29" tabindex="-1"></a><span class="co">#&gt; 6           NA    &lt;NA&gt;        NA          NA          NA</span></span></code></pre></div>
 </div>
 <div id="selecting-variables" class="section level2">
 <h2>Selecting variables</h2>
@@ -680,7 +694,21 @@ or <code>test = &quot;nonparametric&quot;</code> for rank-based comparisons:</p>
 <span id="cb9-31"><a href="#cb9-31" tabindex="-1"></a><span class="co">#&gt;                                             │ Male      3.65       3.83     577 </span></span>
 <span id="cb9-32"><a href="#cb9-32" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
 <span id="cb9-33"><a href="#cb9-33" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with standard of living (1-5) │ Female    3.28       3.46     615 </span></span>
-<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="co">#&gt;                                             │ Male      3.33       3.52     577</span></span></code></pre></div>
+<span id="cb9-34"><a href="#cb9-34" tabindex="-1"></a><span class="co">#&gt;                                             │ Male      3.33       3.52     577 </span></span>
+<span id="cb9-35"><a href="#cb9-35" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-36"><a href="#cb9-36" tabindex="-1"></a><span class="co">#&gt;  Variable                                   │ Group      p </span></span>
+<span id="cb9-37"><a href="#cb9-37" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────────────────┼──────────────</span></span>
+<span id="cb9-38"><a href="#cb9-38" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5)             │ Female  .267 </span></span>
+<span id="cb9-39"><a href="#cb9-39" tabindex="-1"></a><span class="co">#&gt;                                             │ Male         </span></span>
+<span id="cb9-40"><a href="#cb9-40" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb9-41"><a href="#cb9-41" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with work (1-5)               │ Female  .073 </span></span>
+<span id="cb9-42"><a href="#cb9-42" tabindex="-1"></a><span class="co">#&gt;                                             │ Male         </span></span>
+<span id="cb9-43"><a href="#cb9-43" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb9-44"><a href="#cb9-44" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with relationships (1-5)      │ Female  .570 </span></span>
+<span id="cb9-45"><a href="#cb9-45" tabindex="-1"></a><span class="co">#&gt;                                             │ Male         </span></span>
+<span id="cb9-46"><a href="#cb9-46" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb9-47"><a href="#cb9-47" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with standard of living (1-5) │ Female  .453 </span></span>
+<span id="cb9-48"><a href="#cb9-48" tabindex="-1"></a><span class="co">#&gt;                                             │ Male</span></span></code></pre></div>
 <p>For more programmatic selection, set <code>regex = TRUE</code>:</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  sochealth,</span>
@@ -702,19 +730,32 @@ or <code>test = &quot;nonparametric&quot;</code> for rank-based comparisons:</p>
 <span id="cb10-18"><a href="#cb10-18" tabindex="-1"></a><span class="co">#&gt; 10      life_sat_standard Satisfaction with standard of living (1-5)</span></span>
 <span id="cb10-19"><a href="#cb10-19" tabindex="-1"></a><span class="co">#&gt; 11      life_sat_standard Satisfaction with standard of living (1-5)</span></span>
 <span id="cb10-20"><a href="#cb10-20" tabindex="-1"></a><span class="co">#&gt; 12      life_sat_standard Satisfaction with standard of living (1-5)</span></span>
-<span id="cb10-21"><a href="#cb10-21" tabindex="-1"></a><span class="co">#&gt;              group     mean        sd min max ci_lower ci_upper   n</span></span>
-<span id="cb10-22"><a href="#cb10-22" tabindex="-1"></a><span class="co">#&gt; 1  Lower secondary 2.714286 1.2021575   1   5 2.567189 2.861382 259</span></span>
-<span id="cb10-23"><a href="#cb10-23" tabindex="-1"></a><span class="co">#&gt; 2  Upper secondary 3.533708 1.1853493   1   5 3.432943 3.634473 534</span></span>
-<span id="cb10-24"><a href="#cb10-24" tabindex="-1"></a><span class="co">#&gt; 3         Tertiary 4.110276 1.0432216   1   5 4.007602 4.212950 399</span></span>
-<span id="cb10-25"><a href="#cb10-25" tabindex="-1"></a><span class="co">#&gt; 4  Lower secondary 2.570881 1.1467994   1   5 2.431102 2.710660 261</span></span>
-<span id="cb10-26"><a href="#cb10-26" tabindex="-1"></a><span class="co">#&gt; 5  Upper secondary 3.422430 1.1037312   1   5 3.328691 3.516169 535</span></span>
-<span id="cb10-27"><a href="#cb10-27" tabindex="-1"></a><span class="co">#&gt; 6         Tertiary 3.851010 1.0314174   1   5 3.749112 3.952909 396</span></span>
-<span id="cb10-28"><a href="#cb10-28" tabindex="-1"></a><span class="co">#&gt; 7  Lower secondary 3.023077 1.2268891   1   5 2.873246 3.172908 260</span></span>
-<span id="cb10-29"><a href="#cb10-29" tabindex="-1"></a><span class="co">#&gt; 8  Upper secondary 3.743446 0.9645227   1   5 3.661453 3.825439 534</span></span>
-<span id="cb10-30"><a href="#cb10-30" tabindex="-1"></a><span class="co">#&gt; 9         Tertiary 4.158291 0.9322485   1   5 4.066423 4.250159 398</span></span>
-<span id="cb10-31"><a href="#cb10-31" tabindex="-1"></a><span class="co">#&gt; 10 Lower secondary 2.666667 1.1635489   1   5 2.524846 2.808487 261</span></span>
-<span id="cb10-32"><a href="#cb10-32" tabindex="-1"></a><span class="co">#&gt; 11 Upper secondary 3.387218 1.1065913   1   5 3.292970 3.481466 532</span></span>
-<span id="cb10-33"><a href="#cb10-33" tabindex="-1"></a><span class="co">#&gt; 12        Tertiary 3.887218 0.9588582   1   5 3.792847 3.981589 399</span></span></code></pre></div>
+<span id="cb10-21"><a href="#cb10-21" tabindex="-1"></a><span class="co">#&gt;              group     mean        sd min max ci_lower ci_upper   n   test_type</span></span>
+<span id="cb10-22"><a href="#cb10-22" tabindex="-1"></a><span class="co">#&gt; 1  Lower secondary 2.714286 1.2021575   1   5 2.567189 2.861382 259 welch_anova</span></span>
+<span id="cb10-23"><a href="#cb10-23" tabindex="-1"></a><span class="co">#&gt; 2  Upper secondary 3.533708 1.1853493   1   5 3.432943 3.634473 534        &lt;NA&gt;</span></span>
+<span id="cb10-24"><a href="#cb10-24" tabindex="-1"></a><span class="co">#&gt; 3         Tertiary 4.110276 1.0432216   1   5 4.007602 4.212950 399        &lt;NA&gt;</span></span>
+<span id="cb10-25"><a href="#cb10-25" tabindex="-1"></a><span class="co">#&gt; 4  Lower secondary 2.570881 1.1467994   1   5 2.431102 2.710660 261 welch_anova</span></span>
+<span id="cb10-26"><a href="#cb10-26" tabindex="-1"></a><span class="co">#&gt; 5  Upper secondary 3.422430 1.1037312   1   5 3.328691 3.516169 535        &lt;NA&gt;</span></span>
+<span id="cb10-27"><a href="#cb10-27" tabindex="-1"></a><span class="co">#&gt; 6         Tertiary 3.851010 1.0314174   1   5 3.749112 3.952909 396        &lt;NA&gt;</span></span>
+<span id="cb10-28"><a href="#cb10-28" tabindex="-1"></a><span class="co">#&gt; 7  Lower secondary 3.023077 1.2268891   1   5 2.873246 3.172908 260 welch_anova</span></span>
+<span id="cb10-29"><a href="#cb10-29" tabindex="-1"></a><span class="co">#&gt; 8  Upper secondary 3.743446 0.9645227   1   5 3.661453 3.825439 534        &lt;NA&gt;</span></span>
+<span id="cb10-30"><a href="#cb10-30" tabindex="-1"></a><span class="co">#&gt; 9         Tertiary 4.158291 0.9322485   1   5 4.066423 4.250159 398        &lt;NA&gt;</span></span>
+<span id="cb10-31"><a href="#cb10-31" tabindex="-1"></a><span class="co">#&gt; 10 Lower secondary 2.666667 1.1635489   1   5 2.524846 2.808487 261 welch_anova</span></span>
+<span id="cb10-32"><a href="#cb10-32" tabindex="-1"></a><span class="co">#&gt; 11 Upper secondary 3.387218 1.1065913   1   5 3.292970 3.481466 532        &lt;NA&gt;</span></span>
+<span id="cb10-33"><a href="#cb10-33" tabindex="-1"></a><span class="co">#&gt; 12        Tertiary 3.887218 0.9588582   1   5 3.792847 3.981589 399        &lt;NA&gt;</span></span>
+<span id="cb10-34"><a href="#cb10-34" tabindex="-1"></a><span class="co">#&gt;    statistic df1      df2      p.value</span></span>
+<span id="cb10-35"><a href="#cb10-35" tabindex="-1"></a><span class="co">#&gt; 1  118.73585   2 652.0775 1.063917e-44</span></span>
+<span id="cb10-36"><a href="#cb10-36" tabindex="-1"></a><span class="co">#&gt; 2         NA  NA       NA           NA</span></span>
+<span id="cb10-37"><a href="#cb10-37" tabindex="-1"></a><span class="co">#&gt; 3         NA  NA       NA           NA</span></span>
+<span id="cb10-38"><a href="#cb10-38" tabindex="-1"></a><span class="co">#&gt; 4  105.98821   2 651.9434 1.398117e-40</span></span>
+<span id="cb10-39"><a href="#cb10-39" tabindex="-1"></a><span class="co">#&gt; 5         NA  NA       NA           NA</span></span>
+<span id="cb10-40"><a href="#cb10-40" tabindex="-1"></a><span class="co">#&gt; 6         NA  NA       NA           NA</span></span>
+<span id="cb10-41"><a href="#cb10-41" tabindex="-1"></a><span class="co">#&gt; 7   82.35074   2 617.9668 1.969764e-32</span></span>
+<span id="cb10-42"><a href="#cb10-42" tabindex="-1"></a><span class="co">#&gt; 8         NA  NA       NA           NA</span></span>
+<span id="cb10-43"><a href="#cb10-43" tabindex="-1"></a><span class="co">#&gt; 9         NA  NA       NA           NA</span></span>
+<span id="cb10-44"><a href="#cb10-44" tabindex="-1"></a><span class="co">#&gt; 10 101.31672   2 648.7723 5.105889e-39</span></span>
+<span id="cb10-45"><a href="#cb10-45" tabindex="-1"></a><span class="co">#&gt; 11        NA  NA       NA           NA</span></span>
+<span id="cb10-46"><a href="#cb10-46" tabindex="-1"></a><span class="co">#&gt; 12        NA  NA       NA           NA</span></span></code></pre></div>
 <p>Use <code>exclude</code> when you want a broad selection with one or
 two explicit removals:</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
@@ -736,15 +777,15 @@ two explicit removals:</p>
 <span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Female  3.51   1.25   1.00    5.00  </span></span>
 <span id="cb11-18"><a href="#cb11-18" tabindex="-1"></a><span class="co">#&gt;                                 │ Male    3.59   1.25   1.00    5.00  </span></span>
 <span id="cb11-19"><a href="#cb11-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group   95% CI LL  95% CI UL    n </span></span>
-<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼───────────────────────────────────</span></span>
-<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Female    25.39      25.98    616 </span></span>
-<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a><span class="co">#&gt;                                 │ Male      25.90      26.50    572 </span></span>
-<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Female    65.99      68.33    620 </span></span>
-<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a><span class="co">#&gt;                                 │ Male      69.73      72.37    580 </span></span>
-<span id="cb11-27"><a href="#cb11-27" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
-<span id="cb11-28"><a href="#cb11-28" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Female    3.41       3.61     616 </span></span>
+<span id="cb11-20"><a href="#cb11-20" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group   95% CI LL  95% CI UL    n       p </span></span>
+<span id="cb11-21"><a href="#cb11-21" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼───────────────────────────────────────────</span></span>
+<span id="cb11-22"><a href="#cb11-22" tabindex="-1"></a><span class="co">#&gt;  Body mass index                │ Female    25.39      25.98    616    .018 </span></span>
+<span id="cb11-23"><a href="#cb11-23" tabindex="-1"></a><span class="co">#&gt;                                 │ Male      25.90      26.50    572         </span></span>
+<span id="cb11-24"><a href="#cb11-24" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb11-25"><a href="#cb11-25" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100)  │ Female    65.99      68.33    620  &lt; .001 </span></span>
+<span id="cb11-26"><a href="#cb11-26" tabindex="-1"></a><span class="co">#&gt;                                 │ Male      69.73      72.37    580         </span></span>
+<span id="cb11-27"><a href="#cb11-27" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb11-28"><a href="#cb11-28" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Female    3.41       3.61     616    .267 </span></span>
 <span id="cb11-29"><a href="#cb11-29" tabindex="-1"></a><span class="co">#&gt;                                 │ Male      3.49       3.69     576</span></span></code></pre></div>
 </div>
 <div id="labels-and-output-formats" class="section level2">

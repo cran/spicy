@@ -92,21 +92,23 @@ print.spicy_freq_table <- function(x, ...) {
     )
   }
 
-  fmt_int <- function(v) {
-    ifelse(
-      v %% 1 != 0,
-      format(round(v, 2), trim = TRUE),
-      format(round(v, 0), trim = TRUE)
-    )
-  }
+  fmt_int <- function(v) format(round(v, 0), trim = TRUE)
 
   build_rows <- function(block, category, show_valid_col_block) {
     if (!nrow(block)) {
       return(NULL)
     }
+    # Each block is homogeneous: `valid_block` has no NA in `value`, and
+    # `missing_block` has only NA. Branch once on the whole block instead
+    # of running a vectorized `ifelse` that is dead code on the valid path.
+    values <- if (anyNA(block$value)) {
+      rep("NA", nrow(block))
+    } else {
+      block$value
+    }
     out <- data.frame(
       Category = c(category, rep("", nrow(block) - 1L)),
-      Values = ifelse(is.na(block$value), "NA", block$value),
+      Values = values,
       `Freq.` = fmt_int(block$n),
       Percent = fmt_pct(block$prop),
       stringsAsFactors = FALSE,

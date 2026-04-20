@@ -28,10 +28,13 @@
 #' normalizes weights so their sum equals the unweighted sample size.
 #'
 #' @param data A `data.frame`, vector, or factor. If a data frame is provided,
-#'   specify the target variable `x`.
+#'   specify the target variable `x`. If both `data` and `x` are supplied as
+#'   vectors, `data` is ignored with a warning.
 #' @param x A variable from `data` (unquoted).
 #' @param weights Optional numeric vector of weights (same length as `x`).
-#'   The variable may be referenced as a bare name when it belongs to `data`.
+#'   The variable may be referenced as a bare name when it belongs to `data`,
+#'   or as a qualified expression like `other$w` (evaluated in the calling
+#'   environment), which always takes precedence over `data` lookup.
 #' @param digits Number of decimal digits to display for percentages (default: `1`).
 #' @param valid Logical. If `TRUE` (default), display valid percentages
 #'   (excluding missing values).
@@ -66,7 +69,8 @@
 #' @param ... Additional arguments passed to [print.spicy_freq_table()].
 #'
 #' @return
-#' A `data.frame` with columns:
+#' With `styled = FALSE`, a plain `data.frame` with no extra attributes
+#' and columns:
 #' \itemize{
 #'   \item \code{value} - unique values or factor levels
 #'   \item \code{n} - frequency count (weighted if applicable)
@@ -75,7 +79,12 @@
 #'   \item \code{cum_prop}, \code{cum_valid_prop} - cumulative percentages (if `cum = TRUE`)
 #' }
 #'
-#' If `styled = TRUE`, prints the formatted table to the console and returns it invisibly.
+#' With `styled = TRUE` (default), prints the formatted table to the
+#' console and invisibly returns a `spicy_freq_table` object: the same
+#' `data.frame` carrying rendering metadata as attributes (`digits`,
+#' `data_name`, `var_name`, `var_label`, `class_name`, `n_total`,
+#' `n_valid`, `weighted`, `rescaled`, `weight_var`) used by
+#' [print.spicy_freq_table()].
 #'
 #' @examples
 #' # Frequency table with labelled ordered factor
@@ -87,6 +96,9 @@
 #' # Simple numeric vector
 #' x <- c(1, 2, 2, 3, 3, 3, NA)
 #' freq(x)
+#'
+#' # Plain vector with a sentinel value recoded as missing
+#' freq(c(1, 2, 3, 99, 99), na_val = 99)
 #'
 #' # Labelled variable (haven-style)
 #' x_lbl <- labelled(
@@ -144,19 +156,12 @@ freq <- function(
   cum = FALSE,
   sort = "",
   na_val = NULL,
-  labelled_levels = c("prefixed", "labels", "values", "p", "l", "v"),
+  labelled_levels = c("prefixed", "labels", "values"),
   rescale = TRUE,
   styled = TRUE,
   ...
 ) {
   labelled_levels <- match.arg(labelled_levels)
-  labelled_levels <- switch(
-    labelled_levels,
-    "p" = "prefixed",
-    "l" = "labels",
-    "v" = "values",
-    labelled_levels
-  )
 
   if (!is.numeric(digits) || length(digits) != 1L || digits < 0) {
     stop("`digits` must be a single non-negative number.", call. = FALSE)
@@ -199,9 +204,9 @@ freq <- function(
   if (!missing(weights)) {
     weight_expr <- substitute(weights)
     weight_name <- deparse(weight_expr, backtick = FALSE)
-    weight_name <- sub("^.*\\$", "", weight_name)
+    is_qualified <- grepl("[$]|\\[\\[", weight_name)
 
-    if (is_df && weight_name %in% names(data)) {
+    if (is_df && !is_qualified && weight_name %in% names(data)) {
       weights <- data[[weight_name]]
     } else {
       weights <- tryCatch(
@@ -311,6 +316,19 @@ freq <- function(
     df <- df[order(df[[sort_col]], decreasing = decreasing), ]
   }
 
+  # Move missing-value rows to the end so cumulative columns match the
+  # printed layout (valid rows, then missing rows). Without this, a
+  # user-supplied `sort` can place the NA row between valid rows and make
+  # the displayed cum_prop look non-monotonic.
+  na_rows <- is.na(df$value)
+  if (any(na_rows) && !all(na_rows)) {
+    df <- rbind(
+      df[!na_rows, , drop = FALSE],
+      df[na_rows, , drop = FALSE]
+    )
+    rownames(df) <- NULL
+  }
+
   if (cum) {
     df$cum_prop <- cumsum(df$prop)
     if (valid) {
@@ -321,6 +339,13 @@ freq <- function(
     } else {
       df$cum_valid_prop <- NA
     }
+  }
+
+  if (!styled) {
+    # Return a genuinely plain data.frame: no spicy print-method attributes
+    # clinging to it. Users who want the metadata can keep `styled = TRUE`
+    # (default) and inspect the invisibly returned `spicy_freq_table`.
+    return(df)
   }
 
   attr(df, "digits") <- digits
@@ -335,11 +360,6 @@ freq <- function(
   attr(df, "weight_var") <- weight_name
 
   class(df) <- c("spicy_freq_table", "spicy_table", class(df))
-
-  if (!styled) {
-    class(df) <- "data.frame"
-    return(df)
-  }
 
   print(df, ...)
   invisible(df)

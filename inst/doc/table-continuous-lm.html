@@ -407,19 +407,20 @@ slopes in the same model-based table:</p>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
 <span id="cb4-4"><a href="#cb4-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
-<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">weights =</span> weight</span>
-<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>)</span>
-<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Highest education level</span></span>
-<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Lower secondary)  M (Upper secondary) </span></span>
-<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
-<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │        67.55                80.88        </span></span>
-<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │        25.96                23.39        </span></span>
-<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Tertiary)      p   R²      n </span></span>
-<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────</span></span>
-<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │    66.52      &lt;.001  0.19  1200 </span></span>
-<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │    26.16      &lt;.001  0.13  1188</span></span></code></pre></div>
+<span id="cb4-5"><a href="#cb4-5" tabindex="-1"></a>  <span class="at">weights =</span> weight,</span>
+<span id="cb4-6"><a href="#cb4-6" tabindex="-1"></a>  <span class="at">show_weighted_n =</span> <span class="cn">TRUE</span></span>
+<span id="cb4-7"><a href="#cb4-7" tabindex="-1"></a>)</span>
+<span id="cb4-8"><a href="#cb4-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Highest education level</span></span>
+<span id="cb4-9"><a href="#cb4-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-10"><a href="#cb4-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Lower secondary)  M (Upper secondary) </span></span>
+<span id="cb4-11"><a href="#cb4-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb4-12"><a href="#cb4-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │        67.55                80.88        </span></span>
+<span id="cb4-13"><a href="#cb4-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │        25.96                23.39        </span></span>
+<span id="cb4-14"><a href="#cb4-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb4-15"><a href="#cb4-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Tertiary)      p   R²      n  Weighted n </span></span>
+<span id="cb4-16"><a href="#cb4-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────────</span></span>
+<span id="cb4-17"><a href="#cb4-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │    66.52      &lt;.001  0.19  1200     1196.47 </span></span>
+<span id="cb4-18"><a href="#cb4-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │    26.16      &lt;.001  0.13  1188     1183.32</span></span></code></pre></div>
 <p>This is often the most natural summary-table function when your
 reporting workflow already relies on weighted linear models.</p>
 </div>
@@ -431,24 +432,14 @@ reports the slope rather than group means:</p>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
 <span id="cb5-4"><a href="#cb5-4" tabindex="-1"></a>  <span class="at">by =</span> age,</span>
-<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span>,</span>
-<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;long&quot;</span></span>
-<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a>)</span>
-<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt;          variable                         label predictor_type predictor_label</span></span>
-<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_score WHO-5 wellbeing index (0-100)     continuous     Age (years)</span></span>
-<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; 2             bmi               Body mass index     continuous     Age (years)</span></span>
-<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt;   level reference estimate_type emmean emmean_se emmean_ci_lower</span></span>
-<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt; 1  &lt;NA&gt;      &lt;NA&gt;         slope     NA        NA              NA</span></span>
-<span id="cb5-13"><a href="#cb5-13" tabindex="-1"></a><span class="co">#&gt; 2  &lt;NA&gt;      &lt;NA&gt;         slope     NA        NA              NA</span></span>
-<span id="cb5-14"><a href="#cb5-14" tabindex="-1"></a><span class="co">#&gt;   emmean_ci_upper   estimate estimate_se estimate_ci_lower estimate_ci_upper</span></span>
-<span id="cb5-15"><a href="#cb5-15" tabindex="-1"></a><span class="co">#&gt; 1              NA 0.04138096 0.030585451       -0.01862605        0.10138797</span></span>
-<span id="cb5-16"><a href="#cb5-16" tabindex="-1"></a><span class="co">#&gt; 2              NA 0.03508525 0.007455753        0.02045732        0.04971319</span></span>
-<span id="cb5-17"><a href="#cb5-17" tabindex="-1"></a><span class="co">#&gt;   test_type statistic df1  df2      p.value es_type    es_value          r2</span></span>
-<span id="cb5-18"><a href="#cb5-18" tabindex="-1"></a><span class="co">#&gt; 1         t  1.352962   1 1198 1.763230e-01      f2 0.001519732 0.001517426</span></span>
-<span id="cb5-19"><a href="#cb5-19" tabindex="-1"></a><span class="co">#&gt; 2         t  4.705796   1 1186 2.826189e-06      f2 0.019622500 0.019244867</span></span>
-<span id="cb5-20"><a href="#cb5-20" tabindex="-1"></a><span class="co">#&gt;         adj_r2    n sum_w</span></span>
-<span id="cb5-21"><a href="#cb5-21" tabindex="-1"></a><span class="co">#&gt; 1 0.0006839677 1200    NA</span></span>
-<span id="cb5-22"><a href="#cb5-22" tabindex="-1"></a><span class="co">#&gt; 2 0.0184179236 1188    NA</span></span></code></pre></div>
+<span id="cb5-5"><a href="#cb5-5" tabindex="-1"></a>  <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span></span>
+<span id="cb5-6"><a href="#cb5-6" tabindex="-1"></a>)</span>
+<span id="cb5-7"><a href="#cb5-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Age (years)</span></span>
+<span id="cb5-8"><a href="#cb5-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb5-9"><a href="#cb5-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  B    95% CI LL  95% CI UL      p   R²      n </span></span>
+<span id="cb5-10"><a href="#cb5-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────────────────</span></span>
+<span id="cb5-11"><a href="#cb5-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 0.04    -0.02      0.10      .176  0.00  1200 </span></span>
+<span id="cb5-12"><a href="#cb5-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 0.04    0.02       0.05     &lt;.001  0.02  1188</span></span></code></pre></div>
 <p>When you need the underlying returned data for further processing,
 use <code>output = &quot;data.frame&quot;</code> for the wide raw table or
 <code>output = &quot;long&quot;</code> for the analytic long table.</p>
