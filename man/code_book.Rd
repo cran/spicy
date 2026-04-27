@@ -6,55 +6,78 @@
 \usage{
 code_book(
   x,
+  ...,
   values = FALSE,
   include_na = FALSE,
   title = "Codebook",
-  factor_levels = c("all", "observed"),
-  ...
+  filename = NULL,
+  factor_levels = c("all", "observed")
 )
 }
 \arguments{
 \item{x}{A data frame or tibble.}
 
-\item{values}{Logical. If \code{FALSE} (the default), displays a compact summary of the variable's values.
-For numeric, character, date/time, labelled, and factor variables, up to four unique non-missing values are shown:
-the first three values, followed by an ellipsis (\code{...}), and the last value.
-Values are sorted when appropriate (e.g., numeric, character, date)
+\item{...}{Optional tidyselect-style column selectors (e.g.
+\code{starts_with("var")}, \code{where(is.numeric)}, etc.). Columns can be selected
+or reordered, but renaming selections is not supported.}
+
+\item{values}{Logical. If \code{FALSE} (the default), displays a compact
+summary of the variable's values. For numeric, character, date/time,
+labelled, and factor variables, all unique non-missing values are shown
+when there are at most four; otherwise the first three values, an ellipsis
+(\code{...}), and the last value are shown. Values are sorted when appropriate
+(e.g., numeric, character, date).
 For factors, \code{factor_levels} controls whether observed or all declared
 levels are shown; level order is preserved.
-For labelled variables, prefixed labels are displayed via \code{labelled::to_factor(levels = "prefixed")}.
+For labelled variables, prefixed labels are displayed via
+\code{labelled::to_factor(levels = "prefixed")}.
 If \code{TRUE}, all unique non-missing values are displayed.}
 
-\item{include_na}{Logical. If \code{TRUE}, unique missing values (\code{NA}, \code{NaN}) are explicitly appended at the end of the \code{Values} summary
-when present in the variable. This applies to all variable types.
-If \code{FALSE} (the default), missing values are omitted from \code{Values} but still counted in the \code{NAs} column.}
+\item{include_na}{Logical. If \code{TRUE}, unique missing value markers
+(\verb{<NA>}, \verb{<NaN>}) are appended at the end of the \code{Values} summary when
+present in the variable. This applies to all variable types. Literal
+strings \code{"NA"}, \code{"NaN"}, and \code{""} are quoted to distinguish them from
+missing markers. If \code{FALSE} (the default), missing values are omitted from
+\code{Values} but still counted in the \code{NAs} column.}
 
-\item{title}{Optional character string displayed as the table title in the Viewer.
-Defaults to \code{"Codebook"}. Set to \code{NULL} to remove the title completely.}
+\item{title}{Optional character string displayed as the table caption.
+Defaults to \code{"Codebook"}. Set to \code{NULL} to remove the title
+completely. When \code{filename = NULL}, the title is also used as the base for
+export filenames after conversion to a portable ASCII name.}
+
+\item{filename}{Optional character string used as the base for exported CSV,
+Excel, and PDF filenames. If \code{NULL} (the default), a portable filename is
+derived from \code{title}, falling back to \code{"Codebook"} when needed. File
+extensions are added by the browser/export engine.}
 
 \item{factor_levels}{Character. Controls how factor values are displayed
-in \code{Values}. \code{"all"} (the default) shows all declared levels, including
-unused levels. \code{"observed"} shows only levels present in the data,
-preserving factor level order.}
-
-\item{...}{Additional arguments (currently unused).}
+in \code{Values}. \code{"all"} (the default; \code{\link[=varlist]{varlist()}} uses \code{"observed"}) shows
+all declared levels, including unused levels. \code{"observed"} shows only
+levels present in the data, preserving factor level order.}
 }
 \value{
 A \code{DT::datatable} object.
 }
 \description{
-\code{code_book()} creates an interactive and exportable codebook summarizing all variables of a data frame.
-It builds upon \code{\link[=varlist]{varlist()}} to provide an overview of variable names, labels,
-classes, and representative values in a sortable, searchable table.
+\code{code_book()} creates an interactive and exportable codebook summarizing
+selected variables of a data frame. It builds upon \code{\link[=varlist]{varlist()}} to provide
+an overview of variable names, labels, classes, and representative values in
+a sortable, searchable table.
 
-The output is displayed as an interactive \code{DT::datatable()} in the Viewer pane,
-allowing filtering, column reordering, and export (copy, print, CSV, Excel, PDF)
-directly.
+The output is displayed as an interactive \code{DT::datatable()} in the Viewer pane
+(for example in RStudio or Positron), allowing searching, sorting, and export
+(copy, print, CSV, Excel, PDF) directly.
 }
 \details{
 \itemize{
-\item The interactive \code{datatable} supports column sorting, searching, and
+\item The interactive \code{datatable} supports column sorting, global searching, and
 client-side export to various formats.
+\item Variable selection uses the same tidyselect interface as \code{\link[=varlist]{varlist()}}.
+\item By default, factor variables document all declared levels, including
+unused levels — appropriate for a schema-oriented codebook. This differs
+from \code{\link[=varlist]{varlist()}}, which defaults to \code{"observed"} to summarize observed
+data only. Pass \code{factor_levels = "observed"} to mirror \code{\link[=varlist]{varlist()}}'s
+default.
 \item All exports occur client-side through the Viewer or Tab.
 }
 }
@@ -68,8 +91,28 @@ Requires the following package:
 
 \examples{
 \dontrun{
-# Launch the interactive codebook (opens in Viewer)
-code_book(sochealth)
+if (requireNamespace("DT", quietly = TRUE)) {
+  code_book(sochealth)
+  code_book(sochealth, starts_with("bmi"))
+  code_book(sochealth, starts_with("bmi"), values = TRUE, include_na = TRUE)
+
+  factors <- data.frame(
+    group = factor(c("A", "B", NA), levels = c("A", "B", "C"))
+  )
+  code_book(
+    factors,
+    values = TRUE,
+    include_na = TRUE,
+    factor_levels = "observed"
+  )
+
+  code_book(
+    sochealth,
+    starts_with("bmi"),
+    title = "BMI codebook",
+    filename = "bmi_codebook"
+  )
+}
 }
 
 }

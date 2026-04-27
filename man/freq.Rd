@@ -14,6 +14,7 @@ freq(
   sort = "",
   na_val = NULL,
   labelled_levels = c("prefixed", "labels", "values"),
+  factor_levels = c("observed", "all"),
   rescale = TRUE,
   styled = TRUE,
   ...
@@ -29,7 +30,8 @@ vectors, \code{data} is ignored with a warning.}
 \item{weights}{Optional numeric vector of weights (same length as \code{x}).
 The variable may be referenced as a bare name when it belongs to \code{data},
 or as a qualified expression like \code{other$w} (evaluated in the calling
-environment), which always takes precedence over \code{data} lookup.}
+environment), which always takes precedence over \code{data} lookup. \code{NA}
+weights are treated as zero with a warning; see \code{Details}.}
 
 \item{digits}{Number of decimal digits to display for percentages (default: \code{1}).}
 
@@ -48,7 +50,7 @@ If \code{TRUE}, adds cumulative percentages.}
 \item \code{"name-"} - alphabetical Z-A
 }}
 
-\item{na_val}{Vector of numeric or character values to be treated as missing (\code{NA}).
+\item{na_val}{Atomic vector of numeric or character values to be treated as missing (\code{NA}).
 
 For \emph{labelled} variables (from \strong{haven} or \strong{labelled}), this argument
 must refer to the underlying coded values, not the visible labels.
@@ -67,8 +69,16 @@ values are displayed:
 \item \code{"values"} or \code{"v"} - show only numeric codes
 }}
 
+\item{factor_levels}{Character. Controls how factor and labelled values
+are displayed in the frequency table. \code{"observed"} (the default;
+matches Stata's \code{tab}) shows only levels present in the data.
+\code{"all"} (matches SPSS \code{FREQUENCIES} and \code{\link[=code_book]{code_book()}}'s default)
+keeps every declared level, including unused ones, which appear
+with \code{n = 0}.}
+
 \item{rescale}{Logical. If \code{TRUE} (default), rescale weights so that their
-total equals the unweighted sample size.}
+total equals the unweighted sample size (\code{length(weights)}). See
+\code{Details} for the interaction with \code{NA} weights.}
 
 \item{styled}{Logical. If \code{TRUE} (default), print the formatted spicy table.
 If \code{FALSE}, return a plain \code{data.frame} with frequency values.}
@@ -115,11 +125,29 @@ It automatically detects the type of input (\code{vector}, \code{factor}, or
 \item Optional weighting with a rescaling mechanism
 \item Support for cumulative percentages (\code{cum = TRUE})
 \item Multiple display modes for labels via \code{labelled_levels}
+\item Schema-vs-observed level display via \code{factor_levels}
 }
+
+For factor and labelled inputs, the \code{factor_levels} argument
+controls whether declared-but-unobserved levels appear in the
+output. The default \code{"observed"} drops them (Stata \code{tab} behavior);
+\code{"all"} keeps them with \code{n = 0}, matching SPSS \code{FREQUENCIES} and
+\code{\link[=code_book]{code_book()}}'s default. For schema-level inspection without
+computing frequencies, use \code{\link[=varlist]{varlist()}} or \code{\link[=code_book]{code_book()}} with
+\code{factor_levels = "all"}.
 
 When weighting is applied (\code{weights}), the frequencies and percentages are
 computed proportionally to the weights. The argument \code{rescale = TRUE}
-normalizes weights so their sum equals the unweighted sample size.
+normalizes weights so their sum equals the unweighted sample size
+(\code{length(weights)}).
+
+Missing values in \code{weights} are treated as zero (with a warning), so
+the corresponding rows contribute nothing to any cell. With
+\code{rescale = TRUE}, the remaining weights are normalized so the total
+weighted N still equals \code{length(weights)} — the implicit share of the
+zeroed rows is redistributed over the others, mirroring Stata's
+\code{pweight} semantics. With \code{rescale = FALSE}, the total weighted N is
+the actual sum of non-\code{NA} weights.
 }
 \examples{
 # Frequency table with labelled ordered factor
@@ -150,6 +178,11 @@ freq(x_lbl, labelled_levels = "labels", cum = TRUE)
 
 # Display values only, sorted descending
 freq(x_lbl, labelled_levels = "values", sort = "-")
+
+# Show all declared factor levels, including unused ones (SPSS-style).
+# The default "observed" mirrors Stata's `tab` and drops unused levels.
+f <- factor(c("Yes", "No", "Yes"), levels = c("Yes", "No", "Maybe"))
+freq(f, factor_levels = "all")
 
 # With weighting
 df <- data.frame(

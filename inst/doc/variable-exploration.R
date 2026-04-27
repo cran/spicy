@@ -51,6 +51,17 @@ vl(sochealth, starts_with("bmi"), tbl = TRUE)
 #   code_book(sochealth)
 # }
 
+## ----code-book-select, eval = build_rich_tables-------------------------------
+# if (requireNamespace("DT", quietly = TRUE)) {
+#   code_book(
+#     sochealth,
+#     starts_with("bmi"),
+#     values = TRUE,
+#     title = "BMI codebook",
+#     filename = "bmi_codebook"
+#   )
+# }
+
 ## ----code-book-values, eval = build_rich_tables-------------------------------
 # if (requireNamespace("DT", quietly = TRUE)) {
 #   code_book(sochealth, values = TRUE, include_na = TRUE)
