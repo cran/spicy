@@ -73,19 +73,17 @@
 #' - `N_valid`: number of non-missing observations
 #' - `NAs`: number of missing observations
 #'
+#' For matrix and array columns, observations are counted per **row**:
+#' a row is treated as missing if any of its cells is `NA`. `N_valid`
+#' / `NAs` therefore count complete vs. incomplete rows, not
+#' individual cells.
+#'
 #' If `tbl = TRUE`, the tibble is returned. If `tbl = FALSE` and the session is
 #' interactive, the summary is displayed in the Viewer pane and the function
 #' returns invisibly. In non-interactive sessions, a message is displayed and
 #' the function returns invisibly.
 #'
-#' @importFrom labelled is.labelled
-#' @importFrom labelled to_factor
-#' @importFrom tibble as_tibble view
-#' @importFrom tidyselect eval_select everything
-#' @importFrom rlang expr
-#' @importFrom stats na.omit
-#' @importFrom utils head tail
-#'
+#' @family variable inspection
 #' @export
 #'
 #' @examples
@@ -141,9 +139,9 @@ varlist_impl <- function(
   raw_expr = substitute(x)
 ) {
   if (!is.data.frame(x)) {
-    stop(
+    spicy_abort(
       "varlist() only works with named data frames or transformations of them.",
-      call. = FALSE
+      class = "spicy_invalid_data"
     )
   }
 
@@ -154,14 +152,18 @@ varlist_impl <- function(
   factor_levels <- match_varlist_factor_levels(factor_levels)
 
   selectors <- if (missing(...)) {
-    tidyselect::eval_select(rlang::expr(everything()), data = x)
+    # Qualify `everything()` so that R CMD check's static analysis sees
+    # the source -- no NOTE about an undefined global. Functionally
+    # identical: `tidyselect::eval_select` evaluates the captured
+    # expression in the tidyselect data mask either way.
+    tidyselect::eval_select(rlang::expr(tidyselect::everything()), data = x)
   } else {
     tidyselect::eval_select(rlang::expr(c(...)), data = x)
   }
   validate_varlist_selectors(selectors, x)
 
   if (length(selectors) == 0) {
-    warning("No columns selected.", call. = FALSE)
+    spicy_warn("No columns selected.", class = "spicy_no_selection")
     res <- tibble::tibble(
       Variable = character(),
       Label = character(),
@@ -176,7 +178,7 @@ varlist_impl <- function(
       return(res)
     }
 
-    if (interactive()) {
+    if (interactive()) { # nocov start
       tryCatch(
         tibble::view(res, title = "vl: (no columns selected)"),
         error = function(e) {
@@ -184,7 +186,7 @@ varlist_impl <- function(
           message("Displaying result in console instead:")
           print(res)
         }
-      )
+      ) # nocov end
     } else {
       message("No columns selected. Use `tbl = TRUE` to return result.")
     }
@@ -249,7 +251,7 @@ varlist_impl <- function(
 
   if (tbl) {
     return(res)
-  } else if (interactive()) {
+  } else if (interactive()) { # nocov start
     title_txt <- varlist_title(expr = raw_expr, selectors_used = !missing(...))
 
     tryCatch(
@@ -259,7 +261,7 @@ varlist_impl <- function(
         message("Displaying result in console instead:")
         print(res)
       }
-    )
+    ) # nocov end
   } else {
     message("Non-interactive session: use `tbl = TRUE` to return a tibble.")
   }

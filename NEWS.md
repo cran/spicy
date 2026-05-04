@@ -1,3 +1,139 @@
+# spicy 0.11.0
+
+## New features
+
+### `table_continuous_lm()`
+
+* Cluster-robust SEs via `cluster` and four `vcov` choices
+  (`"CR0"`–`"CR3"`), dispatched to `clubSandwich` with
+  Satterthwaite df (`clubSandwich` in `Suggests`).
+* `vcov = "bootstrap"` (nonparametric or cluster) and
+  `vcov = "jackknife"` (leave-one-out / leave-one-cluster-out)
+  variance estimators in pure base R, controlled by `boot_n`.
+* Three new `effect_size` choices alongside `"f2"`: Cohen's
+  `"d"`, Hedges' `"g"` (two-group only), Hays' `"omega2"`. New
+  `effect_size_ci` adds noncentral *t* / *F* CIs rendered inline
+  as `0.18 [0.07, 0.30]`.
+* `HC*` estimators delegate to `sandwich::vcovHC()`;
+  rank-deficient fits return a clean rank-by-rank covariance.
+
+### Harmonisation across the table family
+
+* Shared reporting vocabulary (`decimal_mark`, `p_digits`,
+  `align`, named-`labels`) now spans `cross_tab()`, `freq()` and
+  the three `table_*()` helpers, including APA-style p-value
+  notation (`<.001` / `.045`, no leading zero).
+* `table_categorical()`'s `assoc_measure` accepts a per-variable
+  spec. When measures differ across rows the column collapses to
+  `"Effect size"` and an APA-style `Note.` line documents the
+  per-variable measure; `phi` on a non-2x2 errors.
+* All three `table_*()` functions gain `as.data.frame()`,
+  `tibble::as_tibble()`, `broom::tidy()` and `broom::glance()`
+  methods (`broom` in `Suggests`).
+
+## Quality and robustness
+
+* **Classed conditions.** Errors and warnings now carry stable
+  classes (`spicy_error` / `spicy_warning` plus 11 leaf classes
+  documented in `?spicy`), so downstream code can dispatch via
+  `tryCatch()` / `withCallingHandlers()` instead of matching
+  message strings. `rlang (>= 1.1.0)` required.
+* **Structured cli messages.** Multi-line errors and warnings
+  (vcov fallbacks, bootstrap/jackknife failures, `padding`
+  migration, `labels` length mismatch) render as cli bullets.
+* **Locale-deterministic ordering.** Sorts in `varlist()`,
+  `freq()`, `cross_tab()` and `table_*()` use
+  `method = "radix"`. Output is byte-stable across locales and
+  platforms, matching Stata / SPSS guarantees.
+* **Edge-case hardening.** `varlist()` / `code_book()` /
+  `cross_tab()` / `freq()` no longer crash on zero-length or
+  all-NA `Date` / `POSIXct` / `character` columns or factors
+  with no observed levels (R 4.6.0 `sort()` segfaults on these
+  inputs).
+* **Snapshot-locked rendering.** `tests/testthat/test-snapshots.R`
+  pins the exact console output of every spicy print method, so
+  any unintended formatting drift surfaces as a PR diff.
+* **API stability contract.** `?spicy` documents which exports
+  are stable, stabilising or internal. pkgdown reference groups
+  exports via four `@family` tags.
+* **Cross-software validation.** All 13 association measures
+  agree with PSPP 2.0 (`CROSSTABS /STATISTICS=ALL`, 65 / 65
+  statistics on four datasets); Cohen's *d* and Hedges' *g*
+  noncentral CIs are tested numerically against
+  `effectsize::cohens_d()` / `effectsize::hedges_g()`
+  (`tolerance = 1e-6`); point-estimate formulas and asymptotic
+  standard errors follow `DescTools` (Signorell et al.).
+
+## Improvements
+
+* `cross_tab()` warns when `correct = TRUE` is ignored on a
+  non-2x2 sub-table, when `weights` contains `NA`, and notes
+  statistics computed on a sub-table after empty rows / columns
+  are pruned.
+* `cross_tab()` validates `decimal_mark`, `p_digits` and
+  `simulate_B` up front; `freq()` validates `decimal_mark` and
+  tightens `digits` to a non-negative integer.
+* A user category literally named `"N"` or `"Total"` is no longer
+  mis-rendered as the totals row in `cross_tab()`.
+* `table_continuous_lm(output = "long")` returns `n`, `df1`, `df2`
+  as integer columns; `predictor_label` preserved on the
+  degenerate-model fallback path.
+* `cramer_v()` / `phi()` doc states the CI uses the Fisher
+  z-transformation (point estimate and p-value identical to
+  `DescTools` / SPSS).
+* `uncertainty_coef()` doc states entropy uses `0 log 0 = 0`
+  (matching SPSS, PSPP, Stata, Cover & Thomas).
+
+## Bug fixes
+
+* `label_from_names()` raises actionable errors on duplicate or
+  empty new column names; trims whitespace and preserves the
+  input class.
+* `table_continuous_lm(output = "data.frame")` names contrast CI
+  columns from `ci_level` (was hardcoded to 95 %).
+* The categorical-predictor global Wald *F* degrades to `NA` on
+  a singular coefficient covariance submatrix.
+* The degenerate-table branch of `cramer_v()`, `yule_q()`,
+  `gamma_gk()`, `kendall_tau_b()` and `somers_d()` respects
+  `detail`: scalar `NA_real_` by default, fully shaped
+  `spicy_assoc_detail` when `detail = TRUE`.
+* `uncertainty_coef()` returns a finite estimate (was `NaN`) when
+  a marginal is zero.
+* `somers_d(direction = "symmetric")` returns the harmonic mean
+  of the two asymmetric values, matching SPSS / PSPP `CROSSTABS`.
+* `print.spicy_assoc_detail()` / `print.spicy_assoc_table()` use
+  APA-strict `<.001` / `.045` notation, matching the rest of the
+  package.
+* `varlist()` / `code_book()` honour `factor_levels = "all"` for
+  `haven_labelled` columns: declared-but-unobserved labels appear
+  in the `Values` summary.
+* `copy_clipboard()` rejects `row.names.as.col` vectors of length
+  ≠ 1 and empty strings; accumulates all messages from
+  `clipr::write_clip()` instead of overwriting.
+* `mean_n()` / `sum_n()` reject non-integer `min_valid >= 1` and
+  `min_valid > ncol`; their `digits` requires a non-negative
+  integer.
+
+## Breaking changes
+
+* `table_continuous_lm()` and `table_categorical()` default to
+  decimal-point alignment for numeric columns
+  (`align = "decimal"`). Pass `align = "auto"` for the previous
+  behaviour.
+* `build_ascii_table()` / `spicy_print_table()`: `padding`
+  switches from a string enum to a non-negative integer.
+  Default `2L` (was `+5L`); printed tables are roughly 40 %
+  narrower. **Migration**: `"compact" -> 0L`, `"normal" -> 2L`,
+  `"wide" -> 4L`.
+* `table_categorical(assoc_measure = "auto")` on a 2x2 table
+  picks `phi` instead of `cramer_v`. Numeric value unchanged
+  (|phi| = V on 2x2); only the column label changes.
+* `freq()` drops observations with `NA` weights (with a warning)
+  instead of recoding them to zero. Aligns with `cross_tab()`.
+* `table_continuous_lm(output = "long")` returns `NA` in
+  `es_type` / `es_value` when `effect_size = "none"` (was
+  `"f2"`), and renames `sum_w` to `weighted_n`.
+
 # spicy 0.10.0
 
 ## New features

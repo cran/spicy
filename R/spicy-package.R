@@ -1,34 +1,63 @@
+#' spicy: descriptive statistics, summary tables, and data management
+#'
+#' @description
+#' spicy provides a small set of opinionated, Stata-/SPSS-grade
+#' tools for descriptive analysis: frequency tables, cross-
+#' tabulations, association measures, variable inspection, and
+#' publication-ready summary tables.
+#'
+#' @section API stability:
+#' spicy is in active pre-1.0 development. Per the policy
+#' documented in `NEWS.md` and the package roadmap, breaking
+#' changes are made deliberately at minor-version bumps and are
+#' always announced in `NEWS.md`. The API surface is partitioned
+#' as follows; users planning to embed spicy in production
+#' pipelines or downstream packages should rely on the **stable**
+#' surface.
+#'
+#' **Stable** (signature and behaviour preserved across 0.y.z and
+#' into 1.0.0; documented changes only):
+#' \itemize{
+#'   \item Frequency / cross-tabs: [freq()], [cross_tab()]
+#'   \item Variable inspection: [varlist()] / [vl()],
+#'         [code_book()], [label_from_names()]
+#'   \item Row-wise summaries: [mean_n()], [sum_n()], [count_n()]
+#'   \item Clipboard export: [copy_clipboard()]
+#'   \item Association measures (point estimates and
+#'         documented CIs): [cramer_v()], [phi()],
+#'         [contingency_coef()], [yule_q()], [gamma_gk()],
+#'         [kendall_tau_b()], [kendall_tau_c()], [somers_d()],
+#'         [lambda_gk()], [goodman_kruskal_tau()],
+#'         [uncertainty_coef()]
+#' }
+#'
+#' **Stabilising** (still maturing; argument names may be tightened
+#' before 1.0 with a `NEWS.md` entry, but no silent behavioural
+#' changes):
+#' \itemize{
+#'   \item Summary table builders: [table_categorical()],
+#'         [table_continuous()], [table_continuous_lm()]
+#'   \item Omnibus association overview: [assoc_measures()]
+#' }
+#'
+#' **Internal API** (not part of the public surface; can change
+#' without notice -- avoid calling directly from downstream code):
+#' \itemize{
+#'   \item ASCII rendering primitives: [build_ascii_table()],
+#'         [spicy_print_table()]
+#' }
+#'
+#' All errors and warnings emitted by the stable / stabilising
+#' surfaces use the documented `spicy_error` / `spicy_warning`
+#' class hierarchies (see `NEWS.md`), so downstream code can
+#' dispatch on class via `tryCatch()` / `withCallingHandlers()`
+#' instead of matching message strings.
+#'
 #' @keywords internal
 "_PACKAGE"
 
 ## usethis namespace: start
-#' @importFrom dplyr pick
-#' @importFrom dplyr pull
-#' @importFrom dplyr select
-#' @importFrom haven labelled
-#' @importFrom labelled is.labelled
-#' @importFrom labelled to_factor
-#' @importFrom labelled var_label
-#' @importFrom labelled var_label<-
-#' @importFrom rlang enquo
-#' @importFrom rlang eval_tidy
-#' @importFrom rlang inform
-#' @importFrom rlang quo_is_null
 #' @importFrom stats complete.cases
-#' @importFrom stats na.omit
 #' @importFrom stats setNames
-#' @importFrom stats xtabs
-#' @importFrom stringr str_pad
-#' @importFrom tibble as_tibble
-#' @importFrom tibble rownames_to_column
-#' @importFrom tibble view
-#' @importFrom tidyselect all_of
-#' @importFrom tidyselect any_of
-#' @importFrom tidyselect eval_select
-#' @importFrom tidyselect everything
-#' @importFrom tidyselect where
-#' @importFrom utils capture.output
-#' @importFrom utils head
-#' @importFrom utils tail
 ## usethis namespace: end
 NULL

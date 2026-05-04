@@ -46,10 +46,12 @@ measuring the strength of association between two categorical variables.
 Cramer's V is computed as
 \eqn{V = \sqrt{\chi^2 / (n \cdot (k - 1))}}, where \eqn{\chi^2}
 is the Pearson chi-squared statistic, \eqn{n} is the total count,
-and \eqn{k = \min(r, c)}.
-The confidence interval uses the Fisher z-transformation.
-Standard error formulas follow the DescTools implementations
-(Signorell et al., 2024).
+and \eqn{k = \min(r, c)}. The point estimate matches the
+DescTools (Signorell et al., 2024) and SPSS implementations.
+The confidence interval uses the Fisher z-transformation
+on \eqn{V} (\eqn{\tanh(\mathrm{atanh}(V) \pm z_{\alpha/2} /
+\sqrt{n - 3})}), which differs from the noncentral chi-squared
+or bootstrap CIs reported by \code{DescTools::CramerV()}.
 }
 \examples{
 tab <- table(sochealth$smoking, sochealth$education)
@@ -68,4 +70,18 @@ Statistics}. R package.
 }
 \seealso{
 \code{\link[=phi]{phi()}}, \code{\link[=contingency_coef]{contingency_coef()}}, \code{\link[=assoc_measures]{assoc_measures()}}
+
+Other association measures:
+\code{\link[=assoc_measures]{assoc_measures()}},
+\code{\link[=contingency_coef]{contingency_coef()}},
+\code{\link[=gamma_gk]{gamma_gk()}},
+\code{\link[=goodman_kruskal_tau]{goodman_kruskal_tau()}},
+\code{\link[=kendall_tau_b]{kendall_tau_b()}},
+\code{\link[=kendall_tau_c]{kendall_tau_c()}},
+\code{\link[=lambda_gk]{lambda_gk()}},
+\code{\link[=phi]{phi()}},
+\code{\link[=somers_d]{somers_d()}},
+\code{\link[=uncertainty_coef]{uncertainty_coef()}},
+\code{\link[=yule_q]{yule_q()}}
 }
+\concept{association measures}

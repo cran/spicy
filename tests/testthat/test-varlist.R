@@ -163,9 +163,90 @@ test_that("varlist_title() handles magrittr-style pipe calls", {
   expect_equal(varlist_title(quote(df %>% head())), "vl: df*")
 })
 
+test_that("varlist_title() recognises modern dplyr/tidyr verbs (curated)", {
+  # Verbs added to the curated fast-path list. Bare names: quoted
+  # expressions are parsed only, never evaluated, so no namespace is
+  # required at test time.
+  expect_equal(varlist_title(quote(pivot_longer(df, everything()))), "vl: df*")
+  expect_equal(varlist_title(quote(count(df, x))), "vl: df*")
+  expect_equal(varlist_title(quote(slice_head(df, n = 5))), "vl: df*")
+  expect_equal(varlist_title(quote(left_join(df, other))), "vl: df*")
+  expect_equal(varlist_title(quote(bind_rows(df, other))), "vl: df*")
+})
+
+test_that("varlist_is_data_first() fast path hits curated list", {
+  expect_true(varlist_is_data_first("filter"))
+  expect_true(varlist_is_data_first("pivot_longer"))
+  expect_true(varlist_is_data_first("left_join"))
+})
+
+test_that("varlist_is_data_first() slow path introspects loaded verbs", {
+  skip_if_not_installed("dplyr")
+  # Force-load dplyr so the introspection branch sees its namespace
+  loadNamespace("dplyr")
+
+  # `dplyr::pull(.data, var, ...)` -- first formal is `.data`, NOT in
+  # the curated list, so this only succeeds via introspection.
+  expect_false("pull" %in% varlist_data_first_calls())
+  expect_true(varlist_is_data_first("pull"))
+})
+
+test_that("varlist_is_data_first() rejects unknown / non-data-first verbs", {
+  expect_false(varlist_is_data_first("zzz_nonexistent_verb_xyz"))
+
+  # `dplyr::across(.cols, ...)` -- first formal is `.cols`, NOT data-first
+  if (requireNamespace("dplyr", quietly = TRUE)) {
+    loadNamespace("dplyr")
+    expect_false("across" %in% varlist_data_first_calls())
+    expect_false(varlist_is_data_first("across"))
+  }
+})
+
 test_that("varlist_title() avoids ambiguous lookup and call arguments", {
   expect_equal(varlist_title(quote(get(name))), "vl: <data>")
   expect_equal(varlist_title(quote(fun(x, df))), "vl: <data>")
+})
+
+test_that("varlist() handles exotic / empty column types without crashing", {
+  # Each row probes a column type that can crash R's `sort()` (Date /
+  # POSIXct / character of length 0 segfault on R 4.6.0 dev) or that
+  # historically tripped up the `Values` summary path. The radix sort
+  # helper short-circuits on length <= 1 to keep these inputs safe.
+  exotic <- list(
+    empty_int       = integer(0),
+    empty_char      = character(0),
+    empty_factor    = factor(character(0)),
+    all_na_date     = as.Date(c(NA, NA, NA)),
+    all_na_posix    = as.POSIXct(c(NA_character_, NA_character_)),
+    difftime_days   = structure(c(1, 2, 3), class = "difftime", units = "days"),
+    factor_unused   = factor(c("a", "a"), levels = c("a", "b", "c"))
+  )
+  for (nm in names(exotic)) {
+    df <- data.frame(x = exotic[[nm]])
+    out <- varlist(df, tbl = TRUE, values = TRUE, include_na = TRUE)
+    expect_true(inherits(out, "tbl_df"), info = nm)
+    expect_equal(nrow(out), 1L, info = nm)
+    expect_equal(out$Variable, "x", info = nm)
+  }
+})
+
+test_that("varlist() Values column ordering is locale-independent", {
+  # Strings whose collation order depends on `LC_COLLATE`: under the
+  # POSIX `C` locale the output is uppercase-first ASCII order
+  # (`A, B, a, b`), under most non-C locales it is case-insensitive
+  # (`A, a, B, b`). The radix sort used internally guarantees the
+  # POSIX ordering on every platform, so the same dataset produces
+  # the same `Values` cell on Linux, macOS and Windows regardless of
+  # the user's locale.
+  df <- data.frame(grp = c("B", "a", "A", "b"))
+  withr::with_collate("en_US.UTF-8", {
+    out_locale <- varlist(df, tbl = TRUE, values = TRUE)$Values
+  })
+  withr::with_collate("C", {
+    out_c <- varlist(df, tbl = TRUE, values = TRUE)$Values
+  })
+  expect_identical(out_locale, out_c)
+  expect_identical(out_locale, "A, B, a, b")
 })
 
 test_that("varlist_title() returns fallback for non-symbol expressions", {
@@ -503,6 +584,42 @@ test_that("varlist() uses labelled value order consistently", {
 
   expect_equal(unname(res$Values), "[1] Low, [2] Mid, [3] High")
   expect_equal(unname(res_all$Values), "[1] Low, [2] Mid, [3] High")
+})
+
+test_that("varlist() honours `factor_levels = 'all'` for labelled (declared > observed)", {
+  # spicy 0.11.0 fix: previously labelled columns silently forced
+  # `factor_levels = "observed"` regardless of user input. With
+  # value 3 unobserved, `factor_levels = "all"` must still surface
+  # the [3] High label.
+  skip_if_not_installed("labelled")
+  x <- labelled::labelled(
+    c(1, 2, 1, 2),
+    labels = c(Low = 1, Mid = 2, High = 3)
+  )
+  df <- data.frame(v = x)
+
+  res_observed <- varlist(df, tbl = TRUE, factor_levels = "observed")
+  res_all <- varlist(df, tbl = TRUE, factor_levels = "all")
+
+  expect_no_match(res_observed$Values, "High")
+  expect_match(res_all$Values, "[3] High", fixed = TRUE)
+
+  # Same on the values = TRUE path.
+  res_all_full <- varlist(df, tbl = TRUE, values = TRUE, factor_levels = "all")
+  expect_match(res_all_full$Values, "[3] High", fixed = TRUE)
+})
+
+test_that("match_varlist_factor_levels rejects bad inputs with a stable message", {
+  msg <- '`factor_levels` must be "observed" or "all".'
+  expect_error(varlist(mtcars, factor_levels = "foo"), msg, fixed = TRUE)
+  expect_error(varlist(mtcars, factor_levels = NA_character_), msg, fixed = TRUE)
+  expect_error(varlist(mtcars, factor_levels = character()), msg, fixed = TRUE)
+  expect_error(varlist(mtcars, factor_levels = 1L), msg, fixed = TRUE)
+  expect_error(
+    varlist(mtcars, factor_levels = c("foo", "bar")),
+    msg,
+    fixed = TRUE
+  )
 })
 
 test_that("N_distinct counts correctly", {

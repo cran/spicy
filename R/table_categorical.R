@@ -1,3 +1,198 @@
+# ── Internal helpers for per-row association measure ─────────────────────────
+
+# Pretty label for an association measure. Always ASCII so the
+# resulting string is safe to use as a data.frame column name (the
+# `out[["Kendall's Tau-b"]]` contract works on every platform) and as
+# a `glance()` value. A locale-aware Unicode upgrade (`τ`, `γ`)
+# could be added later as a display-only print option without
+# affecting these data-side names.
+.assoc_label <- function(measure) {
+  switch(
+    measure,
+    cramer_v = "Cramer's V",
+    phi = "Phi",
+    tau_b = "Kendall's Tau-b",
+    tau_c = "Stuart's Tau-c",
+    gamma = "Goodman-Kruskal Gamma",
+    somers_d = "Somers' D",
+    lambda = "Lambda",
+    measure
+  )
+}
+
+# Resolve the user-supplied `assoc_measure` into a named character vector
+# of length(select_names): one resolved measure per row variable. Accepts
+# four input shapes:
+#
+#   * `"none"`              -> rep("none", N)
+#   * single string         -> rep(string, N) (uniform application)
+#   * named character vec   -> per-row override; unnamed positions or
+#                              missing names fall back to "auto"
+#   * unnamed character vec -> positional pair-up with `select_names`
+#
+# Then resolves each remaining `"auto"` entry based on the variable type:
+# 2x2 -> phi ; both ordered -> tau_b ; otherwise cramer_v.
+#
+# The strict per-row validation (e.g. phi requires a 2x2 table) lives
+# here so the user gets a clear, early error instead of a silent NA in
+# the cell.
+.resolve_assoc_measures <- function(
+  assoc_measure,
+  select_names,
+  data,
+  by_name
+) {
+  valid <- c(
+    "auto",
+    "none",
+    "cramer_v",
+    "phi",
+    "tau_b",
+    "tau_c",
+    "gamma",
+    "somers_d",
+    "lambda"
+  )
+
+  n <- length(select_names)
+  per_row <- character(n)
+  names(per_row) <- select_names
+
+  if (is.null(assoc_measure)) {
+    assoc_measure <- "auto"
+  }
+  if (!is.character(assoc_measure)) {
+    spicy_abort(
+      "`assoc_measure` must be a character string or named/unnamed character vector.", class = "spicy_invalid_input")
+  }
+
+  has_names <- !is.null(names(assoc_measure)) &&
+    any(nzchar(names(assoc_measure)))
+
+  if (length(assoc_measure) == 1L && !has_names) {
+    if (!assoc_measure %in% valid) {
+      spicy_abort(
+        sprintf(
+          "`assoc_measure = \"%s\"` is not one of: %s.",
+          assoc_measure,
+          paste(shQuote(valid), collapse = ", ")
+        ), class = "spicy_invalid_input")
+    }
+    per_row[] <- assoc_measure
+  } else if (has_names) {
+    bad_names <- setdiff(names(assoc_measure)[nzchar(names(assoc_measure))],
+                         select_names)
+    if (length(bad_names) > 0L) {
+      spicy_abort(
+        sprintf(
+          "`assoc_measure` keys not found in `select`: %s.",
+          paste(shQuote(bad_names), collapse = ", ")
+        ), class = "spicy_invalid_input")
+    }
+    bad_vals <- setdiff(unique(assoc_measure), valid)
+    if (length(bad_vals) > 0L) {
+      spicy_abort(
+        sprintf(
+          "`assoc_measure` value(s) not recognised: %s.",
+          paste(shQuote(bad_vals), collapse = ", ")
+        ), class = "spicy_invalid_input")
+    }
+    per_row[] <- "auto" # default fallback for unnamed variables
+    keyed <- assoc_measure[nzchar(names(assoc_measure))]
+    per_row[names(keyed)] <- as.character(keyed)
+  } else {
+    # Unnamed vector, positional pair-up
+    if (length(assoc_measure) != n) {
+      spicy_abort(
+        sprintf(
+          "Unnamed `assoc_measure` has length %d but `select` chose %d variable%s. Either pass a named vector keyed by variable name, or match the lengths.",
+          length(assoc_measure),
+          n,
+          if (n > 1L) "s" else ""
+        ), class = "spicy_invalid_input")
+    }
+    bad_vals <- setdiff(unique(assoc_measure), valid)
+    if (length(bad_vals) > 0L) {
+      spicy_abort(
+        sprintf(
+          "`assoc_measure` value(s) not recognised: %s.",
+          paste(shQuote(bad_vals), collapse = ", ")
+        ), class = "spicy_invalid_input")
+    }
+    per_row[] <- as.character(assoc_measure)
+  }
+
+  # Resolve each remaining "auto" based on the variable / by-variable type
+  by_var <- data[[by_name]]
+  by_n_levels <- length(unique(by_var[!is.na(by_var)]))
+  by_ordered <- is.ordered(by_var)
+
+  for (i in seq_along(per_row)) {
+    if (per_row[i] != "auto") {
+      next
+    }
+    var <- data[[select_names[i]]]
+    var_n_levels <- length(unique(var[!is.na(var)]))
+    var_ordered <- is.ordered(var)
+    per_row[i] <- if (var_n_levels == 2L && by_n_levels == 2L) {
+      "phi"
+    } else if (var_ordered && by_ordered) {
+      "tau_b"
+    } else {
+      "cramer_v"
+    }
+  }
+
+  # Strict applicability check: phi only on 2x2.
+  for (i in seq_along(per_row)) {
+    if (per_row[i] != "phi") {
+      next
+    }
+    var <- data[[select_names[i]]]
+    var_n_levels <- length(unique(var[!is.na(var)]))
+    if (var_n_levels != 2L || by_n_levels != 2L) {
+      spicy_abort(
+        sprintf(
+          "`assoc_measure[\"%s\"] = \"phi\"` requires a 2x2 table, but `%s` x `by` is %dx%d.",
+          select_names[i],
+          select_names[i],
+          var_n_levels,
+          by_n_levels
+        ), class = "spicy_unsupported")
+    }
+  }
+
+  per_row
+}
+
+# Build the APA-style "Note." line listing which measure was used for
+# which variable when the rows of a `table_categorical()` table use
+# more than one association measure.
+#
+# Example output:
+#   "Note. Cramer's V: smoking, education; Kendall's Tau-b: self_rated_health."
+.assoc_note_apa <- function(per_row_measures, labels) {
+  shown <- per_row_measures[per_row_measures != "none"]
+  if (length(shown) == 0L) {
+    return(NULL)
+  }
+  unique_measures <- unique(unname(shown))
+  if (length(unique_measures) <= 1L) {
+    return(NULL)
+  }
+  parts <- vapply(
+    unique_measures,
+    function(m) {
+      vars <- names(shown)[shown == m]
+      lab <- labels[match(vars, names(per_row_measures))]
+      paste0(.assoc_label(m), ": ", paste(lab, collapse = ", "))
+    },
+    character(1)
+  )
+  paste0("Note. ", paste(parts, collapse = "; "), ".")
+}
+
+
 #' Categorical summary table
 #'
 #' @description
@@ -20,9 +215,23 @@
 #'   syntax and character vectors of column names.
 #' @param by Optional grouping column used for columns/groups. Accepts an
 #'   unquoted column name or a single character column name.
-#' @param labels An optional character vector of display labels for the
-#'   variables named in `select` (must be the same length and in the same
-#'   order). When `NULL` (the default), column names are used as-is.
+#' @param labels Optional display labels for the variables. Two
+#'   forms are accepted (matching [table_continuous()] and
+#'   [table_continuous_lm()]):
+#'   - A **named character vector** whose names match column names
+#'     in `data` (e.g. `c(bmi = "Body mass index")`); only listed
+#'     columns are relabelled, others fall back to attribute-based
+#'     labels or the column name. **Recommended form**.
+#'   - A **positional character vector** of the same length as
+#'     `select`, in the same order. Backward-compatible with the
+#'     spicy < 0.11.0 API.
+#'
+#'   When `NULL` (the default), column names are used as-is. If a
+#'   variable label attribute is present (e.g. from `haven`), it is
+#'   *not* picked up here -- pass `labels = c(...)` explicitly. (The
+#'   continuous companions auto-detect attribute labels; the
+#'   categorical function is conservative because the indented row
+#'   labels expect predictable text.)
 #' @param levels_keep Optional character vector of levels to keep/order for row
 #'   modalities. If `NULL`, all observed levels are kept.
 #' @param include_total Logical. If `TRUE` (the default), includes a `Total` group
@@ -49,17 +258,66 @@
 #'   Defaults to `3`.
 #' @param v_digits Number of digits for the association measure. Defaults
 #'   to `2`.
-#' @param assoc_measure Passed to [cross_tab()]. Which association measure
-#'   to report (`"auto"`, `"cramer_v"`, `"phi"`, `"gamma"`, `"tau_b"`,
-#'   `"tau_c"`, `"somers_d"`, `"lambda"`, `"none"`). Defaults to `"auto"`.
+#' @param assoc_measure Which association measure to report alongside the
+#'   chi-squared *p*-value. Accepts four input shapes:
+#'
+#'   * `"none"` — drop the column entirely.
+#'   * `"auto"` (the default) — pick a measure per row variable based
+#'     on the variable type: a 2x2 table (binary row variable
+#'     vs. binary `by`) uses **`phi`**, a pair of ordered factors uses
+#'     **`tau_b`**, every other case uses **`cramer_v`**.
+#'   * a single string from
+#'     `c("cramer_v", "phi", "gamma", "tau_b", "tau_c", "somers_d", "lambda")`
+#'     — applied uniformly to every row variable.
+#'   * a character vector with one entry per row variable. Both
+#'     **named** (`c(smoking = "phi", health = "tau_b")`, recommended;
+#'     unnamed variables fall back to `"auto"`) and **unnamed**
+#'     positional (`c("phi", "tau_b", "auto")`, paired up with
+#'     `select`) are accepted. Named is more robust to reordering of
+#'     `select`.
+#'
+#'   When a single measure is used for every row, the column header is
+#'   that measure's name (e.g. `"Cramer's V"`). When multiple measures
+#'   are used (typically with `"auto"` on a heterogeneous `select`),
+#'   the header collapses to `"Effect size"` and an APA-style
+#'   `Note.` line is appended documenting which measure was used for
+#'   which variable.
+#'
+#'   `phi` requires a 2x2 table; if explicitly requested for a
+#'   non-2x2 variable, an error is raised so the user can choose
+#'   another measure or fall back to `"auto"`.
 #' @param assoc_ci Passed to [cross_tab()]. If `TRUE`, includes the
-#'   confidence interval of the association measure. In data formats
-#'   (`"data.frame"`, `"long"`, `"excel"`, `"clipboard"`), two extra
-#'   columns `CI lower` and `CI upper` are added.
-#'   In rendered formats (`"gt"`, `"tinytable"`, `"flextable"`, `"word"`),
-#'   the CI is shown inline (e.g., `.14 [.08, .19]`).
+#'   confidence interval of the association measure. In wide raw
+#'   outputs (`"data.frame"`, `"excel"`, `"clipboard"`), two extra
+#'   columns `CI lower` / `CI upper` are added; in the long raw
+#'   output (`"long"`) the bounds appear as `ci_lower` / `ci_upper`.
+#'   In rendered formats (`"gt"`, `"tinytable"`, `"flextable"`,
+#'   `"word"`), the CI is shown inline (e.g., `.14 [.08, .19]`).
 #'   Defaults to `FALSE`.
 #' @param decimal_mark Decimal separator (`"."` or `","`). Defaults to `"."`.
+#' @param align Horizontal alignment of numeric columns in the
+#'   printed ASCII table and in the `tinytable`, `gt`, `flextable`,
+#'   `word`, and `clipboard` outputs. The first column (`Variable`)
+#'   is always left-aligned. One of:
+#'   - `"decimal"` (default): align numeric columns on the decimal
+#'     mark, the standard scientific-publication convention used by
+#'     SPSS, SAS, LaTeX `siunitx`, and the native primitives of
+#'     [gt::cols_align_decimal()] and `tinytable::style_tt(align = "d")`.
+#'     For engines without a native primitive (`flextable`, `word`,
+#'     `clipboard`, ASCII print), numeric cells are pre-padded with
+#'     leading and trailing spaces so the dots line up vertically;
+#'     the body of the `flextable`/`word` output additionally uses
+#'     a monospace font (`Consolas`) to make character widths uniform.
+#'   - `"center"`: center-align all numeric columns.
+#'   - `"right"`: right-align all numeric columns.
+#'   - `"auto"`: legacy uniform right-alignment used in spicy < 0.11.0.
+#'
+#'   The `excel` output uses the engine's default alignment in any
+#'   case: cell-string padding does not align decimals under
+#'   proportional fonts, and Excel's native right-alignment combined
+#'   with the per-column `numfmt` already produces dot-aligned
+#'   columns. Same default and semantics as [table_continuous()] /
+#'   [table_continuous_lm()].
 #' @param output Output format. One of:
 #'   - `"default"` (a printed ASCII table, returned invisibly)
 #'   - `"data.frame"` (a wide numeric `data.frame`)
@@ -109,10 +367,38 @@
 #' }
 #'
 #' @details
-#' When `by` is used, each selected variable is cross-tabulated against
-#' the grouping variable with [cross_tab()]. Chi-squared statistics,
-#' *p*-values, and the chosen association measure are reported for each
-#' variable.
+#' # Tests
+#'
+#' When `by` is used, each selected variable is cross-tabulated
+#' against the grouping variable with [cross_tab()]. The omnibus
+#' chi-squared test (with optional Yates continuity correction or
+#' Monte Carlo *p*-value, see `correct` / `simulate_p`) is computed
+#' and reported in the `p` column. The chosen association measure
+#' (`assoc_measure`, with `"auto"` selecting Cramer's V for nominal
+#' variables and Kendall's Tau-b when both are ordered) is reported
+#' alongside, with optional CI via `assoc_ci`. Without `by`, the
+#' table reports the marginal frequency distribution of each variable
+#' with no inferential statistics.
+#'
+#' For model-based comparisons (cluster-robust SE, weighted contrasts,
+#' fitted means) on continuous outcomes, see [table_continuous_lm()].
+#' For descriptive (empirical) comparisons on continuous outcomes, see
+#' [table_continuous()].
+#'
+#' # Display conventions
+#'
+#' By default (`align = "decimal"`) numeric columns are aligned on
+#' the decimal mark, the standard scientific-publication convention
+#' used by SPSS, SAS, LaTeX `siunitx`, and the native primitives of
+#' [gt::cols_align_decimal()] / `tinytable::style_tt(align = "d")`.
+#' For the printed ASCII table the alignment is achieved by padding
+#' numeric cells with leading and trailing spaces so dots line up
+#' vertically. Pass `align = "auto"` to revert to the legacy uniform
+#' right-alignment used in spicy < 0.11.0.
+#'
+#' *p*-values are formatted with `p_digits` decimal places (default
+#' 3, the APA standard). Leading zeros on *p* are always stripped
+#' (`.045`, not `0.045`).
 #'
 #' Optional output engines require suggested packages:
 #' \itemize{
@@ -124,80 +410,169 @@
 #'   \item \pkg{clipr} for `output = "clipboard"`
 #' }
 #'
-#' @seealso [table_continuous()] for continuous variables;
-#'   [cross_tab()] for two-way cross-tabulations; [freq()] for one-way
-#'   frequency tables.
+#' @family spicy tables
+#' @seealso [table_continuous()] for empirical comparisons on
+#'   continuous outcomes; [table_continuous_lm()] for the model-based
+#'   companion (heteroskedasticity-consistent / cluster-robust /
+#'   bootstrap / jackknife SE, fitted means, weighted contrasts);
+#'   [cross_tab()] for two-way cross-tabulations; [freq()] for
+#'   one-way frequency tables.
 #'
 #' @examples
-#' # Long numeric output
-#' table_categorical(
-#'   data = sochealth,
-#'   select = c(smoking, physical_activity),
-#'   by = education,
-#'   labels = c("Current smoker", "Physical activity"),
-#'   output = "long"
-#' )
+#' # --- Basic usage ---------------------------------------------------------
 #'
-#' # ASCII console output (default)
+#' # Default: ASCII console table grouped by sex.
 #' table_categorical(
-#'   data = sochealth,
+#'   sochealth,
 #'   select = c(smoking, physical_activity),
 #'   by = sex
 #' )
 #'
-#' # One-way frequency-style table
+#' # One-way frequency-style table (no `by`).
 #' table_categorical(
-#'   data = sochealth,
+#'   sochealth,
 #'   select = c(smoking, physical_activity)
 #' )
 #'
-#' # Wide numeric data.frame
+#' # Pretty labels keyed by column name.
 #' table_categorical(
-#'   data = sochealth,
+#'   sochealth,
 #'   select = c(smoking, physical_activity),
 #'   by = education,
-#'   labels = c("Current smoker", "Physical activity"),
+#'   labels = c(
+#'     smoking           = "Current smoker",
+#'     physical_activity = "Physical activity"
+#'   )
+#' )
+#'
+#' # Survey weights with rescaling.
+#' table_categorical(
+#'   sochealth,
+#'   select = c(smoking, physical_activity),
+#'   by = education,
+#'   weights = "weight",
+#'   rescale = TRUE
+#' )
+#'
+#' # Confidence interval for the association measure.
+#' table_categorical(
+#'   sochealth,
+#'   select = smoking,
+#'   by = education,
+#'   assoc_ci = TRUE
+#' )
+#'
+#' # --- Per-variable association measure ----------------------------------
+#'
+#' # Default (`assoc_measure = "auto"`): one measure per row variable based on
+#' # the variable type (2x2 -> Phi, both ordered factors -> Kendall's Tau-b,
+#' # otherwise Cramer's V). When the chosen measures differ across rows, the
+#' # column header collapses to `"Effect size"` and an APA-style `Note.` line
+#' # documents which measure was used for which variable.
+#' table_categorical(
+#'   sochealth,
+#'   select = c(smoking, education),
+#'   by = sex
+#' )
+#'
+#' # Force a uniform measure across all row variables.
+#' table_categorical(
+#'   sochealth,
+#'   select = c(smoking, education),
+#'   by = sex,
+#'   assoc_measure = "cramer_v"
+#' )
+#'
+#' # Per-variable override (recommended named form).
+#' table_categorical(
+#'   sochealth,
+#'   select = c(smoking, education, self_rated_health),
+#'   by = sex,
+#'   assoc_measure = c(
+#'     smoking           = "phi",        # binary x binary
+#'     education         = "cramer_v",   # multi-category nominal
+#'     self_rated_health = "tau_b"       # ordinal x binary, Tau-b
+#'   )
+#' )
+#'
+#' # --- Output formats -----------------------------------------------------
+#'
+#' # The rendered outputs below all wrap the same call:
+#' #   table_categorical(sochealth,
+#' #                     select = c(smoking, physical_activity),
+#' #                     by = sex)
+#' # only `output` changes. Assign to a variable to avoid the
+#' # console-friendly text fallback that some engines fall back to
+#' # when printed directly in `?` help.
+#'
+#' # Wide data.frame (one row per modality).
+#' table_categorical(
+#'   sochealth,
+#'   select = c(smoking, physical_activity),
+#'   by = sex,
 #'   output = "data.frame"
 #' )
 #'
-#' # Weighted example
+#' # Long data.frame (one row per (modality x group)).
 #' table_categorical(
-#'   data = sochealth,
+#'   sochealth,
 #'   select = c(smoking, physical_activity),
-#'   by = education,
-#'   labels = c("Current smoker", "Physical activity"),
-#'   weights = "weight",
-#'   rescale = TRUE,
-#'   simulate_p = FALSE,
+#'   by = sex,
 #'   output = "long"
 #' )
 #'
 #' \donttest{
-#' # Optional output: tinytable
+#' # Rendered HTML / docx objects -- best viewed inside a
+#' # Quarto / R Markdown document or a pkgdown article.
 #' if (requireNamespace("tinytable", quietly = TRUE)) {
-#'   table_categorical(
-#'     data = sochealth,
-#'     select = c(smoking, physical_activity),
-#'     by = sex,
-#'     labels = c("Current smoker", "Physical activity"),
+#'   tt <- table_categorical(
+#'     sochealth, select = c(smoking, physical_activity), by = sex,
 #'     output = "tinytable"
 #'   )
 #' }
-#'
-#' # Optional output: Excel
-#' if (requireNamespace("openxlsx2", quietly = TRUE)) {
-#'   table_categorical(
-#'     data = sochealth,
-#'     select = c(smoking, physical_activity),
-#'     by = education,
-#'     labels = c("Current smoker", "Physical activity"),
-#'     output = "excel",
-#'     excel_path = tempfile(fileext = ".xlsx")
+#' if (requireNamespace("gt", quietly = TRUE)) {
+#'   tbl <- table_categorical(
+#'     sochealth, select = c(smoking, physical_activity), by = sex,
+#'     output = "gt"
 #'   )
 #' }
+#' if (requireNamespace("flextable", quietly = TRUE)) {
+#'   ft <- table_categorical(
+#'     sochealth, select = c(smoking, physical_activity), by = sex,
+#'     output = "flextable"
+#'   )
 #' }
 #'
-#' @importFrom rlang enquo eval_tidy quo_get_env quo_is_null
+#' # Excel and Word: write to a temporary file.
+#' if (requireNamespace("openxlsx2", quietly = TRUE)) {
+#'   tmp <- tempfile(fileext = ".xlsx")
+#'   table_categorical(
+#'     sochealth, select = c(smoking, physical_activity), by = sex,
+#'     output = "excel", excel_path = tmp
+#'   )
+#'   unlink(tmp)
+#' }
+#' if (
+#'   requireNamespace("flextable", quietly = TRUE) &&
+#'     requireNamespace("officer", quietly = TRUE)
+#' ) {
+#'   tmp <- tempfile(fileext = ".docx")
+#'   table_categorical(
+#'     sochealth, select = c(smoking, physical_activity), by = sex,
+#'     output = "word", word_path = tmp
+#'   )
+#'   unlink(tmp)
+#' }
+#' }
+#'
+#' \dontrun{
+#' # Clipboard: writes to the system clipboard.
+#' table_categorical(
+#'   sochealth, select = c(smoking, physical_activity), by = sex,
+#'   output = "clipboard"
+#' )
+#' }
+#'
 #' @export
 table_categorical <- function(
   data,
@@ -218,6 +593,7 @@ table_categorical <- function(
   assoc_measure = "auto",
   assoc_ci = FALSE,
   decimal_mark = ".",
+  align = c("decimal", "auto", "center", "right"),
   output = c(
     "default",
     "data.frame",
@@ -239,9 +615,10 @@ table_categorical <- function(
   word_path = NULL
 ) {
   output <- match.arg(output)
+  align <- match.arg(align)
 
   if (!is.data.frame(data)) {
-    stop("`data` must be a data.frame.", call. = FALSE)
+    spicy_abort("`data` must be a data.frame.", class = "spicy_invalid_data")
   }
   by_quo <- rlang::enquo(by)
   has_group <- !rlang::quo_is_null(by_quo)
@@ -261,24 +638,58 @@ table_categorical <- function(
     tryCatch(
       names(tidyselect::eval_select(select_quo, data)),
       error = function(e) {
-        stop(
-          "`select` must select at least one column in `data`.",
-          call. = FALSE
-        )
+        spicy_abort(
+          "`select` must select at least one column in `data`.", class = "spicy_invalid_input")
       }
     )
   }
   if (length(select_names) == 0) {
-    stop("`select` must select at least one column in `data`.", call. = FALSE)
+    spicy_abort("`select` must select at least one column in `data`.", class = "spicy_invalid_input")
   }
   if (!all(select_names %in% names(data))) {
-    stop("Some `select` columns are missing in `data`.", call. = FALSE)
+    spicy_abort("Some `select` columns are missing in `data`.", class = "spicy_missing_column")
   }
+  # `labels` accepts two shapes (matching the continuous companions):
+  # - named character vector keyed by column name in `data` (the
+  #   recommended form). Only listed columns are relabelled; the rest
+  #   fall back to their column name.
+  # - positional character vector of length `length(select)` in the
+  #   same order (the legacy spicy < 0.11.0 form).
   if (is.null(labels)) {
     labels <- select_names
-  }
-  if (length(labels) != length(select_names)) {
-    stop("`labels` must have same length as `select`.", call. = FALSE)
+  } else {
+    if (!is.character(labels)) {
+      spicy_abort("`labels` must be a character vector.", class = "spicy_invalid_input")
+    }
+    labels_named <- !is.null(names(labels)) && all(nzchar(names(labels)))
+    if (labels_named) {
+      unknown <- setdiff(names(labels), names(data))
+      if (length(unknown) > 0L) {
+        spicy_abort(
+          sprintf(
+            "Names in `labels` not found in `data`: %s.",
+            paste(unknown, collapse = ", ")
+          ), class = "spicy_missing_column")
+      }
+      resolved <- select_names
+      hits <- intersect(select_names, names(labels))
+      resolved[match(hits, select_names)] <- unname(labels[hits])
+      labels <- resolved
+    } else {
+      if (length(labels) != length(select_names)) {
+        spicy_abort(
+          c(
+            sprintf(
+              "Positional `labels` has length %d but `select` chose %d variable(s).",
+              length(labels),
+              length(select_names)
+            ),
+            "i" = "Pass a named character vector keyed by column name in `data` to relabel only specific variables."
+          ),
+          class = "spicy_invalid_input"
+        )
+      }
+    }
   }
   labels <- as.character(labels)
 
@@ -287,19 +698,19 @@ table_categorical <- function(
       length(include_total) != 1 ||
       is.na(include_total)
   ) {
-    stop("`include_total` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`include_total` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (!is.logical(drop_na) || length(drop_na) != 1 || is.na(drop_na)) {
-    stop("`drop_na` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`drop_na` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (!is.logical(rescale) || length(rescale) != 1 || is.na(rescale)) {
-    stop("`rescale` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`rescale` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (!is.logical(correct) || length(correct) != 1 || is.na(correct)) {
-    stop("`correct` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`correct` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (!is.logical(simulate_p) || length(simulate_p) != 1 || is.na(simulate_p)) {
-    stop("`simulate_p` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`simulate_p` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (
     !is.numeric(simulate_B) ||
@@ -307,7 +718,7 @@ table_categorical <- function(
       is.na(simulate_B) ||
       simulate_B < 1
   ) {
-    stop("`simulate_B` must be a positive integer.", call. = FALSE)
+    spicy_abort("`simulate_B` must be a positive integer.", class = "spicy_invalid_input")
   }
   simulate_B <- as.integer(simulate_B)
   if (
@@ -315,27 +726,25 @@ table_categorical <- function(
       length(add_multilevel_header) != 1 ||
       is.na(add_multilevel_header)
   ) {
-    stop("`add_multilevel_header` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`add_multilevel_header` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (
     !is.logical(blank_na_wide) ||
       length(blank_na_wide) != 1 ||
       is.na(blank_na_wide)
   ) {
-    stop("`blank_na_wide` must be TRUE/FALSE.", call. = FALSE)
+    spicy_abort("`blank_na_wide` must be TRUE/FALSE.", class = "spicy_invalid_input")
   }
   if (!identical(decimal_mark, ".") && !identical(decimal_mark, ",")) {
-    stop("`decimal_mark` must be either '.' or ','.", call. = FALSE)
+    spicy_abort("`decimal_mark` must be either '.' or ','.", class = "spicy_invalid_input")
   }
   for (.dname in c("percent_digits", "p_digits", "v_digits")) {
     .dval <- get(.dname)
     if (
       !is.numeric(.dval) || length(.dval) != 1L || is.na(.dval) || .dval < 0
     ) {
-      stop(
-        paste0("`", .dname, "` must be a single non-negative number."),
-        call. = FALSE
-      )
+      spicy_abort(
+        paste0("`", .dname, "` must be a single non-negative number."), class = "spicy_invalid_input")
     }
   }
   percent_digits <- as.integer(percent_digits)
@@ -344,25 +753,21 @@ table_categorical <- function(
 
   if (!has_group) {
     if (!include_total) {
-      warning(
-        "`include_total` is ignored when `by` is not used.",
-        call. = FALSE
-      )
+      spicy_warn(
+        "`include_total` is ignored when `by` is not used.", class = "spicy_ignored_arg")
     }
     if (correct) {
-      warning("`correct` is ignored when `by` is not used.", call. = FALSE)
+      spicy_warn("`correct` is ignored when `by` is not used.", class = "spicy_ignored_arg")
     }
     if (simulate_p) {
-      warning("`simulate_p` is ignored when `by` is not used.", call. = FALSE)
+      spicy_warn("`simulate_p` is ignored when `by` is not used.", class = "spicy_ignored_arg")
     }
-    if (!identical(assoc_measure, "auto")) {
-      warning(
-        "`assoc_measure` is ignored when `by` is not used.",
-        call. = FALSE
-      )
+    if (!isTRUE(all(as.character(assoc_measure) == "auto"))) {
+      spicy_warn(
+        "`assoc_measure` is ignored when `by` is not used.", class = "spicy_ignored_arg")
     }
     if (assoc_ci) {
-      warning("`assoc_ci` is ignored when `by` is not used.", call. = FALSE)
+      spicy_warn("`assoc_ci` is ignored when `by` is not used.", class = "spicy_ignored_arg")
     }
     include_total <- TRUE
   }
@@ -371,10 +776,8 @@ table_categorical <- function(
   weights_vec <- resolve_weights_argument(weights_quo, data, "weights")
 
   if (isTRUE(rescale) && is.null(weights_vec)) {
-    warning(
-      "`rescale = TRUE` has no effect without `weights`; using `rescale = FALSE`.",
-      call. = FALSE
-    )
+    spicy_warn(
+      "`rescale = TRUE` has no effect without `weights`; using `rescale = FALSE`.", class = "spicy_ignored_arg")
     rescale <- FALSE
   }
 
@@ -400,6 +803,8 @@ table_categorical <- function(
     p_val <- attr(ct_obj, "p_value")
     v_val <- attr(ct_obj, "assoc_value")
     m_name <- attr(ct_obj, "assoc_measure")
+    chi2_val <- attr(ct_obj, "chi2")
+    df_val <- attr(ct_obj, "df")
     ar <- attr(ct_obj, "assoc_result")
     ci_lo <- if (!is.null(ar)) ar[["ci_lower"]] else NA_real_
     ci_hi <- if (!is.null(ar)) ar[["ci_upper"]] else NA_real_
@@ -411,6 +816,8 @@ table_categorical <- function(
         p_op = p_op,
         v = v_val,
         measure = m_name %||% "Cramer's V",
+        chi2 = chi2_val %||% NA_real_,
+        df = df_val %||% NA_real_,
         ci_lower = ci_lo,
         ci_upper = ci_hi
       ))
@@ -451,6 +858,8 @@ table_categorical <- function(
       p_op = p_op,
       v = v_val,
       measure = "Cramer's V",
+      chi2 = NA_real_,
+      df = NA_real_,
       ci_lower = NA_real_,
       ci_upper = NA_real_
     )
@@ -481,19 +890,25 @@ table_categorical <- function(
     out
   }
 
+  # `fmt_p` defers to the shared `format_p_value()` helper so the
+  # three `table_*` functions print *p*-values identically: `p_digits`
+  # drives both the displayed precision AND the small-*p* threshold
+  # (`p_digits = 3` -> `<.001`, `p_digits = 4` -> `<.0001`, etc.),
+  # leading zeros are stripped, and the configured `decimal_mark` is
+  # honoured. The `op` argument carries the comparison operator
+  # parsed from `cross_tab()`'s note text in the rare fallback path
+  # where the numeric p-value is unavailable: `op = "<"` means the
+  # underlying note literally said "p < threshold", so we honour the
+  # request and render the small-p form regardless of the numeric
+  # placeholder.
   fmt_p <- function(p, op = NA_character_) {
     if (is.na(p)) {
       return("")
     }
-    if ((!is.na(op) && op == "<" && p <= 0.001) || p < 0.001) {
-      return(if (decimal_mark == ".") "<\u00A0.001" else "<\u00A0,001")
+    if (!is.na(op) && identical(op, "<")) {
+      return(paste0("<", decimal_mark, strrep("0", p_digits - 1L), "1"))
     }
-    s <- formatC(p, format = "f", digits = p_digits)
-    s <- sub("^0\\.", ".", s)
-    if (decimal_mark != ".") {
-      s <- sub("\\.", decimal_mark, s)
-    }
-    s
+    format_p_value(p, decimal_mark, digits = p_digits)
   }
 
   fmt_v <- function(v) {
@@ -515,6 +930,25 @@ table_categorical <- function(
       x[is_mod] <- paste0(strong_indent, suffix)
     }
     x
+  }
+
+  # Pre-pad numeric (i.e. non-Variable) columns of a display data
+  # frame with leading / trailing spaces so the decimal mark falls at
+  # the same horizontal position across each column. Used by engines
+  # without a native decimal-alignment primitive (`flextable`, `word`,
+  # `clipboard`, ASCII print). The first column is the variable /
+  # level label and is left untouched. No-op unless `align == "decimal"`.
+  pad_decimal_cols <- function(df) {
+    if (!identical(align, "decimal") || ncol(df) < 2L) {
+      return(df)
+    }
+    for (j in seq_along(df)[-1]) {
+      df[[j]] <- decimal_align_strings(
+        df[[j]],
+        decimal_mark = decimal_mark
+      )
+    }
+    df
   }
 
   if (!has_group) {
@@ -618,7 +1052,7 @@ table_categorical <- function(
         )
       }
       long_raw <- long_raw[
-        order(long_raw$variable, long_raw$level),
+        order(long_raw$variable, long_raw$level, method = "radix"),
         ,
         drop = FALSE
       ]
@@ -739,6 +1173,9 @@ table_categorical <- function(
       attr(out, "display_df") <- report_wide_char
       attr(out, "group_var") <- NULL
       attr(out, "indent_text") <- indent_text
+      attr(out, "align") <- align
+      attr(out, "decimal_mark") <- decimal_mark
+      attr(out, "long_data") <- long_raw
       class(out) <- c("spicy_categorical_table", "spicy_table", "data.frame")
       print(out)
       return(invisible(out))
@@ -746,7 +1183,7 @@ table_categorical <- function(
 
     if (output == "tinytable") {
       if (!requireNamespace("tinytable", quietly = TRUE)) {
-        stop("Install package 'tinytable'.", call. = FALSE)
+        spicy_abort("Install package 'tinytable'.", class = "spicy_missing_pkg")
       }
       old_tt_opt <- getOption("tinytable_print_output")
       options(tinytable_print_output = "html")
@@ -765,7 +1202,18 @@ table_categorical <- function(
       tt <- tinytable::tt(dat_tt, escape = FALSE)
       tt <- tinytable::theme_empty(tt)
       tt <- tinytable::style_tt(tt, j = 1, align = "l")
-      tt <- tinytable::style_tt(tt, j = 2:ncol(dat_tt), align = "r")
+      tt_align <- switch(
+        align,
+        decimal = "d",
+        center = "c",
+        right = "r",
+        "r"
+      )
+      tt <- tinytable::style_tt(
+        tt,
+        j = 2:ncol(dat_tt),
+        align = tt_align
+      )
       tt <- tinytable::style_tt(tt, i = 0, j = 2:ncol(dat_tt), align = "c")
       if (length(mod_rows)) {
         tt <- tinytable::style_tt(tt, i = mod_rows, j = 1, indent = 1)
@@ -802,7 +1250,7 @@ table_categorical <- function(
 
     if (output == "gt") {
       if (!requireNamespace("gt", quietly = TRUE)) {
-        stop("Install package 'gt'.", call. = FALSE)
+        spicy_abort("Install package 'gt'.", class = "spicy_missing_pkg")
       }
       dat_gt <- report_wide_char
       mod_rows <- which(startsWith(dat_gt[[1]], indent_text))
@@ -816,7 +1264,13 @@ table_categorical <- function(
       tbl <- gt::gt(dat_gt)
       tbl <- gt::cols_label(tbl, Variable = "", n = "n", pct = "%")
       tbl <- gt::cols_align(tbl, align = "left", columns = "Variable")
-      tbl <- gt::cols_align(tbl, align = "right", columns = c("n", "pct"))
+      if (identical(align, "decimal")) {
+        tbl <- gt::cols_align_decimal(tbl, columns = c("n", "pct"))
+      } else if (identical(align, "center")) {
+        tbl <- gt::cols_align(tbl, align = "center", columns = c("n", "pct"))
+      } else {
+        tbl <- gt::cols_align(tbl, align = "right", columns = c("n", "pct"))
+      }
       rule <- gt::cell_borders(
         sides = "bottom",
         color = "currentColor",
@@ -858,8 +1312,9 @@ table_categorical <- function(
 
     build_flextable_oneway <- function(df) {
       if (!requireNamespace("flextable", quietly = TRUE)) {
-        stop("Install package 'flextable'.", call. = FALSE)
+        spicy_abort("Install package 'flextable'.", class = "spicy_missing_pkg")
       }
+      df <- pad_decimal_cols(df)
       ft <- flextable::flextable(df)
       map <- data.frame(
         col_keys = names(df),
@@ -870,7 +1325,36 @@ table_categorical <- function(
       ft <- flextable::set_header_df(ft, mapping = map, key = "col_keys")
       bd <- spicy_fp_border(color = "black", width = 1)
       ft <- flextable::align(ft, j = 1, part = "all", align = "left")
-      ft <- flextable::align(ft, j = 2:ncol(df), part = "all", align = "right")
+      # Numeric column alignment honours `align`. For "decimal" the
+      # cells were pre-padded above; right-aligning the padded strings
+      # preserves the dot-aligned column. Use a monospace font in the
+      # body so character widths match. For "center" / "right" / "auto"
+      # apply the literal alignment.
+      num_j <- 2:ncol(df)
+      if (identical(align, "decimal") && length(num_j) > 0L) {
+        ft <- flextable::align(
+          ft,
+          j = num_j,
+          part = "header",
+          align = "center"
+        )
+        ft <- flextable::align(
+          ft,
+          j = num_j,
+          part = "body",
+          align = "right"
+        )
+        ft <- flextable::font(
+          ft,
+          j = num_j,
+          part = "body",
+          fontname = "Consolas"
+        )
+      } else if (identical(align, "center") && length(num_j) > 0L) {
+        ft <- flextable::align(ft, j = num_j, part = "all", align = "center")
+      } else {
+        ft <- flextable::align(ft, j = num_j, part = "all", align = "right")
+      }
       ft <- flextable::hline_top(ft, part = "header", border = bd)
       ft <- flextable::hline_bottom(ft, part = "header", border = bd)
       ft <- flextable::hline_bottom(ft, part = "body", border = bd)
@@ -891,7 +1375,7 @@ table_categorical <- function(
       ft <- build_flextable_oneway(report_wide_char)
       if (!is.null(word_path) && nzchar(word_path)) {
         if (!requireNamespace("officer", quietly = TRUE)) {
-          stop("Install package 'officer'.", call. = FALSE)
+          spicy_abort("Install package 'officer'.", class = "spicy_missing_pkg")
         }
         flextable::save_as_docx(ft, path = word_path)
       }
@@ -900,14 +1384,18 @@ table_categorical <- function(
 
     if (output == "word") {
       if (is.null(word_path) || !nzchar(word_path)) {
-        stop("Provide `word_path` for output = 'word'.", call. = FALSE)
+        spicy_abort("Provide `word_path` for output = 'word'.", class = "spicy_invalid_input")
       }
       ft <- build_flextable_oneway(report_wide_char)
       flextable::save_as_docx(ft, path = word_path)
       return(invisible(word_path))
     }
 
-    clip_body <- report_wide_char
+    # Clipboard text gets the same pre-padded numeric columns as
+    # flextable / word, so dots line up when the text is pasted into
+    # any monospace-rendered destination (terminal, plain-text email,
+    # markdown code block).
+    clip_body <- pad_decimal_cols(report_wide_char)
     clip_body$Variable <- make_stronger_indent(
       clip_body$Variable,
       indent_text,
@@ -917,10 +1405,10 @@ table_categorical <- function(
 
     if (output == "excel") {
       if (is.null(excel_path) || !nzchar(excel_path)) {
-        stop("Provide `excel_path` for output = 'excel'.", call. = FALSE)
+        spicy_abort("Provide `excel_path` for output = 'excel'.", class = "spicy_invalid_input")
       }
       if (!requireNamespace("openxlsx2", quietly = TRUE)) {
-        stop("Install package 'openxlsx2'.", call. = FALSE)
+        spicy_abort("Install package 'openxlsx2'.", class = "spicy_missing_pkg")
       }
 
       body_xl <- report_wide_excel
@@ -952,7 +1440,14 @@ table_categorical <- function(
         bottom_border = "thin"
       )
       if (nrow(body_xl) > 0) {
-        # Body alignment
+        # Body alignment. The Variable column is always left-aligned;
+        # numeric columns honour `align`. For "decimal", Excel
+        # already aligns decimal points implicitly via right-alignment
+        # combined with a uniform numfmt (every cell of the column
+        # shares the same number of decimal places), so the visual
+        # result matches the dot-aligned column in print / gt /
+        # tinytable.
+        num_horiz <- if (identical(align, "center")) "center" else "right"
         wb <- openxlsx2::wb_add_cell_style(
           wb,
           dims = openxlsx2::wb_dims(rows = 2:last_row, cols = 1),
@@ -961,7 +1456,7 @@ table_categorical <- function(
         wb <- openxlsx2::wb_add_cell_style(
           wb,
           dims = openxlsx2::wb_dims(rows = 2:last_row, cols = 2:nc),
-          horizontal = "right"
+          horizontal = num_horiz
         )
         # Number formats: integers (col 2), percentages (col 3)
         wb <- openxlsx2::wb_add_numfmt(
@@ -988,7 +1483,7 @@ table_categorical <- function(
 
     if (output == "clipboard") {
       if (!requireNamespace("clipr", quietly = TRUE)) {
-        stop("Install package 'clipr'.", call. = FALSE)
+        spicy_abort("Install package 'clipr'.", class = "spicy_missing_pkg")
       }
       lines <- apply(clip_mat, 1, function(x) {
         paste(x, collapse = clipboard_delim)
@@ -1001,7 +1496,18 @@ table_categorical <- function(
   }
 
   g0 <- data[[by_name]]
-  show_assoc <- !identical(assoc_measure, "none")
+  # Resolve `assoc_measure` to a named character vector, one entry per
+  # row variable (validates input shape, fills "auto" via the per-row
+  # rule, errors on phi-on-non-2x2). The downstream loop reads from
+  # this vector instead of the raw user input so each row gets its own
+  # measure.
+  assoc_measures_per_row <- .resolve_assoc_measures(
+    assoc_measure,
+    select_names = select_names,
+    data = data,
+    by_name = by_name
+  )
+  show_assoc <- any(assoc_measures_per_row != "none")
   if (!show_assoc) {
     assoc_ci <- FALSE
   }
@@ -1056,6 +1562,7 @@ table_categorical <- function(
       g[is.na(g)] <- missing_label
     }
 
+    this_measure <- assoc_measures_per_row[[select_names[i]]]
     ct_pct <- spicy::cross_tab(
       x,
       g,
@@ -1065,7 +1572,7 @@ table_categorical <- function(
       correct = correct,
       simulate_p = simulate_p,
       simulate_B = simulate_B,
-      assoc_measure = assoc_measure,
+      assoc_measure = this_measure,
       assoc_ci = assoc_ci
     )
     ct_n <- spicy::cross_tab(
@@ -1079,9 +1586,6 @@ table_categorical <- function(
       assoc_measure = "none"
     )
     st <- parse_stats(ct_pct)
-    if (show_assoc && is.null(measure_col)) {
-      measure_col <- st$measure %||% "Cramer's V"
-    }
 
     groups_present <- setdiff(names(ct_n), "Values")
     groups_use <- intersect(group_levels, groups_present)
@@ -1118,6 +1622,8 @@ table_categorical <- function(
           group = gr,
           n = suppressWarnings(as.numeric(ct_n[in_n, gr])),
           pct = suppressWarnings(as.numeric(ct_pct[in_p, gr])),
+          chi2 = st$chi2 %||% NA_real_,
+          df = st$df %||% NA_real_,
           p = st$p,
           p_op = st$p_op,
           ci_lower = st$ci_lower,
@@ -1126,8 +1632,10 @@ table_categorical <- function(
           check.names = FALSE
         )
         if (show_assoc) {
+          # Defer the rename `.assoc` -> measure_col to post-loop, where
+          # we know whether all rows used the same measure (uniform
+          # column header) or a mix (collapsed to "Effect size").
           row_df$.assoc <- st$v
-          names(row_df)[names(row_df) == ".assoc"] <- measure_col
         }
         rows[[rr]] <- row_df
         rr <- rr + 1L
@@ -1138,6 +1646,22 @@ table_categorical <- function(
   if (show_assoc && is.null(measure_col)) {
     measure_col <- "Cramer's V"
   }
+
+  # Collapse the per-variable measure vector into the column header
+  # the printed / wide outputs will use:
+  #   * one measure used everywhere -> that measure's pretty label
+  #   * mixed measures              -> generic "Effect size"
+  # Row-level `.assoc` cells are then renamed once, below.
+  shown_measures <- assoc_measures_per_row[assoc_measures_per_row != "none"]
+  unique_shown <- unique(unname(shown_measures))
+  measure_col <- if (length(unique_shown) == 1L) {
+    .assoc_label(unique_shown)
+  } else if (length(unique_shown) > 1L) {
+    "Effect size"
+  } else {
+    "Cramer's V" # show_assoc is FALSE in this branch; placeholder name
+  }
+  assoc_note_text <- .assoc_note_apa(assoc_measures_per_row, labels)
 
   if (length(rows) == 0) {
     long_raw <- data.frame(
@@ -1154,13 +1678,13 @@ table_categorical <- function(
       stringsAsFactors = FALSE,
       check.names = FALSE
     )
-    if (show_assoc) {
-      names(long_raw)[names(long_raw) == ".assoc"] <- measure_col
-    } else {
-      long_raw$.assoc <- NULL
-    }
   } else {
     long_raw <- do.call(rbind, rows)
+  }
+  if (show_assoc) {
+    names(long_raw)[names(long_raw) == ".assoc"] <- measure_col
+  } else {
+    long_raw$.assoc <- NULL
   }
 
   if (nrow(long_raw) > 0) {
@@ -1178,7 +1702,7 @@ table_categorical <- function(
     }
     long_raw$group <- factor(long_raw$group, levels = group_levels)
     long_raw <- long_raw[
-      order(long_raw$variable, long_raw$level, long_raw$group),
+      order(long_raw$variable, long_raw$level, long_raw$group, method = "radix"),
       ,
       drop = FALSE
     ]
@@ -1397,6 +1921,10 @@ table_categorical <- function(
     attr(out, "display_df") <- report_wide_char
     attr(out, "group_var") <- by_name
     attr(out, "indent_text") <- indent_text
+    attr(out, "align") <- align
+    attr(out, "decimal_mark") <- decimal_mark
+    attr(out, "long_data") <- long_raw
+    attr(out, "assoc_note") <- assoc_note_text
     class(out) <- c("spicy_categorical_table", "spicy_table", "data.frame")
     print(out)
     return(invisible(out))
@@ -1443,7 +1971,7 @@ table_categorical <- function(
   # ---------------- tinytable ----------------
   if (output == "tinytable") {
     if (!requireNamespace("tinytable", quietly = TRUE)) {
-      stop("Install package 'tinytable'.", call. = FALSE)
+      spicy_abort("Install package 'tinytable'.", class = "spicy_missing_pkg")
     }
 
     old_tt_opt <- getOption("tinytable_print_output")
@@ -1484,7 +2012,10 @@ table_categorical <- function(
     tt <- tinytable::group_tt(tt, j = gspec)
     tt <- tinytable::theme_empty(tt)
 
-    # Alignment
+    # Alignment. Honour the `align` argument: "decimal" uses the
+    # native tinytable decimal-alignment primitive on every numeric
+    # column; "center" / "right" apply literal alignment; "auto"
+    # preserves the legacy right-alignment.
     tt <- tinytable::style_tt(tt, j = 1, align = "l")
     data_j <- 2:(1 + 2 * length(group_levels))
     stat_j <- if (show_assoc) {
@@ -1492,7 +2023,14 @@ table_categorical <- function(
     } else {
       ncol(dat_tt)
     }
-    tt <- tinytable::style_tt(tt, j = c(data_j, stat_j), align = "r")
+    tt_align <- switch(
+      align,
+      decimal = "d",
+      center = "c",
+      right = "r",
+      "r"
+    )
+    tt <- tinytable::style_tt(tt, j = c(data_j, stat_j), align = tt_align)
     # Centre n/% labels (row 0 = column labels row)
     tt <- tinytable::style_tt(tt, i = 0, j = data_j, align = "c")
     # Centre spanner labels (row -1 = spanner row)
@@ -1555,7 +2093,7 @@ table_categorical <- function(
   # ---------------- gt ----------------
   if (output == "gt") {
     if (!requireNamespace("gt", quietly = TRUE)) {
-      stop("Install package 'gt'.", call. = FALSE)
+      spicy_abort("Install package 'gt'.", class = "spicy_missing_pkg")
     }
 
     dat_gt <- merge_ci_inline(report_wide_char)
@@ -1630,17 +2168,31 @@ table_categorical <- function(
       )
     }
 
-    # Alignment
+    # Alignment. The Variable column is always left-aligned; numeric
+    # columns honour the `align` argument: "decimal" uses
+    # gt::cols_align_decimal() (the native gt primitive); "center" /
+    # "right" use gt::cols_align(); "auto" preserves the legacy
+    # rule (centre for group n/%, right for p / association measure).
     tbl <- gt::cols_align(tbl, align = "left", columns = "Variable")
     grp_cols <- unlist(lapply(group_levels, function(g) {
       c(paste0(g, "_n"), paste0(g, "_pct"))
     }))
-    tbl <- gt::cols_align(tbl, align = "center", columns = grp_cols)
     right_cols <- "p"
     if (show_assoc) {
       right_cols <- c(right_cols, "assoc_col")
     }
-    tbl <- gt::cols_align(tbl, align = "right", columns = right_cols)
+    numeric_cols <- c(grp_cols, right_cols)
+    if (identical(align, "decimal") && length(numeric_cols) > 0L) {
+      tbl <- gt::cols_align_decimal(tbl, columns = numeric_cols)
+    } else if (identical(align, "center") && length(numeric_cols) > 0L) {
+      tbl <- gt::cols_align(tbl, align = "center", columns = numeric_cols)
+    } else if (identical(align, "right") && length(numeric_cols) > 0L) {
+      tbl <- gt::cols_align(tbl, align = "right", columns = numeric_cols)
+    } else {
+      # "auto": legacy per-column rule.
+      tbl <- gt::cols_align(tbl, align = "center", columns = grp_cols)
+      tbl <- gt::cols_align(tbl, align = "right", columns = right_cols)
+    }
     # Left-align the Variable spanner label
     tbl <- gt::tab_style(
       tbl,
@@ -1752,8 +2304,9 @@ table_categorical <- function(
   # ---------------- flextable / word ----------------
   build_flextable <- function(df) {
     if (!requireNamespace("flextable", quietly = TRUE)) {
-      stop("Install package 'flextable'.", call. = FALSE)
+      spicy_abort("Install package 'flextable'.", class = "spicy_missing_pkg")
     }
+    df <- pad_decimal_cols(df)
     ft <- flextable::flextable(df)
 
     map <- data.frame(
@@ -1769,7 +2322,40 @@ table_categorical <- function(
     bd <- spicy_fp_border(color = "black", width = 1)
 
     ft <- flextable::align(ft, j = 1, part = "all", align = "left")
-    ft <- flextable::align(ft, j = 2:ncol(df), part = "body", align = "right")
+    # Numeric column alignment honours `align`. For "decimal", cells
+    # were pre-padded above by `pad_decimal_cols()`; right-aligning
+    # the padded strings preserves the dot-aligned column. Use a
+    # monospace font in the body so character widths match. For
+    # "center" / "right" / "auto", apply the literal alignment.
+    num_j <- 2:ncol(df)
+    if (identical(align, "decimal") && length(num_j) > 0L) {
+      ft <- flextable::align(
+        ft,
+        j = num_j,
+        part = "body",
+        align = "right"
+      )
+      ft <- flextable::font(
+        ft,
+        j = num_j,
+        part = "body",
+        fontname = "Consolas"
+      )
+    } else if (identical(align, "center") && length(num_j) > 0L) {
+      ft <- flextable::align(
+        ft,
+        j = num_j,
+        part = "body",
+        align = "center"
+      )
+    } else {
+      ft <- flextable::align(
+        ft,
+        j = num_j,
+        part = "body",
+        align = "right"
+      )
+    }
     # Centre n/% labels and spanner labels in header
     ft <- flextable::align(ft, j = grp_j, part = "header", align = "center")
     # Right-align p and association measure in header
@@ -1799,7 +2385,7 @@ table_categorical <- function(
     ft <- build_flextable(merge_ci_inline(report_wide_char))
     if (!is.null(word_path) && nzchar(word_path)) {
       if (!requireNamespace("officer", quietly = TRUE)) {
-        stop("Install package 'officer'.", call. = FALSE)
+        spicy_abort("Install package 'officer'.", class = "spicy_missing_pkg")
       }
       flextable::save_as_docx(ft, path = word_path)
     }
@@ -1808,7 +2394,7 @@ table_categorical <- function(
 
   if (output == "word") {
     if (is.null(word_path) || !nzchar(word_path)) {
-      stop("Provide `word_path` for output = 'word'.", call. = FALSE)
+      spicy_abort("Provide `word_path` for output = 'word'.", class = "spicy_invalid_input")
     }
     ft <- build_flextable(merge_ci_inline(report_wide_char))
     flextable::save_as_docx(ft, path = word_path)
@@ -1827,13 +2413,23 @@ table_categorical <- function(
   }
 
   # ---------------- clipboard matrix ----------------
-  clip_body <- report_wide_char
+  # Pre-pad the n / % numeric columns so decimal points line up
+  # vertically in plain-text rendering. The Variable column is
+  # left untouched by `pad_decimal_cols()`. The p / association /
+  # CI columns are wrapped below in Excel-text formulas (`="..."`)
+  # to prevent Excel from auto-parsing leading-`<` strings; the
+  # `to_excel_text()` wrapper trims surrounding whitespace, so the
+  # quoted inner text stays clean and padded-empty cells stay empty.
+  clip_body <- pad_decimal_cols(report_wide_char)
   clip_body$Variable <- make_stronger_indent(
     clip_body$Variable,
     indent_text,
     indent_text_excel_clipboard
   )
-  to_excel_text <- function(x) ifelse(x == "", "", paste0("=\"", x, "\""))
+  to_excel_text <- function(x) {
+    trimmed <- trimws(x)
+    ifelse(!nzchar(trimmed), "", paste0("=\"", trimmed, "\""))
+  }
   clip_body$p <- to_excel_text(clip_body$p)
   if (show_assoc) {
     clip_body[[measure_col]] <- to_excel_text(clip_body[[measure_col]])
@@ -1848,10 +2444,10 @@ table_categorical <- function(
   # ---------------- excel ----------------
   if (output == "excel") {
     if (is.null(excel_path) || !nzchar(excel_path)) {
-      stop("Provide `excel_path` for output = 'excel'.", call. = FALSE)
+      spicy_abort("Provide `excel_path` for output = 'excel'.", class = "spicy_invalid_input")
     }
     if (!requireNamespace("openxlsx2", quietly = TRUE)) {
-      stop("Install package 'openxlsx2'.", call. = FALSE)
+      spicy_abort("Install package 'openxlsx2'.", class = "spicy_missing_pkg")
     }
 
     wb <- openxlsx2::wb_workbook()
@@ -1915,7 +2511,12 @@ table_categorical <- function(
       vertical = "center"
     )
     if (nrow(body_xl) > 0) {
-      # Body alignment
+      # Body alignment. The Variable column is always left-aligned;
+      # numeric columns honour `align`. For "decimal", Excel already
+      # aligns decimal points implicitly via right-alignment combined
+      # with a uniform numfmt, so the visual result matches the
+      # dot-aligned column in print / gt / tinytable.
+      num_horiz <- if (identical(align, "center")) "center" else "right"
       wb <- openxlsx2::wb_add_cell_style(
         wb,
         dims = openxlsx2::wb_dims(rows = 3:last_row, cols = 1),
@@ -1924,7 +2525,7 @@ table_categorical <- function(
       wb <- openxlsx2::wb_add_cell_style(
         wb,
         dims = openxlsx2::wb_dims(rows = 3:last_row, cols = 2:nc),
-        horizontal = "right"
+        horizontal = num_horiz
       )
       # Text columns (p, assoc, CI) — force text format
       text_cols <- if (show_assoc && assoc_ci) {
@@ -1989,7 +2590,7 @@ table_categorical <- function(
   # ---------------- clipboard ----------------
   if (output == "clipboard") {
     if (!requireNamespace("clipr", quietly = TRUE)) {
-      stop("Install package 'clipr'.", call. = FALSE)
+      spicy_abort("Install package 'clipr'.", class = "spicy_missing_pkg")
     }
     lines <- apply(clip_mat, 1, function(x) {
       paste(x, collapse = clipboard_delim)

@@ -37,13 +37,12 @@
 #' normalizes weights so their sum equals the unweighted sample size
 #' (`length(weights)`).
 #'
-#' Missing values in `weights` are treated as zero (with a warning), so
-#' the corresponding rows contribute nothing to any cell. With
-#' `rescale = TRUE`, the remaining weights are normalized so the total
-#' weighted N still equals `length(weights)` — the implicit share of the
-#' zeroed rows is redistributed over the others, mirroring Stata's
-#' `pweight` semantics. With `rescale = FALSE`, the total weighted N is
-#' the actual sum of non-`NA` weights.
+#' Missing values in `weights` cause those observations to be dropped
+#' from the table entirely (with a warning), matching the behaviour of
+#' [cross_tab()] in spicy 0.11.0+. With `rescale = TRUE`, the remaining
+#' (non-`NA`-weighted) weights are normalized so the total weighted N
+#' equals the count of non-`NA`-weighted rows. With `rescale = FALSE`,
+#' the total weighted N is the actual sum of non-`NA` weights.
 #'
 #' @param data A `data.frame`, vector, or factor. If a data frame is provided,
 #'   specify the target variable `x`. If both `data` and `x` are supplied as
@@ -52,8 +51,9 @@
 #' @param weights Optional numeric vector of weights (same length as `x`).
 #'   The variable may be referenced as a bare name when it belongs to `data`,
 #'   or as a qualified expression like `other$w` (evaluated in the calling
-#'   environment), which always takes precedence over `data` lookup. `NA`
-#'   weights are treated as zero with a warning; see `Details`.
+#'   environment), which always takes precedence over `data` lookup.
+#'   Observations with `NA` weights are dropped from the table with a
+#'   warning; see `Details`.
 #' @param digits Number of decimal digits to display for percentages (default: `1`).
 #' @param valid Logical. If `TRUE` (default), display valid percentages
 #'   (excluding missing values).
@@ -90,6 +90,11 @@
 #' @param rescale Logical. If `TRUE` (default), rescale weights so that their
 #'   total equals the unweighted sample size (`length(weights)`). See
 #'   `Details` for the interaction with `NA` weights.
+#' @param decimal_mark Character used as the decimal mark in printed
+#'   percentages. Either `"."` (the default) or `","`. Matches the
+#'   `decimal_mark` argument of [cross_tab()] and the three
+#'   `table_*()` helpers, so European-locale users get a consistent
+#'   experience across the package.
 #' @param styled Logical. If `TRUE` (default), print the formatted spicy table.
 #'   If `FALSE`, return a plain `data.frame` with frequency values.
 #' @param ... Additional arguments passed to [print.spicy_freq_table()].
@@ -165,6 +170,9 @@
 #' # Piped version (tidy syntax) and sort alphabetically descending ("name-")
 #' df |> freq(sex, sort = "name-")
 #'
+#' # European decimal mark (matches `cross_tab()` and the `table_*()` family)
+#' freq(sochealth, education, decimal_mark = ",")
+#'
 #' # Non-styled return (for programmatic use)
 #' f <- freq(df, sex, styled = FALSE)
 #' head(f)
@@ -173,15 +181,13 @@
 #' [print.spicy_freq_table()] for formatted printing.
 #' [spicy_print_table()] for the underlying ASCII rendering engine.
 #'
-#' @importFrom labelled is.labelled to_factor var_label
-#'
 #' @export
 
 freq <- function(
   data,
   x = NULL,
   weights = NULL,
-  digits = 1,
+  digits = 1L,
   valid = TRUE,
   cum = FALSE,
   sort = "",
@@ -189,19 +195,39 @@ freq <- function(
   labelled_levels = c("prefixed", "labels", "values"),
   factor_levels = c("observed", "all"),
   rescale = TRUE,
+  decimal_mark = ".",
   styled = TRUE,
   ...
 ) {
   labelled_levels <- match.arg(labelled_levels)
   factor_levels <- match_varlist_factor_levels(factor_levels)
 
+  # B2: tighten `digits` to a non-negative integer (the rest of the
+  # spicy 0.11.0 family does the same). Coerces silently if the user
+  # passes 1.0 / 2L; rejects 1.5, NA, vectors, etc.
   if (
     !is.numeric(digits) ||
       length(digits) != 1L ||
       !is.finite(digits) ||
-      digits < 0
+      digits < 0 ||
+      digits != as.integer(digits)
   ) {
-    stop("`digits` must be a single non-negative number.", call. = FALSE)
+    spicy_abort(
+      "`digits` must be a single non-negative integer.",
+      class = "spicy_invalid_input"
+    )
+  }
+  digits <- as.integer(digits)
+
+  if (
+    !is.character(decimal_mark) ||
+      length(decimal_mark) != 1L ||
+      !decimal_mark %in% c(".", ",")
+  ) {
+    spicy_abort(
+      "`decimal_mark` must be either `\".\"` or `\",\"`.",
+      class = "spicy_invalid_input"
+    )
   }
 
   if (
@@ -210,9 +236,9 @@ freq <- function(
       is.na(sort) ||
       !sort %in% c("", "+", "-", "name+", "name-")
   ) {
-    stop(
+    spicy_abort(
       "Invalid value for 'sort'. Use '+', '-', 'name+', or 'name-'.",
-      call. = FALSE
+      class = "spicy_invalid_input"
     )
   }
 
@@ -223,9 +249,9 @@ freq <- function(
 
   is_df <- is.data.frame(data)
   if (is_df && missing(x)) {
-    stop(
+    spicy_abort(
       "When `data` is a data frame, you must supply `x` (e.g., freq(data, x)).",
-      call. = FALSE
+      class = "spicy_invalid_input"
     )
   }
 
@@ -238,10 +264,8 @@ freq <- function(
     data_name <- var_name
     x <- data
   } else {
-    warning(
-      "Both `data` and `x` are vectors; `data` is ignored.",
-      call. = FALSE
-    )
+    spicy_warn(
+      "Both `data` and `x` are vectors; `data` is ignored.", class = "spicy_ignored_arg")
     # `x` is what gets analyzed here — mirror the `!is_df && missing(x)`
     # branch above so the printed footer (`Data: ...`) does not surface
     # the name of the vector that was just declared "ignored".
@@ -283,13 +307,13 @@ freq <- function(
       )
 
       if (identical(weights, not_found)) {
-        stop(
+        spicy_abort(
           paste0(
             "The weighting variable '",
             weight_name,
             "' was not found either in the data frame or in the global environment."
           ),
-          call. = FALSE
+          class = "spicy_missing_column"
         )
       }
 
@@ -309,28 +333,53 @@ freq <- function(
     # TRUE/FALSE coerce naturally to 1/0 — a common shorthand for
     # "include / exclude" weighting.
     if (!is.numeric(weights) && !is.logical(weights)) {
-      stop("`weights` must be a numeric or logical vector.", call. = FALSE)
+      spicy_abort(
+        "`weights` must be a numeric or logical vector.",
+        class = "spicy_invalid_input"
+      )
     }
     if (length(weights) != length(x)) {
-      stop("`weights` must have the same length as `x`.", call. = FALSE)
+      spicy_abort(
+        "`weights` must have the same length as `x`.",
+        class = "spicy_invalid_data"
+      )
     }
     if (any(weights < 0, na.rm = TRUE)) {
-      stop("`weights` must be non-negative.", call. = FALSE)
+      spicy_abort(
+        "`weights` must be non-negative.",
+        class = "spicy_invalid_input"
+      )
     }
     if (any(!is.finite(weights[!is.na(weights)]))) {
-      stop("`weights` must contain only finite numeric values.", call. = FALSE)
+      spicy_abort(
+        "`weights` must contain only finite numeric values.",
+        class = "spicy_invalid_input"
+      )
     }
     if (any(is.na(weights))) {
-      warning("NA values in `weights` are treated as zero.", call. = FALSE)
-      weights[is.na(weights)] <- 0
+      n_na <- sum(is.na(weights))
+      spicy_warn(
+        sprintf(
+          "%d NA value%s in `weights`; those observations are excluded from the table and from rescaling.",
+          n_na,
+          if (n_na > 1L) "s" else ""
+        ), class = "spicy_dropped_na")
+      # Drop NA-weighted rows up front so they never reach `table()` /
+      # `tapply()` (where they would otherwise be retained with weight
+      # zero and inflate the rescale denominator). This matches the
+      # `cross_tab()` 0.11.0 behaviour.
+      keep <- !is.na(weights)
+      x <- x[keep]
+      x_original <- x_original[keep]
+      weights <- weights[keep]
     }
 
     if (rescale) {
-      w_sum <- sum(weights, na.rm = TRUE)
+      w_sum <- sum(weights)
       if (!is.finite(w_sum) || w_sum <= 0) {
-        stop(
+        spicy_abort(
           "`rescale = TRUE` requires a strictly positive sum of weights.",
-          call. = FALSE
+          class = "spicy_invalid_input"
         )
       }
       weights <- weights * length(weights) / w_sum
@@ -339,10 +388,8 @@ freq <- function(
 
   if (labelled::is.labelled(x)) {
     if (!is.null(na_val) && !is.numeric(na_val)) {
-      warning(
-        "For labelled variables, 'na_val' should match the underlying numeric value (e.g., 1), not the label.",
-        call. = FALSE
-      )
+      spicy_warn(
+        "For labelled variables, 'na_val' should match the underlying numeric value (e.g., 1), not the label.", class = "spicy_ignored_arg")
     }
 
     if (!is.null(na_val)) {
@@ -372,7 +419,10 @@ freq <- function(
   n_valid <- n_total - n_missing
 
   if (n_total == 0) {
-    stop("Total frequency is zero; cannot compute proportions.", call. = FALSE)
+    spicy_abort(
+      "Total frequency is zero; cannot compute proportions.",
+      class = "spicy_invalid_data"
+    )
   }
 
   if (is.null(weights)) {
@@ -403,10 +453,13 @@ freq <- function(
   }
 
   # --- Sort
-  if (sort != "") {
+  # `nrow(df) > 1L` guards against an R 4.6.0 `order()` segfault on a
+  # zero-length vector for some classes; sorting a length-0 / 1 frame
+  # is a no-op anyway.
+  if (sort != "" && nrow(df) > 1L) {
     decreasing <- sort %in% c("-", "name-")
     sort_col <- if (sort %in% c("+", "-")) "n" else "value"
-    df <- df[order(df[[sort_col]], decreasing = decreasing), ]
+    df <- df[order(df[[sort_col]], decreasing = decreasing, method = "radix"), ]
   }
 
   # Move missing-value rows to the end so cumulative columns match the
@@ -445,6 +498,7 @@ freq <- function(
   }
 
   attr(df, "digits") <- digits
+  attr(df, "decimal_mark") <- decimal_mark
   attr(df, "data_name") <- data_name
   attr(df, "var_name") <- var_name
   attr(df, "var_label") <- attr(x_original, "label", exact = TRUE)

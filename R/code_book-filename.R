@@ -35,12 +35,14 @@ code_book_sanitize_filename <- function(filename, arg, fallback = NULL) {
       return(fallback)
     }
 
-    stop(
-      "`",
-      arg,
-      "` must contain at least one letter, number, ",
-      "underscore, or hyphen after sanitization.",
-      call. = FALSE
+    spicy_abort(
+      paste0(
+        "`",
+        arg,
+        "` must contain at least one letter, number, ",
+        "underscore, or hyphen after sanitization."
+      ),
+      class = "spicy_invalid_input"
     )
   }
 
@@ -48,20 +50,6 @@ code_book_sanitize_filename <- function(filename, arg, fallback = NULL) {
   if (nchar(filename, type = "chars") > max_length) {
     filename <- substr(filename, 1L, max_length)
     filename <- gsub("_+$", "", filename, perl = TRUE)
-  }
-
-  if (!nzchar(filename)) {
-    if (!is.null(fallback)) {
-      return(fallback)
-    }
-
-    stop(
-      "`",
-      arg,
-      "` must contain at least one letter, number, ",
-      "underscore, or hyphen after sanitization.",
-      call. = FALSE
-    )
   }
 
   filename
@@ -75,9 +63,9 @@ code_book_ascii_filename <- function(filename) {
     iconv(filename, from = "UTF-8", to = "ASCII//TRANSLIT", sub = "")
   )
 
-  if (is.na(filename)) {
+  if (is.na(filename)) { # nocov start
     return(filename)
-  }
+  } # nocov end
 
   # Some iconv implementations transliterate accents as ASCII marks.
   filename <- gsub("\\p{M}+", "", filename, perl = TRUE)

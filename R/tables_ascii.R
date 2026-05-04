@@ -1,3 +1,32 @@
+# Internal: validate the `padding` argument shared by `build_ascii_table()`
+# and `spicy_print_table()`. Pre-1.0 spicy switched from a string enum
+# (`"compact" / "normal" / "wide"`) to a single non-negative integer
+# giving the extra characters added to each column's auto-computed
+# width. Passing the legacy strings raises an actionable migration
+# error rather than silently mapping to an integer, so users see the
+# change instead of debugging an unexplained layout shift.
+.validate_padding <- function(padding) {
+  if (is.character(padding)) {
+    spicy_abort(
+      c(
+        "`padding` must be a non-negative integer (e.g. `padding = 2L`).",
+        "x" = "The string choices `\"compact\"`, `\"normal\"` and `\"wide\"` were removed in spicy 0.11.0.",
+        "i" = "Use `0L`, `2L` and `4L` respectively."
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  padding <- suppressWarnings(as.integer(padding))
+  if (length(padding) != 1L || is.na(padding) || padding < 0L) {
+    spicy_abort(
+      "`padding` must be a non-negative integer.",
+      class = "spicy_invalid_input"
+    )
+  }
+  padding
+}
+
+
 #' Build a formatted ASCII table
 #'
 #' @description
@@ -12,8 +41,7 @@
 #' `build_ascii_table()` is the rendering engine that produces the aligned text
 #' layout of **spicy-formatted tables**.
 #' It automatically detects cell widths (including colored text), inserts Unicode
-#' separators, and applies padding for different display modes (`"compact"`,
-#' `"normal"`, `"wide"`).
+#' separators, and applies a configurable amount of horizontal padding.
 #'
 #' For most users, this function should not be called directly. Instead, use
 #' [spicy_print_table()] which adds headers, notes, and alignment logic
@@ -21,10 +49,18 @@
 #'
 #' @param x A `data.frame` or `spicy_table` object containing the table to format.
 #'   Typically, this includes columns such as *Category*, *Values*, *Freq.*, *Percent*, etc.
-#' @param padding Character string controlling horizontal spacing between columns:
-#'   * `"compact"` — minimal spacing
-#'   * `"normal"` — moderate spacing (default)
-#'   * `"wide"` — extra spacing (for large displays or wide content)
+#' @param padding Non-negative integer giving the number of extra
+#'   characters added to each column's auto-computed width (the
+#'   maximum of the cell-content width and the header width).
+#'   Defaults to `2L`, which gives a Stata- / `cli`-like compact
+#'   look. Each cell additionally receives a one-space gutter on
+#'   each side, so a `padding = 2L` column whose content is at
+#'   most 5 characters wide occupies 9 characters in total
+#'   (`1 + 5 + 2 + 1`).
+#'
+#'   The string choices `"compact"`, `"normal"` and `"wide"` from
+#'   spicy `< 0.11.0` were removed; pass `0L`, `2L` or `4L`
+#'   instead. Passing a string raises an actionable error.
 #' @param first_column_line Logical. If `TRUE` (the default), a vertical separator
 #'   is drawn after the first column (useful for separating categories from data).
 #' @param row_total_line,column_total_line Logical. Control horizontal rules
@@ -42,6 +78,14 @@
 #'   right-aligned.
 #' @param group_sep_rows Integer vector of row indices before which a
 #'   light dashed separator line is drawn. Defaults to `integer(0)`.
+#' @param total_row_idx Optional integer vector of 1-based row indices
+#'   identifying the totals rows; a horizontal rule is drawn just
+#'   before each. When `NULL` (the default), falls back to a regex
+#'   match on `"Total"` / `"Column_Total"` in the formatted row text,
+#'   which can mis-fire if a user category is literally named "Total"
+#'   or "Sub-Total". Cross-tabs and frequency tables built by
+#'   `cross_tab()` and `freq()` set this attribute on their result so
+#'   the print methods are immune to that false positive.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return
@@ -57,20 +101,17 @@
 #'   Percent = c(57.1, 38.1, 4.8, 100.0)
 #' )
 #'
-#' cat(build_ascii_table(df, padding = "compact"))
+#' cat(build_ascii_table(df, padding = 0L))
 #'
 #' @seealso
 #' [spicy_print_table()] for a user-facing wrapper that adds titles and notes.
-#'
-#' @importFrom crayon has_color make_style col_nchar
-#' @importFrom stringr str_pad
 #'
 #' @keywords internal
 #' @export
 
 build_ascii_table <- function(
   x,
-  padding = c("compact", "normal", "wide"),
+  padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
   column_total_line = TRUE,
@@ -79,10 +120,11 @@ build_ascii_table <- function(
   align_left_cols = c(1L, 2L),
   align_center_cols = integer(0),
   group_sep_rows = integer(0),
+  total_row_idx = NULL,
   ...
 ) {
   stopifnot(is.data.frame(x))
-  padding <- match.arg(padding)
+  padding <- .validate_padding(padding)
 
   df <- as.data.frame(x, check.names = FALSE)
   df[] <- lapply(df, as.character)
@@ -160,9 +202,9 @@ build_ascii_table <- function(
   }
 
   style <- if (crayon::has_color()) {
-    crayon::make_style(lines_color)
+    crayon::make_style(lines_color) # nocov
   } else {
-    identity
+    identity # nocov
   }
   header_rule <- style(make_rule(full_width, bar_positions, "\u253c"))
   total_rule <- style(make_rule(full_width, bar_positions, "\u253c")) # line before Total
@@ -179,18 +221,25 @@ build_ascii_table <- function(
   light_rule <- style(make_light_rule(full_width, bar_positions))
 
   # --- Colorize vertical bars if supported
-  if (crayon::has_color()) {
+  if (crayon::has_color()) { # nocov start
     header_txt <- gsub("\u2502", style("\u2502"), header_txt, fixed = TRUE)
     rows_txt <- gsub("\u2502", style("\u2502"), rows_txt, fixed = TRUE)
-  }
+  } # nocov end
 
   out <- character(0)
 
   # --- Add header
   out <- c(out, header_txt, header_rule)
 
-  # --- Add rows, with horizontal line before Total and light separators
-  total_idx <- grep("\\b(Total|Column_Total)\\b", rows_txt, perl = TRUE)
+  # --- Add rows, with horizontal line before Total and light separators.
+  # Caller-supplied `total_row_idx` is preferred over the regex fallback,
+  # which can false-positive on a user category literally named "Total".
+  total_idx <- if (!is.null(total_row_idx)) {
+    total_row_idx <- as.integer(total_row_idx)
+    total_row_idx[total_row_idx >= 1L & total_row_idx <= length(rows_txt)]
+  } else {
+    grep("\\b(Total|Column_Total)\\b", rows_txt, perl = TRUE)
+  }
   sep_set <- as.integer(group_sep_rows)
   sep_set <- sep_set[sep_set >= 2L & sep_set <= length(rows_txt)]
 
@@ -234,15 +283,7 @@ ascii_table_widths <- function(df, padding) {
     },
     numeric(1)
   )
-
-  if (identical(padding, "normal")) {
-    widths <- widths + 5L
-  }
-  if (identical(padding, "wide")) {
-    widths <- widths + 9L
-  }
-
-  widths
+  widths + as.integer(padding)
 }
 
 ascii_table_separators <- function(df, first_column_line, row_total_line) {
@@ -288,7 +329,7 @@ ascii_table_panels <- function(
   sticky_cols <- sort(unique(as.integer(sticky_cols)))
   sticky_cols <- sticky_cols[sticky_cols %in% cols]
   if (!length(sticky_cols)) {
-    sticky_cols <- 1L
+    sticky_cols <- 1L # nocov
   }
 
   if (
@@ -305,7 +346,7 @@ ascii_table_panels <- function(
 
   remaining_cols <- setdiff(cols, sticky_cols)
   if (!length(remaining_cols)) {
-    return(list(cols))
+    return(list(cols)) # nocov
   }
 
   panels <- list()
@@ -368,10 +409,11 @@ ascii_table_panels <- function(
 #'   `"title"` attribute of `x` if present.
 #' @param note Optional note displayed below the table. Defaults to the `"note"`
 #'   attribute of `x` if present.
-#' @param padding Character string controlling horizontal spacing between columns:
-#'   * `"compact"` - minimal spacing
-#'   * `"normal"` - moderate spacing (default)
-#'   * `"wide"` - extra spacing (for wide displays)
+#' @param padding Non-negative integer giving the number of extra
+#'   characters added to each column's auto-computed width
+#'   (max of cell-content width and header width). Defaults to
+#'   `2L`. See [build_ascii_table()] for the precise formula and
+#'   the migration note from the pre-0.11.0 string enum.
 #' @param first_column_line Logical. If `TRUE` (the default), adds a vertical separator
 #'   after the first column.
 #' @param row_total_line,column_total_line,bottom_line Logical flags controlling
@@ -389,6 +431,9 @@ ascii_table_panels <- function(
 #'   center-align. Defaults to `integer(0)`.
 #' @param group_sep_rows Integer vector of row indices before which a
 #'   light dashed separator line is drawn. Defaults to `integer(0)`.
+#' @param total_row_idx Optional integer vector of 1-based row indices
+#'   identifying the totals rows; defaults to the `"total_row_idx"`
+#'   attribute of `x` (set by `cross_tab()`). See [build_ascii_table()].
 #' @param ... Additional arguments passed to [build_ascii_table()].
 #'
 #' @return
@@ -412,15 +457,13 @@ ascii_table_panels <- function(
 #' [build_ascii_table()] for the underlying text rendering engine.
 #' [print.spicy_freq_table()] for the specialized printing method used by [freq()].
 #'
-#' @importFrom crayon has_color make_style
-#'
 #' @export
 
 spicy_print_table <- function(
   x,
   title = attr(x, "title"),
   note = attr(x, "note"),
-  padding = c("compact", "normal", "wide"),
+  padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
   column_total_line = TRUE,
@@ -429,10 +472,11 @@ spicy_print_table <- function(
   align_left_cols = NULL,
   align_center_cols = integer(0),
   group_sep_rows = integer(0),
+  total_row_idx = attr(x, "total_row_idx"),
   ...
 ) {
   stopifnot(is.data.frame(x))
-  padding <- match.arg(padding)
+  padding <- .validate_padding(padding)
 
   table_type <- if (any(grepl("^Category$", names(x)))) "freq" else "cross"
 
@@ -470,6 +514,7 @@ spicy_print_table <- function(
         align_left_cols = which(cols %in% align_left_cols),
         align_center_cols = which(cols %in% align_center_cols),
         group_sep_rows = group_sep_rows,
+        total_row_idx = total_row_idx,
         ...
       )
     },
@@ -477,9 +522,9 @@ spicy_print_table <- function(
   )
 
   style_grey <- if (crayon::has_color()) {
-    crayon::make_style("darkgrey")
+    crayon::make_style("darkgrey") # nocov
   } else {
-    identity
+    identity # nocov
   }
   if (!is.null(title)) {
     cat(style_grey(title), "\n\n", sep = "")

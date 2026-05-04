@@ -81,6 +81,11 @@ end (controlled via \code{include_na}). Literal strings \code{"NA"}, \code{"NaN"
 \item \code{NAs}: number of missing observations
 }
 
+For matrix and array columns, observations are counted per \strong{row}:
+a row is treated as missing if any of its cells is \code{NA}. \code{N_valid}
+/ \code{NAs} therefore count complete vs. incomplete rows, not
+individual cells.
+
 If \code{tbl = TRUE}, the tibble is returned. If \code{tbl = FALSE} and the session is
 interactive, the summary is displayed in the Viewer pane and the function
 returns invisibly. In non-interactive sessions, a message is displayed and
@@ -139,3 +144,9 @@ sochealth |> vl(tbl = TRUE)
 vl(sochealth, starts_with("bmi"), tbl = TRUE)
 vl(sochealth, where(is.numeric), values = TRUE, tbl = TRUE)
 }
+\seealso{
+Other variable inspection:
+\code{\link[=code_book]{code_book()}},
+\code{\link[=label_from_names]{label_from_names()}}
+}
+\concept{variable inspection}

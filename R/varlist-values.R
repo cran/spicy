@@ -1,3 +1,18 @@
+# Length-guarded `sort(unique(x), method = "radix")`. Necessary
+# because R's `sort()` segfaults on a zero-length input for several
+# classes (`Date`, `POSIXct`, `character`, ... -- observed on R
+# 4.6.0 dev). Returns the deduplicated input as-is when there is
+# nothing to order; otherwise byte-stable radix-sorts. Centralised
+# so every empty-column call site gets the same protection.
+safe_sort_unique <- function(x) {
+  out <- unique(x)
+  if (length(out) > 1L) {
+    out <- sort(out, method = "radix")
+  }
+  out
+}
+
+
 summarize_varlist_column <- function(
   col,
   name,
@@ -21,12 +36,14 @@ summarize_varlist_column <- function(
     },
     error = function(e) {
       msg <- trimws(gsub("\\s+", " ", conditionMessage(e)))
-      warning(
-        "Could not summarize column `",
-        name,
-        "`: ",
-        msg,
-        call. = FALSE
+      spicy_warn(
+        paste0(
+          "Could not summarize column `",
+          name,
+          "`: ",
+          msg
+        ),
+        class = "spicy_summary_failed"
       )
       paste0("<error: ", msg, ">")
     }
@@ -43,14 +60,18 @@ summarize_values_minmax <- function(
   has_nan <- varlist_has_nan(col)
   max_display <- 4
 
+  # Labelled vectors are converted to factor up front so the same
+  # `factor_values()` path handles `factor_levels = "all"` uniformly
+  # for both `factor` and `labelled` inputs.
   if (labelled::is.labelled(col)) {
     col <- labelled::to_factor(col, levels = "prefixed")
-    unique_vals <- factor_values(col, factor_levels = "observed")
-  } else if (is.factor(col)) {
+  }
+
+  if (is.factor(col)) {
     unique_vals <- factor_values(col, factor_levels = factor_levels)
   } else if (inherits(col, c("Date", "POSIXct", "POSIXlt"))) {
     col_no_na <- stats::na.omit(col)
-    unique_vals <- sort(unique(col_no_na))
+    unique_vals <- safe_sort_unique(col_no_na)
   } else if (varlist_is_array_column(col)) {
     return(summarize_varlist_array(col, include_na = include_na))
   } else if (is.list(col)) {
@@ -61,7 +82,7 @@ summarize_values_minmax <- function(
     ))
   } else {
     col_no_na <- stats::na.omit(col)
-    unique_vals <- sort(unique(col_no_na))
+    unique_vals <- safe_sort_unique(col_no_na)
   }
 
   unique_vals <- format_varlist_values(unique_vals)
@@ -104,11 +125,10 @@ summarize_values_all <- function(
   show_vals <- function(v, sort_values = TRUE) {
     vals <- tryCatch(
       {
-        vals <- unique(v)
         if (sort_values) {
-          sort(vals)
+          safe_sort_unique(v)
         } else {
-          vals
+          unique(v)
         }
       },
       error = function(e) {
@@ -127,9 +147,12 @@ summarize_values_all <- function(
     paste(all_vals, collapse = ", ")
   }
 
+  # Same labelled-to-factor unification as in `summarize_values_minmax()`:
+  # `factor_levels` is now honoured for labelled vectors, and the original
+  # level order is preserved (sorting prefixed labels alphabetically would
+  # mis-order codes >= 10, e.g. `[10] X` before `[2] X`).
   if (labelled::is.labelled(col)) {
     col <- labelled::to_factor(col, levels = "prefixed")
-    return(show_vals(col))
   }
 
   if (is.factor(col)) {
@@ -205,7 +228,7 @@ summarize_varlist_list <- function(col, values = FALSE, include_na = FALSE) {
   base <- paste0("List(", length(col), ")")
 
   if (values && length(col) > 0L) {
-    types <- sort(unique(vapply(col, typeof, character(1))))
+    types <- safe_sort_unique(vapply(col, typeof, character(1)))
     base <- paste0(base, ": ", paste(types, collapse = ", "))
   }
 

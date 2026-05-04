@@ -89,7 +89,7 @@
 #' @examples
 #' library(dplyr)
 #' library(tibble)
-#' library(haven)
+#' library(labelled)
 #'
 #' # Basic usage
 #' df <- tibble(
@@ -145,6 +145,7 @@
 #' # Strict match with factor value: works only where levels match
 #' count_n(df, count = factor("b", levels = levels(df$x)), allow_coercion = FALSE)
 #'
+#' @family row-wise summaries
 #' @export
 count_n <- function(
   data = NULL,
@@ -168,9 +169,9 @@ count_n <- function(
       select <- ".*"
     }
     if (!is.character(select) || length(select) != 1L || is.na(select)) {
-      stop(
+      spicy_abort(
         "When `regex = TRUE`, `select` must be a single character pattern.",
-        call. = FALSE
+        class = "spicy_invalid_input"
       )
     }
     grep(select, names(data), value = TRUE)
@@ -213,31 +214,30 @@ base_count_n <- function(
   verbose = FALSE
 ) {
   if (is.null(count) && is.null(special)) {
-    stop("You must specify either `count` or `special`.", call. = FALSE)
+    spicy_abort(
+      "You must specify either `count` or `special`.",
+      class = "spicy_invalid_input"
+    )
   }
 
   if (!is.null(count)) {
     if (length(count) == 1L && is.na(count)) {
-      stop(
+      spicy_abort(
         "Use `special = \"NA\"` to count missing values, not `count = NA`.",
-        call. = FALSE
+        class = "spicy_invalid_input"
       )
     }
     has_na <- vapply(count, is.na, logical(1))
     if (any(has_na)) {
-      warning(
-        "NA values in `count` are ignored. Use `special = \"NA\"` to count missing values.",
-        call. = FALSE
-      )
+      spicy_warn(
+        "NA values in `count` are ignored. Use `special = \"NA\"` to count missing values.", class = "spicy_ignored_arg")
       count <- count[!has_na]
     }
   }
 
   if (!is.null(special) && !is.null(count)) {
-    warning(
-      "Both `special` and `count` supplied; `count` is ignored.",
-      call. = FALSE
-    )
+    spicy_warn(
+      "Both `special` and `count` supplied; `count` is ignored.", class = "spicy_ignored_arg")
   }
 
   data <- data[, select, drop = FALSE]
@@ -255,9 +255,9 @@ base_count_n <- function(
       special <- allowed
     }
     if (!all(special %in% allowed)) {
-      stop(
+      spicy_abort(
         "Invalid `special`. Use 'NA', 'NaN', 'Inf', '-Inf', or 'all'.",
-        call. = FALSE
+        class = "spicy_invalid_input"
       )
     }
 

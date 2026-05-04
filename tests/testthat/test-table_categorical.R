@@ -28,8 +28,10 @@ test_that("table_categorical returns expected long raw structure", {
   )
 
   expect_s3_class(out, "data.frame")
+  # 2x2 + 2x2 -> auto rule now picks Phi (was Cramer's V before 0.11.0;
+  # see NEWS).
   expect_true(all(
-    c("variable", "level", "group", "n", "pct", "p", "Cramer's V") %in%
+    c("variable", "level", "group", "n", "pct", "p", "Phi") %in%
       names(out)
   ))
   expect_true(nrow(out) > 0)
@@ -496,7 +498,116 @@ test_that("table_categorical default column is Cramer's V", {
     labels = "Var 1",
     output = "long"
   )
-  expect_true("Cramer's V" %in% names(out))
+  # 2x2 -> auto rule now picks Phi (see NEWS for 0.11.0).
+  expect_true("Phi" %in% names(out))
+})
+
+test_that("table_categorical auto-rule picks Phi for 2x2, Cramer's V otherwise (mixed -> Effect size header)", {
+  # smoking: binary, education: 4-cat nominal, sex: binary
+  # auto-rule: smoking -> phi (2x2), education -> cramer_v (not 2x2)
+  out <- table_categorical(
+    sochealth,
+    select = c(smoking, education),
+    by = sex,
+    output = "long"
+  )
+  expect_true("Effect size" %in% names(out))
+  expect_false("Phi" %in% names(out))
+  expect_false("Cramer's V" %in% names(out))
+})
+
+test_that("table_categorical accepts a named per-variable `assoc_measure`", {
+  # Same data, but explicit override per variable
+  out_default <- table_categorical(
+    sochealth,
+    select = c(smoking, education),
+    by = sex,
+    output = "default"
+  )
+  expect_match(
+    attr(out_default, "assoc_note"),
+    "Note\\. Phi: smoking; Cramer's V: education\\."
+  )
+
+  # Force uniform Cramer's V via single-string -> no note
+  out_uniform <- table_categorical(
+    sochealth,
+    select = c(smoking, education),
+    by = sex,
+    assoc_measure = "cramer_v",
+    output = "default"
+  )
+  expect_null(attr(out_uniform, "assoc_note"))
+})
+
+test_that("table_categorical accepts unnamed positional `assoc_measure` and validates length", {
+  # Positional, length matches select -> works
+  out <- table_categorical(
+    sochealth,
+    select = c(smoking, education),
+    by = sex,
+    assoc_measure = c("phi", "cramer_v"),
+    output = "long"
+  )
+  expect_true("Effect size" %in% names(out))
+
+  # Length mismatch (positional vec longer than select) -> actionable error.
+  # NB: length-1 unnamed is treated as a uniform single-string application,
+  # not as a positional vector, so we use length 3 vs select 2 here.
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = c(smoking, education),
+      by = sex,
+      assoc_measure = c("phi", "cramer_v", "tau_b"),
+      output = "long"
+    ),
+    "Unnamed `assoc_measure` has length 3 but `select` chose 2 variables"
+  )
+})
+
+test_that("table_categorical errors when `assoc_measure = 'phi'` requested on non-2x2", {
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = education,
+      by = sex,
+      assoc_measure = "phi"
+    ),
+    "requires a 2x2 table"
+  )
+
+  # Same via named per-variable form
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = c(smoking, education),
+      by = sex,
+      assoc_measure = c(education = "phi")
+    ),
+    "education.+requires a 2x2 table"
+  )
+})
+
+test_that("table_categorical rejects unknown `assoc_measure` values and bad keys", {
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = smoking,
+      by = sex,
+      assoc_measure = "not_a_measure"
+    ),
+    "is not one of"
+  )
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = smoking,
+      by = sex,
+      assoc_measure = c(no_such_var = "phi")
+    ),
+    "keys not found in `select`"
+  )
 })
 
 test_that("table_categorical drops association column when assoc_measure is none", {
@@ -665,7 +776,7 @@ test_that("table_categorical validates labels length", {
   df <- data.frame(g = c("A", "B"), v = c("x", "y"))
   expect_error(
     table_categorical(df, "v", "g", labels = c("a", "b")),
-    "`labels` must have same length"
+    class = "spicy_invalid_input"
   )
 })
 
@@ -979,7 +1090,9 @@ test_that("table_categorical rescale warning includes call. = FALSE", {
     ),
     warning = function(w) w
   )
-  expect_s3_class(w, "simpleWarning")
+  # Spicy classed warnings inherit from `rlang_warning` (a wider class
+  # than base `simpleWarning`); `expect_s3_class` matches either.
+  expect_s3_class(w, "warning")
   expect_null(w$call)
 })
 
@@ -1385,7 +1498,7 @@ test_that("table_categorical errors for missing tinytable package", {
       if (pkg == "tinytable") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1401,7 +1514,7 @@ test_that("table_categorical errors for missing gt package", {
       if (pkg == "gt") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1417,7 +1530,7 @@ test_that("table_categorical errors for missing flextable package", {
       if (pkg == "flextable") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1433,7 +1546,7 @@ test_that("table_categorical errors for missing openxlsx2 package", {
       if (pkg == "openxlsx2") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1454,7 +1567,7 @@ test_that("table_categorical errors for missing clipr package", {
       if (pkg == "clipr") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1493,7 +1606,7 @@ test_that("table_categorical grouped errors for missing tinytable", {
       if (pkg == "tinytable") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1514,7 +1627,7 @@ test_that("table_categorical grouped errors for missing gt", {
       if (pkg == "gt") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1530,7 +1643,7 @@ test_that("table_categorical grouped errors for missing flextable", {
       if (pkg == "flextable") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1551,7 +1664,7 @@ test_that("table_categorical grouped errors for missing openxlsx2", {
       if (pkg == "openxlsx2") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1573,7 +1686,7 @@ test_that("table_categorical grouped errors for missing clipr", {
       if (pkg == "clipr") {
         return(FALSE)
       }
-      base::requireNamespace(pkg, ...)
+      TRUE
     },
     .package = "base"
   )
@@ -1590,4 +1703,397 @@ test_that("table_categorical grouped errors for missing clipr", {
 
 test_that("table_categorical grouped word errors for missing officer", {
   skip("Cannot mock officer requireNamespace without recursion")
+})
+
+# ---- harmonisation with table_continuous() / _lm() (Phase 2) -------------
+
+test_that("align argument validates and is stored as attribute", {
+  for (a in c("decimal", "auto", "center", "right")) {
+    out <- table_categorical(sochealth, select = smoking, by = sex, align = a)
+    expect_equal(attr(out, "align"), a)
+  }
+  expect_error(
+    table_categorical(sochealth, select = smoking, by = sex, align = "bogus"),
+    "should be one of"
+  )
+})
+
+test_that("align defaults to 'decimal' on the printed object", {
+  out <- table_categorical(sochealth, select = smoking, by = sex)
+  expect_equal(attr(out, "align"), "decimal")
+  out_ow <- table_categorical(sochealth, select = smoking)
+  expect_equal(attr(out_ow, "align"), "decimal")
+})
+
+test_that("align = 'decimal' produces gt and tinytable outputs", {
+  skip_if_not_installed("gt")
+  skip_if_not_installed("tinytable")
+  out_gt <- table_categorical(
+    sochealth, select = smoking, by = sex, output = "gt", align = "decimal"
+  )
+  expect_s3_class(out_gt, "gt_tbl")
+
+  out_tt <- table_categorical(
+    sochealth, select = smoking, by = sex, output = "tinytable", align = "decimal"
+  )
+  expect_true(inherits(out_tt, "tinytable"))
+})
+
+test_that("align = 'center' / 'right' / 'auto' all render gt + tinytable", {
+  skip_if_not_installed("gt")
+  skip_if_not_installed("tinytable")
+  for (a in c("center", "right", "auto")) {
+    expect_s3_class(
+      table_categorical(
+        sochealth, select = smoking, by = sex, output = "gt", align = a
+      ),
+      "gt_tbl"
+    )
+    expect_true(inherits(
+      table_categorical(
+        sochealth, select = smoking, by = sex, output = "tinytable", align = a
+      ),
+      "tinytable"
+    ))
+  }
+})
+
+test_that("align = 'decimal' / 'center' / 'right' / 'auto' all render flextable", {
+  skip_if_not_installed("flextable")
+  for (a in c("decimal", "center", "right", "auto")) {
+    expect_s3_class(
+      table_categorical(
+        sochealth, select = smoking, by = sex,
+        output = "flextable", align = a
+      ),
+      "flextable"
+    )
+    expect_s3_class(
+      table_categorical(
+        sochealth, select = smoking,
+        output = "flextable", align = a
+      ),
+      "flextable"
+    )
+  }
+})
+
+test_that("align flows to word output (cross-tab + oneway)", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  for (a in c("decimal", "auto")) {
+    tmp <- tempfile(fileext = ".docx")
+    on.exit(unlink(tmp), add = TRUE)
+    res <- table_categorical(
+      sochealth, select = smoking, by = sex,
+      output = "word", word_path = tmp, align = a
+    )
+    expect_equal(res, tmp)
+    expect_true(file.exists(tmp))
+
+    tmp2 <- tempfile(fileext = ".docx")
+    on.exit(unlink(tmp2), add = TRUE)
+    res2 <- table_categorical(
+      sochealth, select = smoking,
+      output = "word", word_path = tmp2, align = a
+    )
+    expect_equal(res2, tmp2)
+    expect_true(file.exists(tmp2))
+  }
+})
+
+test_that("align flows to excel output (cross-tab + oneway, all values)", {
+  skip_if_not_installed("openxlsx2")
+  for (a in c("decimal", "center", "right", "auto")) {
+    tmp <- tempfile(fileext = ".xlsx")
+    on.exit(unlink(tmp), add = TRUE)
+    res <- table_categorical(
+      sochealth, select = smoking, by = sex,
+      output = "excel", excel_path = tmp, align = a
+    )
+    expect_equal(res, tmp)
+    expect_true(file.exists(tmp))
+  }
+})
+
+test_that("align = 'decimal' pads numeric clipboard cells (oneway + cross-tab)", {
+  skip_if_not_installed("clipr")
+  captured <- new.env()
+  testthat::local_mocked_bindings(
+    write_clip = function(text, ...) {
+      captured$text <- text
+      invisible(text)
+    },
+    .package = "clipr"
+  )
+
+  # Oneway: with decimal, the n-column header value "smoking" sits
+  # alongside padded blank cells, making the column dot-aligned for
+  # plain-text consumers. With auto, no padding is applied.
+  table_categorical(
+    sochealth, select = smoking, output = "clipboard", align = "decimal"
+  )
+  txt_dec <- captured$text
+  table_categorical(
+    sochealth, select = smoking, output = "clipboard", align = "auto"
+  )
+  txt_auto <- captured$text
+  expect_true(nchar(txt_dec) > nchar(txt_auto))
+
+  # Cross-tab: the n / % numeric columns are pre-padded; the
+  # Excel-text-wrapped p / Cramer's V columns are NOT padded inside
+  # the quote (trim happens before wrapping), so empty cells remain
+  # truly empty.
+  table_categorical(
+    sochealth, select = smoking, by = sex,
+    output = "clipboard", align = "decimal"
+  )
+  txt_ct_dec <- captured$text
+  expect_match(txt_ct_dec, "=\"\\.\\d+\"")  # wrapped p with no padding
+  # No spaces inside the wrapped quote
+  expect_false(any(grepl("=\"\\s+\\.\\d", strsplit(txt_ct_dec, "\n")[[1]])))
+})
+
+
+# ---- broom S3 methods -----------------------------------------------------
+
+test_that("as.data.frame() strips spicy classes and rendering attrs", {
+  out <- table_categorical(sochealth, select = smoking, by = sex)
+  df <- as.data.frame(out)
+  expect_true(inherits(df, "data.frame"))
+  expect_false("spicy_categorical_table" %in% class(df))
+  expect_false("spicy_table" %in% class(df))
+  expect_null(attr(df, "display_df"))
+  expect_null(attr(df, "long_data"))
+  expect_null(attr(df, "align"))
+  # group_var preserved as provenance
+  expect_equal(attr(df, "group_var"), "sex")
+})
+
+test_that("as_tibble() returns a tbl_df", {
+  skip_if_not_installed("tibble")
+  out <- table_categorical(sochealth, select = smoking, by = sex)
+  tb <- tibble::as_tibble(out)
+  expect_s3_class(tb, "tbl_df")
+})
+
+test_that("tidy() returns long-format with broom-conventional columns (cross-tab)", {
+  out <- table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex
+  )
+  td <- broom::tidy(out)
+  expect_setequal(
+    names(td),
+    c("outcome", "level", "group", "n", "proportion")
+  )
+  expect_true(all(td$proportion >= 0 & td$proportion <= 1))
+  expect_equal(unique(td$outcome), c("smoking", "physical_activity"))
+  # Real groups appear; the synthetic "Total" marginal is excluded
+  # by `tidy()` (one row per real group, broom convention).
+  expect_setequal(unique(td$group), c("Female", "Male"))
+})
+
+test_that("tidy() returns no group column without by", {
+  out <- table_categorical(sochealth, select = smoking)
+  td <- broom::tidy(out)
+  expect_false("group" %in% names(td))
+  expect_setequal(names(td), c("outcome", "level", "n", "proportion"))
+})
+
+test_that("glance() returns chi-squared test + association measure (cross-tab)", {
+  out <- table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex
+  )
+  gl <- broom::glance(out)
+  expect_setequal(
+    names(gl),
+    c(
+      "outcome",
+      "test_type",
+      "statistic",
+      "df",
+      "p.value",
+      "assoc_type",
+      "assoc_value",
+      "assoc_ci_lower",
+      "assoc_ci_upper",
+      "n_total"
+    )
+  )
+  expect_equal(nrow(gl), 2L)
+  expect_true(all(gl$test_type == "chi_squared"))
+  expect_true(all(is.finite(gl$statistic)))
+  expect_true(all(gl$df >= 1L))
+  expect_true(all(gl$p.value >= 0 & gl$p.value <= 1))
+  # smoking and physical_activity are both binary, sex is binary -> 2x2
+  # auto-rule picks Phi (see NEWS for 0.11.0).
+  expect_true(all(gl$assoc_type == "Phi"))
+})
+
+test_that("glance() returns NA test/ES, populated n_total without by", {
+  out <- table_categorical(sochealth, select = smoking)
+  gl <- broom::glance(out)
+  expect_equal(nrow(gl), 1L)
+  expect_true(is.na(gl$test_type))
+  expect_true(is.na(gl$statistic))
+  expect_true(is.na(gl$p.value))
+  expect_equal(gl$n_total, 1175L)  # observed n for smoking
+})
+
+test_that("glance() picks up assoc CIs when assoc_ci = TRUE", {
+  out <- table_categorical(
+    sochealth, select = smoking, by = sex, assoc_ci = TRUE
+  )
+  gl <- broom::glance(out)
+  expect_true(is.finite(gl$assoc_ci_lower))
+  expect_true(is.finite(gl$assoc_ci_upper))
+  expect_true(gl$assoc_ci_lower <= gl$assoc_value)
+  expect_true(gl$assoc_ci_upper >= gl$assoc_value)
+})
+
+# ---- audit fixes (n_total / Total filtering / p_digits threshold) --------
+
+test_that("glance() n_total excludes the synthetic 'Total' group", {
+  # smoking x sex with include_total = TRUE (default) should not
+  # double-count: the underlying analytic sample is the count of
+  # observations with non-NA smoking (1175 in sochealth), NOT
+  # 2 * 1175 (which is what summing across Female + Male + Total
+  # would give).
+  out <- table_categorical(sochealth, select = smoking, by = sex)
+  gl <- broom::glance(out)
+  observed_n <- sum(!is.na(sochealth$smoking))
+  expect_equal(gl$n_total, observed_n)
+
+  # Triple group setting with iris: 150 observations, three Species
+  # plus a Total marginal -> n_total must remain 150, not 4 * 50.
+  iris2 <- iris
+  iris2$pet_size <- factor(iris2$Petal.Length > 4, labels = c("small", "large"))
+  out_iris <- table_categorical(iris2, select = pet_size, by = Species)
+  gl_iris <- broom::glance(out_iris)
+  expect_equal(gl_iris$n_total, 150L)
+})
+
+test_that("glance() n_total stays correct when include_total = FALSE", {
+  out <- table_categorical(
+    sochealth, select = smoking, by = sex, include_total = FALSE
+  )
+  gl <- broom::glance(out)
+  expect_equal(gl$n_total, sum(!is.na(sochealth$smoking)))
+})
+
+test_that("tidy() drops the synthetic 'Total' group", {
+  out <- table_categorical(sochealth, select = smoking, by = sex)
+  td <- broom::tidy(out)
+  expect_false("Total" %in% td$group)
+  expect_setequal(unique(td$group), c("Female", "Male"))
+})
+
+test_that("tidy() respects include_total = FALSE without spurious Total rows", {
+  out <- table_categorical(
+    sochealth, select = smoking, by = sex, include_total = FALSE
+  )
+  td <- broom::tidy(out)
+  expect_false("Total" %in% td$group)
+})
+
+test_that("p_digits drives the small-p threshold in table_categorical()", {
+  # With a strong association, the chi-squared p-value falls well
+  # below 1e-4. p_digits = 4 -> the rendered p column should show
+  # `<.0001`, not `<.001` (which would be the legacy hardcoded
+  # threshold). Use the wide raw `data.frame` output and inspect the
+  # rendered display via the same code path the printed and gt
+  # outputs use.
+  out_default <- table_categorical(
+    sochealth, select = smoking, by = education
+  )
+  out_p4 <- table_categorical(
+    sochealth, select = smoking, by = education, p_digits = 4
+  )
+  # Both objects expose `display_df` as an attribute; the `p` column
+  # is rendered in the report-wide form.
+  disp_default <- attr(out_default, "display_df")
+  disp_p4 <- attr(out_p4, "display_df")
+  p_default <- disp_default[["p"]][nzchar(disp_default[["p"]])]
+  p_p4 <- disp_p4[["p"]][nzchar(disp_p4[["p"]])]
+  # Default: any small p prints as `<.001`
+  expect_true(any(grepl("^<\\.001$", p_default)))
+  # p_digits = 4: same small p prints as `<.0001`
+  expect_true(any(grepl("^<\\.0001$", p_p4)))
+})
+
+test_that("p_digits = 4 respects decimal_mark = ','", {
+  out <- table_categorical(
+    sochealth,
+    select = smoking,
+    by = education,
+    p_digits = 4,
+    decimal_mark = ","
+  )
+  disp <- attr(out, "display_df")
+  p_col <- disp[["p"]][nzchar(disp[["p"]])]
+  expect_true(any(grepl("^<,0001$", p_col)))
+})
+
+# ---- labels: dual-form (positional + named) -------------------------------
+
+test_that("labels accepts the legacy positional character vector", {
+  out <- table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    labels = c("Current smoker", "Physical activity"),
+    output = "long"
+  )
+  expect_setequal(unique(out$variable), c("Current smoker", "Physical activity"))
+})
+
+test_that("labels accepts a named character vector keyed by column name", {
+  out <- table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    labels = c(
+      smoking = "Current smoker",
+      physical_activity = "Physical activity"
+    ),
+    output = "long"
+  )
+  expect_setequal(unique(out$variable), c("Current smoker", "Physical activity"))
+})
+
+test_that("named labels can relabel only a subset; others fall back to column name", {
+  out <- table_categorical(
+    sochealth,
+    select = c(smoking, physical_activity),
+    labels = c(smoking = "CS only"),
+    output = "long"
+  )
+  expect_setequal(unique(out$variable), c("CS only", "physical_activity"))
+})
+
+test_that("named labels with unknown names error clearly", {
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = smoking,
+      labels = c(bogus = "X")
+    ),
+    "Names in `labels` not found in `data`"
+  )
+})
+
+test_that("positional labels with wrong length error clearly", {
+  expect_error(
+    table_categorical(
+      sochealth,
+      select = c(smoking, physical_activity),
+      labels = c("A", "B", "C")
+    ),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("non-character labels rejected at boundary", {
+  expect_error(
+    table_categorical(sochealth, select = smoking, labels = 123),
+    "must be a character vector"
+  )
 })

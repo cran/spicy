@@ -19,7 +19,6 @@
 #'
 #' @returns Invisibly returns the object `x`. The main purpose is the side effect of copying data to the clipboard.
 #'
-#' @importFrom tibble rownames_to_column
 #' @export
 #'
 #' @examples
@@ -66,23 +65,36 @@ copy_clipboard <- function(
   ...
 ) {
   if (!requireNamespace("clipr", quietly = TRUE)) {
-    stop(
+    spicy_abort(
       "Package 'clipr' is required for copy_clipboard(). Please install it.",
-      call. = FALSE
+      class = "spicy_missing_pkg"
     )
   }
 
   if (!clipr::clipr_available()) {
-    stop("Clipboard is not available on this system.", call. = FALSE)
+    spicy_abort(
+      "Clipboard is not available on this system.",
+      class = "spicy_unsupported"
+    )
   }
 
   is_df <- is.data.frame(x)
+  # Strict matrix excludes `table` because `as.data.frame.table()` reshapes
+  # the table into long-form (one row per cell), which is not what the
+  # `row.names.as.col` user expects -- they want a tabular layout with
+  # the dimnames promoted to a column.
   is_strict_matrix <- is.matrix(x) && !inherits(x, "table")
 
   needs_warning <- FALSE
   warn_msg <- NULL
 
   if (is.logical(row.names.as.col)) {
+    if (length(row.names.as.col) != 1L || is.na(row.names.as.col)) {
+      spicy_abort(
+        "`row.names.as.col` must be either FALSE, TRUE, or a single non-empty character string.",
+        class = "spicy_invalid_input"
+      )
+    }
     if (isTRUE(row.names.as.col)) {
       if (is_df) {
         x <- tibble::rownames_to_column(x, var = "rownames")
@@ -94,26 +106,39 @@ copy_clipboard <- function(
       }
     }
   } else if (is.character(row.names.as.col)) {
+    if (
+      length(row.names.as.col) != 1L ||
+        is.na(row.names.as.col) ||
+        !nzchar(row.names.as.col)
+    ) {
+      spicy_abort(
+        "`row.names.as.col` must be either FALSE, TRUE, or a single non-empty character string.",
+        class = "spicy_invalid_input"
+      )
+    }
     if (is_df) {
-      x <- tibble::rownames_to_column(x, var = row.names.as.col[1L])
+      x <- tibble::rownames_to_column(x, var = row.names.as.col)
     } else if (is_strict_matrix) {
       x <- tibble::rownames_to_column(
         as.data.frame(x),
-        var = row.names.as.col[1L]
+        var = row.names.as.col
       )
     } else {
       needs_warning <- TRUE
       warn_msg <- "`row.names.as.col` is ignored because `x` is not a data frame or matrix."
     }
   } else if (!identical(row.names.as.col, FALSE)) {
-    stop(
-      "`row.names.as.col` must be either FALSE, TRUE, or a character string.",
-      call. = FALSE
+    spicy_abort(
+      "`row.names.as.col` must be either FALSE, TRUE, or a single non-empty character string.",
+      class = "spicy_invalid_input"
     )
   }
 
-  msg_captured <- NULL
-  warn_captured <- NULL
+  # Accumulate clipr's messages and warnings (rather than overwriting),
+  # so a clipboard backend that emits more than one of either does not
+  # silently lose the earlier ones.
+  msgs_captured <- character()
+  warns_captured <- character()
   withCallingHandlers(
     clipr::write_clip(
       x,
@@ -123,36 +148,36 @@ copy_clipboard <- function(
     ),
     message = function(m) {
       if (!quiet) {
-        msg_captured <<- conditionMessage(m)
+        msgs_captured[[length(msgs_captured) + 1L]] <<- conditionMessage(m)
       }
       invokeRestart("muffleMessage")
     },
     warning = function(w) {
       if (!quiet) {
-        warn_captured <<- conditionMessage(w)
+        warns_captured[[length(warns_captured) + 1L]] <<- conditionMessage(w)
       }
       invokeRestart("muffleWarning")
     }
   )
 
-  use_color <- crayon::has_color()
-  green <- if (use_color) crayon::make_style("green") else identity
-  yellow <- if (use_color) crayon::make_style("yellow") else identity
+  if (!quiet) {
+    # Lazy color: only build the styles when there is something to print.
+    use_color <- crayon::has_color()
+    green <- if (use_color) crayon::make_style("green") else identity
+    yellow <- if (use_color) crayon::make_style("yellow") else identity
 
-  if (!quiet && isTRUE(show_message)) {
-    cat(green("Data successfully copied to clipboard!"), "\n")
-  }
-
-  if (!quiet && !is.null(msg_captured)) {
-    cat(yellow(paste0("Message: ", msg_captured)), "\n")
-  }
-
-  if (!quiet && !is.null(warn_captured)) {
-    cat(yellow(paste0("Warning: ", warn_captured)), "\n")
-  }
-
-  if (!quiet && needs_warning) {
-    cat(yellow(warn_msg), "\n")
+    if (isTRUE(show_message)) {
+      cat(green("Data successfully copied to clipboard!"), "\n")
+    }
+    for (msg in msgs_captured) {
+      cat(yellow(paste0("Message: ", msg)), "\n")
+    }
+    for (warn in warns_captured) {
+      cat(yellow(paste0("Warning: ", warn)), "\n")
+    }
+    if (needs_warning) {
+      cat(yellow(paste0("Warning: ", warn_msg)), "\n")
+    }
   }
 
   invisible(x)

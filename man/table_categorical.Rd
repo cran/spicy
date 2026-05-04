@@ -23,6 +23,7 @@ table_categorical(
   assoc_measure = "auto",
   assoc_ci = FALSE,
   decimal_mark = ".",
+  align = c("decimal", "auto", "center", "right"),
   output = c("default", "data.frame", "long", "tinytable", "gt", "flextable", "excel",
     "clipboard", "word"),
   indent_text = "  ",
@@ -44,9 +45,25 @@ syntax and character vectors of column names.}
 \item{by}{Optional grouping column used for columns/groups. Accepts an
 unquoted column name or a single character column name.}
 
-\item{labels}{An optional character vector of display labels for the
-variables named in \code{select} (must be the same length and in the same
-order). When \code{NULL} (the default), column names are used as-is.}
+\item{labels}{Optional display labels for the variables. Two
+forms are accepted (matching \code{\link[=table_continuous]{table_continuous()}} and
+\code{\link[=table_continuous_lm]{table_continuous_lm()}}):
+\itemize{
+\item A \strong{named character vector} whose names match column names
+in \code{data} (e.g. \code{c(bmi = "Body mass index")}); only listed
+columns are relabelled, others fall back to attribute-based
+labels or the column name. \strong{Recommended form}.
+\item A \strong{positional character vector} of the same length as
+\code{select}, in the same order. Backward-compatible with the
+spicy < 0.11.0 API.
+}
+
+When \code{NULL} (the default), column names are used as-is. If a
+variable label attribute is present (e.g. from \code{haven}), it is
+\emph{not} picked up here -- pass \code{labels = c(...)} explicitly. (The
+continuous companions auto-detect attribute labels; the
+categorical function is conservative because the indented row
+labels expect predictable text.)}
 
 \item{levels_keep}{Optional character vector of levels to keep/order for row
 modalities. If \code{NULL}, all observed levels are kept.}
@@ -85,19 +102,72 @@ Defaults to \code{3}.}
 \item{v_digits}{Number of digits for the association measure. Defaults
 to \code{2}.}
 
-\item{assoc_measure}{Passed to \code{\link[=cross_tab]{cross_tab()}}. Which association measure
-to report (\code{"auto"}, \code{"cramer_v"}, \code{"phi"}, \code{"gamma"}, \code{"tau_b"},
-\code{"tau_c"}, \code{"somers_d"}, \code{"lambda"}, \code{"none"}). Defaults to \code{"auto"}.}
+\item{assoc_measure}{Which association measure to report alongside the
+chi-squared \emph{p}-value. Accepts four input shapes:
+\itemize{
+\item \code{"none"} — drop the column entirely.
+\item \code{"auto"} (the default) — pick a measure per row variable based
+on the variable type: a 2x2 table (binary row variable
+vs. binary \code{by}) uses \strong{\code{phi}}, a pair of ordered factors uses
+\strong{\code{tau_b}}, every other case uses \strong{\code{cramer_v}}.
+\item a single string from
+\code{c("cramer_v", "phi", "gamma", "tau_b", "tau_c", "somers_d", "lambda")}
+— applied uniformly to every row variable.
+\item a character vector with one entry per row variable. Both
+\strong{named} (\code{c(smoking = "phi", health = "tau_b")}, recommended;
+unnamed variables fall back to \code{"auto"}) and \strong{unnamed}
+positional (\code{c("phi", "tau_b", "auto")}, paired up with
+\code{select}) are accepted. Named is more robust to reordering of
+\code{select}.
+}
+
+When a single measure is used for every row, the column header is
+that measure's name (e.g. \code{"Cramer's V"}). When multiple measures
+are used (typically with \code{"auto"} on a heterogeneous \code{select}),
+the header collapses to \code{"Effect size"} and an APA-style
+\code{Note.} line is appended documenting which measure was used for
+which variable.
+
+\code{phi} requires a 2x2 table; if explicitly requested for a
+non-2x2 variable, an error is raised so the user can choose
+another measure or fall back to \code{"auto"}.}
 
 \item{assoc_ci}{Passed to \code{\link[=cross_tab]{cross_tab()}}. If \code{TRUE}, includes the
-confidence interval of the association measure. In data formats
-(\code{"data.frame"}, \code{"long"}, \code{"excel"}, \code{"clipboard"}), two extra
-columns \verb{CI lower} and \verb{CI upper} are added.
-In rendered formats (\code{"gt"}, \code{"tinytable"}, \code{"flextable"}, \code{"word"}),
-the CI is shown inline (e.g., \code{.14 [.08, .19]}).
+confidence interval of the association measure. In wide raw
+outputs (\code{"data.frame"}, \code{"excel"}, \code{"clipboard"}), two extra
+columns \verb{CI lower} / \verb{CI upper} are added; in the long raw
+output (\code{"long"}) the bounds appear as \code{ci_lower} / \code{ci_upper}.
+In rendered formats (\code{"gt"}, \code{"tinytable"}, \code{"flextable"},
+\code{"word"}), the CI is shown inline (e.g., \code{.14 [.08, .19]}).
 Defaults to \code{FALSE}.}
 
 \item{decimal_mark}{Decimal separator (\code{"."} or \code{","}). Defaults to \code{"."}.}
+
+\item{align}{Horizontal alignment of numeric columns in the
+printed ASCII table and in the \code{tinytable}, \code{gt}, \code{flextable},
+\code{word}, and \code{clipboard} outputs. The first column (\code{Variable})
+is always left-aligned. One of:
+\itemize{
+\item \code{"decimal"} (default): align numeric columns on the decimal
+mark, the standard scientific-publication convention used by
+SPSS, SAS, LaTeX \code{siunitx}, and the native primitives of
+\code{\link[gt:cols_align_decimal]{gt::cols_align_decimal()}} and \code{tinytable::style_tt(align = "d")}.
+For engines without a native primitive (\code{flextable}, \code{word},
+\code{clipboard}, ASCII print), numeric cells are pre-padded with
+leading and trailing spaces so the dots line up vertically;
+the body of the \code{flextable}/\code{word} output additionally uses
+a monospace font (\code{Consolas}) to make character widths uniform.
+\item \code{"center"}: center-align all numeric columns.
+\item \code{"right"}: right-align all numeric columns.
+\item \code{"auto"}: legacy uniform right-alignment used in spicy < 0.11.0.
+}
+
+The \code{excel} output uses the engine's default alignment in any
+case: cell-string padding does not align decimals under
+proportional fonts, and Excel's native right-alignment combined
+with the per-column \code{numfmt} already produces dot-aligned
+columns. Same default and semantics as \code{\link[=table_continuous]{table_continuous()}} /
+\code{\link[=table_continuous_lm]{table_continuous_lm()}}.}
 
 \item{output}{Output format. One of:
 \itemize{
@@ -173,11 +243,37 @@ table (\code{"default"}), a wide or long numeric \code{data.frame}
 (\code{"tinytable"}, \code{"gt"}, \code{"flextable"}, \code{"excel"}, \code{"clipboard"},
 \code{"word"}).
 }
-\details{
-When \code{by} is used, each selected variable is cross-tabulated against
-the grouping variable with \code{\link[=cross_tab]{cross_tab()}}. Chi-squared statistics,
-\emph{p}-values, and the chosen association measure are reported for each
-variable.
+\section{Tests}{
+When \code{by} is used, each selected variable is cross-tabulated
+against the grouping variable with \code{\link[=cross_tab]{cross_tab()}}. The omnibus
+chi-squared test (with optional Yates continuity correction or
+Monte Carlo \emph{p}-value, see \code{correct} / \code{simulate_p}) is computed
+and reported in the \code{p} column. The chosen association measure
+(\code{assoc_measure}, with \code{"auto"} selecting Cramer's V for nominal
+variables and Kendall's Tau-b when both are ordered) is reported
+alongside, with optional CI via \code{assoc_ci}. Without \code{by}, the
+table reports the marginal frequency distribution of each variable
+with no inferential statistics.
+
+For model-based comparisons (cluster-robust SE, weighted contrasts,
+fitted means) on continuous outcomes, see \code{\link[=table_continuous_lm]{table_continuous_lm()}}.
+For descriptive (empirical) comparisons on continuous outcomes, see
+\code{\link[=table_continuous]{table_continuous()}}.
+}
+
+\section{Display conventions}{
+By default (\code{align = "decimal"}) numeric columns are aligned on
+the decimal mark, the standard scientific-publication convention
+used by SPSS, SAS, LaTeX \code{siunitx}, and the native primitives of
+\code{\link[gt:cols_align_decimal]{gt::cols_align_decimal()}} / \code{tinytable::style_tt(align = "d")}.
+For the printed ASCII table the alignment is achieved by padding
+numeric cells with leading and trailing spaces so dots line up
+vertically. Pass \code{align = "auto"} to revert to the legacy uniform
+right-alignment used in spicy < 0.11.0.
+
+\emph{p}-values are formatted with \code{p_digits} decimal places (default
+3, the APA standard). Leading zeros on \emph{p} are always stripped
+(\code{.045}, not \code{0.045}).
 
 Optional output engines require suggested packages:
 \itemize{
@@ -189,78 +285,174 @@ Optional output engines require suggested packages:
 \item \pkg{clipr} for \code{output = "clipboard"}
 }
 }
-\examples{
-# Long numeric output
-table_categorical(
-  data = sochealth,
-  select = c(smoking, physical_activity),
-  by = education,
-  labels = c("Current smoker", "Physical activity"),
-  output = "long"
-)
 
-# ASCII console output (default)
+\examples{
+# --- Basic usage ---------------------------------------------------------
+
+# Default: ASCII console table grouped by sex.
 table_categorical(
-  data = sochealth,
+  sochealth,
   select = c(smoking, physical_activity),
   by = sex
 )
 
-# One-way frequency-style table
+# One-way frequency-style table (no `by`).
 table_categorical(
-  data = sochealth,
+  sochealth,
   select = c(smoking, physical_activity)
 )
 
-# Wide numeric data.frame
+# Pretty labels keyed by column name.
 table_categorical(
-  data = sochealth,
+  sochealth,
   select = c(smoking, physical_activity),
   by = education,
-  labels = c("Current smoker", "Physical activity"),
+  labels = c(
+    smoking           = "Current smoker",
+    physical_activity = "Physical activity"
+  )
+)
+
+# Survey weights with rescaling.
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity),
+  by = education,
+  weights = "weight",
+  rescale = TRUE
+)
+
+# Confidence interval for the association measure.
+table_categorical(
+  sochealth,
+  select = smoking,
+  by = education,
+  assoc_ci = TRUE
+)
+
+# --- Per-variable association measure ----------------------------------
+
+# Default (`assoc_measure = "auto"`): one measure per row variable based on
+# the variable type (2x2 -> Phi, both ordered factors -> Kendall's Tau-b,
+# otherwise Cramer's V). When the chosen measures differ across rows, the
+# column header collapses to `"Effect size"` and an APA-style `Note.` line
+# documents which measure was used for which variable.
+table_categorical(
+  sochealth,
+  select = c(smoking, education),
+  by = sex
+)
+
+# Force a uniform measure across all row variables.
+table_categorical(
+  sochealth,
+  select = c(smoking, education),
+  by = sex,
+  assoc_measure = "cramer_v"
+)
+
+# Per-variable override (recommended named form).
+table_categorical(
+  sochealth,
+  select = c(smoking, education, self_rated_health),
+  by = sex,
+  assoc_measure = c(
+    smoking           = "phi",        # binary x binary
+    education         = "cramer_v",   # multi-category nominal
+    self_rated_health = "tau_b"       # ordinal x binary, Tau-b
+  )
+)
+
+# --- Output formats -----------------------------------------------------
+
+# The rendered outputs below all wrap the same call:
+#   table_categorical(sochealth,
+#                     select = c(smoking, physical_activity),
+#                     by = sex)
+# only `output` changes. Assign to a variable to avoid the
+# console-friendly text fallback that some engines fall back to
+# when printed directly in `?` help.
+
+# Wide data.frame (one row per modality).
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity),
+  by = sex,
   output = "data.frame"
 )
 
-# Weighted example
+# Long data.frame (one row per (modality x group)).
 table_categorical(
-  data = sochealth,
+  sochealth,
   select = c(smoking, physical_activity),
-  by = education,
-  labels = c("Current smoker", "Physical activity"),
-  weights = "weight",
-  rescale = TRUE,
-  simulate_p = FALSE,
+  by = sex,
   output = "long"
 )
 
 \donttest{
-# Optional output: tinytable
+# Rendered HTML / docx objects -- best viewed inside a
+# Quarto / R Markdown document or a pkgdown article.
 if (requireNamespace("tinytable", quietly = TRUE)) {
-  table_categorical(
-    data = sochealth,
-    select = c(smoking, physical_activity),
-    by = sex,
-    labels = c("Current smoker", "Physical activity"),
+  tt <- table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex,
     output = "tinytable"
   )
 }
-
-# Optional output: Excel
-if (requireNamespace("openxlsx2", quietly = TRUE)) {
-  table_categorical(
-    data = sochealth,
-    select = c(smoking, physical_activity),
-    by = education,
-    labels = c("Current smoker", "Physical activity"),
-    output = "excel",
-    excel_path = tempfile(fileext = ".xlsx")
+if (requireNamespace("gt", quietly = TRUE)) {
+  tbl <- table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex,
+    output = "gt"
   )
 }
+if (requireNamespace("flextable", quietly = TRUE)) {
+  ft <- table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex,
+    output = "flextable"
+  )
+}
+
+# Excel and Word: write to a temporary file.
+if (requireNamespace("openxlsx2", quietly = TRUE)) {
+  tmp <- tempfile(fileext = ".xlsx")
+  table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex,
+    output = "excel", excel_path = tmp
+  )
+  unlink(tmp)
+}
+if (
+  requireNamespace("flextable", quietly = TRUE) &&
+    requireNamespace("officer", quietly = TRUE)
+) {
+  tmp <- tempfile(fileext = ".docx")
+  table_categorical(
+    sochealth, select = c(smoking, physical_activity), by = sex,
+    output = "word", word_path = tmp
+  )
+  unlink(tmp)
+}
+}
+
+\dontrun{
+# Clipboard: writes to the system clipboard.
+table_categorical(
+  sochealth, select = c(smoking, physical_activity), by = sex,
+  output = "clipboard"
+)
 }
 
 }
 \seealso{
-\code{\link[=table_continuous]{table_continuous()}} for continuous variables;
-\code{\link[=cross_tab]{cross_tab()}} for two-way cross-tabulations; \code{\link[=freq]{freq()}} for one-way
-frequency tables.
+\code{\link[=table_continuous]{table_continuous()}} for empirical comparisons on
+continuous outcomes; \code{\link[=table_continuous_lm]{table_continuous_lm()}} for the model-based
+companion (heteroskedasticity-consistent / cluster-robust /
+bootstrap / jackknife SE, fitted means, weighted contrasts);
+\code{\link[=cross_tab]{cross_tab()}} for two-way cross-tabulations; \code{\link[=freq]{freq()}} for
+one-way frequency tables.
+
+Other spicy tables:
+\code{\link{spicy_tables}},
+\code{\link[=table_continuous]{table_continuous()}},
+\code{\link[=table_continuous_lm]{table_continuous_lm()}}
 }
+\concept{spicy tables}

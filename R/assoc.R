@@ -8,15 +8,39 @@
 
 .validate_table <- function(x, min_dim = c(2L, 2L)) {
   if (!inherits(x, "table")) {
-    stop("`x` must be a contingency table (class `table`).", call. = FALSE)
+    spicy_abort(
+      "`x` must be a contingency table (class `table`).",
+      class = "spicy_invalid_data"
+    )
   }
   if (length(dim(x)) != 2L) {
-    stop("`x` must be a two-dimensional table.", call. = FALSE)
+    spicy_abort(
+      "`x` must be a two-dimensional table.",
+      class = "spicy_invalid_data"
+    )
   }
   if (nrow(x) < min_dim[1] || ncol(x) < min_dim[2]) {
-    stop(
+    spicy_abort(
       sprintf("`x` must be at least %dx%d.", min_dim[1], min_dim[2]),
-      call. = FALSE
+      class = "spicy_invalid_data"
+    )
+  }
+  if (anyNA(x)) {
+    spicy_abort(
+      "`x` must not contain NA cells.",
+      class = "spicy_invalid_data"
+    )
+  }
+  if (any(x < 0)) {
+    spicy_abort(
+      "`x` must contain non-negative counts.",
+      class = "spicy_invalid_data"
+    )
+  }
+  if (sum(x) == 0) {
+    spicy_abort(
+      "`x` has zero total count; association is undefined.",
+      class = "spicy_invalid_data"
     )
   }
   invisible(NULL)
@@ -81,7 +105,10 @@
 #' @param x A `spicy_assoc_detail` object.
 #' @param digits Number of decimal places for the estimate, SE, and
 #'   confidence interval. Defaults to 3. The p-value is always
-#'   formatted separately (`< 0.001` or three decimal places).
+#'   formatted separately using APA notation (`<.001` or three
+#'   decimal places, no leading zero), via the shared
+#'   `format_p_value()` helper used by `cross_tab()` and the
+#'   `table_*()` family.
 #' @param ... Ignored.
 #' @return `x`, invisibly.
 #'
@@ -111,7 +138,9 @@ print.spicy_assoc_detail <- function(
         return("--")
       }
       if (nm == "p_value") {
-        if (v < 0.001) "< 0.001" else formatC(v, format = "f", digits = 3)
+        # APA-style: `<.001` / `.045`, no leading zero. Same helper
+        # as `cross_tab()` and the `table_*()` family.
+        format_p_value(v, decimal_mark = ".", digits = 3L)
       } else {
         formatC(v, format = "f", digits = digits)
       }
@@ -129,6 +158,28 @@ print.spicy_assoc_detail <- function(
     sep = ""
   )
   invisible(x)
+}
+
+
+# Internal: assemble the documented NA return shape, respecting `detail`,
+# `conf_level` and `.include_se`. Used by the degenerate-table branches
+# of `cramer_v()`, `yule_q()`, `gamma_gk()`, `kendall_tau_b()` and
+# `somers_d()` so they keep returning the same shape as the happy path
+# instead of a bare length-1 named vector.
+.na_assoc_result <- function(detail, conf_level, .include_se, digits) {
+  if (!detail) {
+    return(NA_real_)
+  }
+  .assoc_result(
+    NA_real_,
+    NA_real_,
+    conf_level = conf_level,
+    p_value = NA_real_,
+    ci_lower = NA_real_,
+    ci_upper = NA_real_,
+    .include_se = .include_se,
+    digits = digits
+  )
 }
 
 
@@ -206,10 +257,12 @@ print.spicy_assoc_detail <- function(
 #' Cramer's V is computed as
 #' \eqn{V = \sqrt{\chi^2 / (n \cdot (k - 1))}}, where \eqn{\chi^2}
 #' is the Pearson chi-squared statistic, \eqn{n} is the total count,
-#' and \eqn{k = \min(r, c)}.
-#' The confidence interval uses the Fisher z-transformation.
-#' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024).
+#' and \eqn{k = \min(r, c)}. The point estimate matches the
+#' DescTools (Signorell et al., 2024) and SPSS implementations.
+#' The confidence interval uses the Fisher z-transformation
+#' on \eqn{V} (\eqn{\tanh(\mathrm{atanh}(V) \pm z_{\alpha/2} /
+#' \sqrt{n - 3})}), which differs from the noncentral chi-squared
+#' or bootstrap CIs reported by `DescTools::CramerV()`.
 #'
 #' @references
 #' Agresti, A. (2002). *Categorical Data Analysis* (2nd ed.). Wiley.
@@ -226,6 +279,7 @@ print.spicy_assoc_detail <- function(
 #' cramer_v(tab, detail = TRUE, conf_level = NULL)
 #'
 #' @seealso [phi()], [contingency_coef()], [assoc_measures()]
+#' @family association measures
 #' @export
 cramer_v <- function(
   x,
@@ -237,13 +291,6 @@ cramer_v <- function(
   .validate_table(x)
   n <- sum(x)
   k <- min(nrow(x), ncol(x)) - 1L
-  if (n <= 0 || k <= 0) {
-    warning(
-      "Cramer's V is undefined for this table; returning NA.",
-      call. = FALSE
-    )
-    return(c(estimate = NA_real_))
-  }
   chi <- suppressWarnings(stats::chisq.test(x, correct = FALSE))
   chi2 <- as.numeric(chi$statistic)
   V <- sqrt(chi2 / (n * k))
@@ -288,10 +335,11 @@ cramer_v <- function(
 #' @details
 #' The phi coefficient is \eqn{\phi = \sqrt{\chi^2 / n}}.
 #' It is equivalent to Cramer's V for 2x2 tables and equals the
-#' Pearson correlation between the two binary variables.
-#' The confidence interval uses the Fisher z-transformation.
-#' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024); see [cramer_v()] for full references.
+#' Pearson correlation between the two binary variables. The point
+#' estimate matches the DescTools (Signorell et al., 2024) and SPSS
+#' implementations.
+#' The confidence interval uses the Fisher z-transformation on
+#' \eqn{\phi}; see [cramer_v()] for the formula and full references.
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$sex)
@@ -299,6 +347,7 @@ cramer_v <- function(
 #' phi(tab, detail = TRUE)
 #'
 #' @seealso [cramer_v()], [yule_q()], [assoc_measures()]
+#' @family association measures
 #' @export
 phi <- function(
   x,
@@ -309,7 +358,10 @@ phi <- function(
 ) {
   .validate_table(x, min_dim = c(2L, 2L))
   if (nrow(x) != 2L || ncol(x) != 2L) {
-    stop("`x` must be a 2x2 table for the phi coefficient.", call. = FALSE)
+    spicy_abort(
+      "`x` must be a 2x2 table for the phi coefficient.",
+      class = "spicy_unsupported"
+    )
   }
   n <- sum(x)
   chi <- suppressWarnings(stats::chisq.test(x, correct = FALSE))
@@ -367,6 +419,7 @@ phi <- function(
 #' contingency_coef(tab)
 #'
 #' @seealso [cramer_v()], [assoc_measures()]
+#' @family association measures
 #' @export
 contingency_coef <- function(
   x,
@@ -424,6 +477,7 @@ contingency_coef <- function(
 #' yule_q(tab)
 #'
 #' @seealso [phi()], [gamma_gk()], [assoc_measures()]
+#' @family association measures
 #' @export
 yule_q <- function(
   x,
@@ -434,7 +488,10 @@ yule_q <- function(
 ) {
   .validate_table(x, min_dim = c(2L, 2L))
   if (nrow(x) != 2L || ncol(x) != 2L) {
-    stop("`x` must be a 2x2 table for Yule's Q.", call. = FALSE)
+    spicy_abort(
+      "`x` must be a 2x2 table for Yule's Q.",
+      class = "spicy_unsupported"
+    )
   }
   a <- x[1, 1]
   b <- x[1, 2]
@@ -444,11 +501,9 @@ yule_q <- function(
   bc <- b * c_
 
   if (ad + bc == 0) {
-    warning(
-      "Yule's Q is undefined when ad + bc = 0; returning NA.",
-      call. = FALSE
-    )
-    return(c(estimate = NA_real_))
+    spicy_warn(
+      "Yule's Q is undefined when ad + bc = 0; returning NA.", class = "spicy_undefined_stat")
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
   }
 
   Q <- (ad - bc) / (ad + bc)
@@ -510,6 +565,7 @@ yule_q <- function(
 #'
 #' @seealso [goodman_kruskal_tau()], [uncertainty_coef()],
 #'   [assoc_measures()]
+#' @family association measures
 #' @export
 lambda_gk <- function(
   x,
@@ -647,6 +703,7 @@ lambda_gk <- function(
 #' goodman_kruskal_tau(tab, direction = "column", detail = TRUE)
 #'
 #' @seealso [lambda_gk()], [uncertainty_coef()], [assoc_measures()]
+#' @family association measures
 #' @export
 goodman_kruskal_tau <- function(
   x,
@@ -797,8 +854,17 @@ goodman_kruskal_tau <- function(
 #' the joint entropy.
 #' The symmetric version is
 #' \eqn{U = 2 (H_X + H_Y - H_{XY}) / (H_X + H_Y)}.
-#' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024); see [cramer_v()] for full references.
+#'
+#' The entropy terms use the standard mathematical convention
+#' \eqn{0 \log 0 = 0}, matching SPSS / PSPP `CROSSTABS` and the
+#' definition in Cover & Thomas (2006). Note that
+#' `DescTools::UncertCoef()` applies an additional Laplace
+#' correction (replacing zero cells with \eqn{1/n^2}) before the
+#' entropy computation, which produces slightly different point
+#' estimates on tables with empty cells; that correction is
+#' uncommon in the information-theory literature and is not used
+#' here. The asymptotic standard errors follow the DescTools delta
+#' method; see [cramer_v()] for full references.
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
@@ -806,6 +872,7 @@ goodman_kruskal_tau <- function(
 #' uncertainty_coef(tab, direction = "row", detail = TRUE)
 #'
 #' @seealso [lambda_gk()], [goodman_kruskal_tau()], [assoc_measures()]
+#' @family association measures
 #' @export
 uncertainty_coef <- function(
   x,
@@ -822,9 +889,12 @@ uncertainty_coef <- function(
   rsum <- rowSums(x)
   csum <- colSums(x)
 
-  # DescTools uses natural log on counts/n
-  H_x <- -sum((rsum * log(rsum / n)) / n)
-  H_y <- -sum((csum * log(csum / n)) / n)
+  # DescTools uses natural log on counts/n. Filter zero margins to avoid
+  # 0 * log(0) = NaN -- the `H_xy` line already guards on cells via x>0.
+  rsum_pos <- rsum[rsum > 0]
+  csum_pos <- csum[csum > 0]
+  H_x <- -sum((rsum_pos * log(rsum_pos / n)) / n)
+  H_y <- -sum((csum_pos * log(csum_pos / n)) / n)
   H_xy <- -sum(x[x > 0] * log(x[x > 0] / n) / n)
 
   mi <- H_x + H_y - H_xy # mutual information
@@ -932,6 +1002,7 @@ uncertainty_coef <- function(
 #'
 #' @seealso [kendall_tau_b()], [kendall_tau_c()], [somers_d()],
 #'   [assoc_measures()]
+#' @family association measures
 #' @export
 gamma_gk <- function(
   x,
@@ -946,8 +1017,8 @@ gamma_gk <- function(
   D <- cd$D
 
   if (C + D == 0) {
-    warning("No concordant or discordant pairs; returning NA.", call. = FALSE)
-    return(c(estimate = NA_real_))
+    spicy_warn("No concordant or discordant pairs; returning NA.", class = "spicy_undefined_stat")
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
   }
 
   G <- (C - D) / (C + D)
@@ -1002,6 +1073,7 @@ gamma_gk <- function(
 #'
 #' @seealso [kendall_tau_c()], [gamma_gk()], [somers_d()],
 #'   [assoc_measures()]
+#' @family association measures
 #' @export
 kendall_tau_b <- function(
   x,
@@ -1025,8 +1097,8 @@ kendall_tau_b <- function(
 
   denom <- sqrt((n0 - n1) * (n0 - n2))
   if (denom == 0) {
-    warning("Tau-b is undefined for this table; returning NA.", call. = FALSE)
-    return(c(estimate = NA_real_))
+    spicy_warn("Tau-b is undefined for this table; returning NA.", class = "spicy_undefined_stat")
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
   }
 
   tau_b <- (C - D) / denom
@@ -1101,6 +1173,7 @@ kendall_tau_b <- function(
 #'
 #' @seealso [kendall_tau_b()], [gamma_gk()], [somers_d()],
 #'   [assoc_measures()]
+#' @family association measures
 #' @export
 kendall_tau_c <- function(
   x,
@@ -1111,6 +1184,8 @@ kendall_tau_c <- function(
 ) {
   .validate_table(x)
   n <- sum(x)
+  # `.validate_table()` enforces nrow >= 2 and ncol >= 2, so `m >= 2`
+  # and the `(m - 1)` denominator below is always positive.
   m <- min(nrow(x), ncol(x))
   cd <- .concordance_counts(x)
   C <- cd$C
@@ -1174,6 +1249,7 @@ kendall_tau_c <- function(
 #' somers_d(tab, direction = "column", detail = TRUE)
 #'
 #' @seealso [kendall_tau_b()], [gamma_gk()], [assoc_measures()]
+#' @family association measures
 #' @export
 somers_d <- function(
   x,
@@ -1201,22 +1277,39 @@ somers_d <- function(
   ni <- switch(direction, row = csum, column = rsum, symmetric = NULL)
 
   if (direction == "symmetric") {
-    # Symmetric Somers' d equals tau-b
-    return(kendall_tau_b(
-      x,
-      detail = detail,
+    # SPSS/PSPP definition: symmetric Somers' D is the harmonic mean of
+    # the two asymmetric values d(R|C) and d(C|R). It is NOT identical
+    # to Kendall's tau-b (which is the geometric mean of the same two
+    # quantities), although they often agree to two decimals.
+    d_r <- somers_d(x, "row", detail = FALSE)
+    d_c <- somers_d(x, "column", detail = FALSE)
+    if (is.na(d_r) || is.na(d_c) || (d_r + d_c) == 0) {
+      d_sym <- NA_real_
+    } else {
+      d_sym <- 2 * d_r * d_c / (d_r + d_c)
+    }
+    if (!detail) {
+      return(d_sym)
+    }
+    # SE for the symmetric form is not implemented in DescTools either;
+    # we report the estimate without an analytic CI / p-value.
+    return(.assoc_result(
+      d_sym,
+      NA_real_,
       conf_level = conf_level,
-      .include_se = .include_se
+      p_value = NA_real_,
+      ci_lower = NA_real_,
+      ci_upper = NA_real_,
+      .include_se = .include_se,
+      digits = digits
     ))
   }
 
   denom <- n0 - switch(direction, row = n2, column = n1)
   if (denom == 0) {
-    warning(
-      "Somers' d is undefined for this table; returning NA.",
-      call. = FALSE
-    )
-    return(c(estimate = NA_real_))
+    spicy_warn(
+      "Somers' d is undefined for this table; returning NA.", class = "spicy_undefined_stat")
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
   }
   d_val <- (C - D) / denom
 
@@ -1311,6 +1404,7 @@ somers_d <- function(
 #' Statistics*. R package.
 #'
 #' @seealso [cramer_v()], [gamma_gk()], [kendall_tau_b()]
+#' @family association measures
 #' @export
 assoc_measures <- function(
   x,
@@ -1492,12 +1586,16 @@ assoc_measures <- function(
 #'
 #' Formats a `spicy_assoc_table` data frame (returned by
 #' [assoc_measures()]) with fixed decimal places, aligned columns,
-#' and `< 0.001` notation for small p-values.
+#' and APA-style `<.001` notation for small p-values (same helper as
+#' `cross_tab()` and the `table_*()` family).
 #'
 #' @param x A `spicy_assoc_table` object.
 #' @param digits Number of decimal places for estimates, SE, and
 #'   confidence intervals. Defaults to 3. The p-value is always
-#'   formatted separately (`< 0.001` or three decimal places).
+#'   formatted separately using APA notation (`<.001` or three
+#'   decimal places, no leading zero), via the shared
+#'   `format_p_value()` helper used by `cross_tab()` and the
+#'   `table_*()` family.
 #' @param ... Ignored.
 #' @return `x`, invisibly.
 #'
@@ -1513,11 +1611,16 @@ print.spicy_assoc_table <- function(
   fmt_num <- function(v) {
     ifelse(is.na(v), "--", formatC(v, format = "f", digits = digits))
   }
+  # APA-style p-value via the shared `format_p_value()` helper:
+  # `<.001` / `.045`, no leading zero. `vapply` rather than `ifelse`
+  # because `format_p_value()` is scalar-only.
   fmt_p <- function(v) {
-    ifelse(
-      is.na(v),
-      "--",
-      ifelse(v < 0.001, "< 0.001", formatC(v, format = "f", digits = 3))
+    vapply(
+      v,
+      function(p) {
+        if (is.na(p)) "--" else format_p_value(p, decimal_mark = ".", digits = 3L)
+      },
+      character(1)
     )
   }
   cols <- list(
