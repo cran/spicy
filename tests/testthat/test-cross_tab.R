@@ -714,3 +714,85 @@ test_that("cross_tab print uses digits=0 for count titles", {
   out <- capture.output(print(res))
   expect_true(length(out) > 0)
 })
+
+test_that("cross_tab auto-renames internal Total/N margin columns on collision", {
+  # Anti-regression for a silent data-corruption bug: when a y
+  # level was literally named "N" or "Total", `cross_tab(percent
+  # = "row")` and `percent = "column"` overwrote that user column
+  # with row totals, producing a plausible-looking but corrupt
+  # table. Now the function auto-picks a non-conflicting margin
+  # column name (e.g. "N_1", "Total_1") and emits a
+  # `spicy_renamed_column` warning, leaving the user's data
+  # intact.
+
+  # Y/N coding: the user's "N" level (% of "No") is preserved;
+  # the sample-size column gets renamed to "N_1".
+  df_yn <- data.frame(
+    group = c("A", "A", "A", "B", "B", "B"),
+    answer = c("Y", "N", "Y", "N", "Y", "N")
+  )
+  expect_warning(
+    res <- cross_tab(df_yn, group, answer, percent = "row"),
+    class = "spicy_renamed_column"
+  )
+  expect_true("N" %in% names(res))     # user data preserved
+  expect_true("N_1" %in% names(res))   # margin column renamed
+  expect_true("Total" %in% names(res)) # default margin name kept
+  # User's "N" column holds the % of "No" answers (not row totals).
+  # Group A: 1 N out of 3 -> 33.3%; Group B: 2 N out of 3 -> 66.7%.
+  expect_equal(res$N[res$Values == "A"], 33.3)
+  expect_equal(res$N[res$Values == "B"], 66.7)
+  # Sample-size column ("N_1") holds the row counts.
+  expect_equal(res$N_1[res$Values == "A"], 3)
+  expect_equal(res$N_1[res$Values == "B"], 3)
+
+  # User-level "Total": the user's Total level data preserved;
+  # the margin column gets renamed to "Total_1".
+  df_total <- data.frame(
+    group = c("A", "A", "B", "B"),
+    answer = c("Sub", "Total", "Sub", "Total")
+  )
+  expect_warning(
+    res2 <- cross_tab(df_total, group, answer, percent = "column"),
+    class = "spicy_renamed_column"
+  )
+  expect_true("Total" %in% names(res2))   # user data preserved
+  expect_true("Total_1" %in% names(res2)) # margin renamed
+
+  # `percent = "none"` does not touch the user's columns.
+  expect_no_warning(
+    cross_tab(df_yn, group, answer, percent = "none")
+  )
+
+  # `percent = "column"` with a Y/N coding does NOT trigger a
+  # rename: only "Total" is reserved as a column there (the "N"
+  # for sample size is a row label in this layout, not a column).
+  expect_no_warning(
+    cross_tab(df_yn, group, answer, percent = "column")
+  )
+
+  # User-level "Values" collides with the row-identifier column.
+  # Without the fix, R's data.frame() auto-renamed the user's
+  # column to "Values.1" silently AND make_named_row() then
+  # overwrote the totals row's identifier label with the
+  # percentage value of the y-level (because both keyed on
+  # "Values"). Now the row-identifier is renamed to "Values_1"
+  # explicitly and the user's "Values" column carries the
+  # correct percentages.
+  df_values <- data.frame(
+    group = c("A", "A", "A", "B", "B", "B"),
+    answer = c("Yes", "Values", "Yes", "Values", "Yes", "Values")
+  )
+  expect_warning(
+    res3 <- cross_tab(df_values, group, answer, percent = "row"),
+    class = "spicy_renamed_column"
+  )
+  expect_true("Values" %in% names(res3))    # user's y-level data preserved
+  expect_true("Values_1" %in% names(res3))  # row identifier renamed
+  # User's "Values" column holds the % of "Values" answers per row.
+  expect_equal(res3$Values[res3$Values_1 == "A"], 33.3)
+  expect_equal(res3$Values[res3$Values_1 == "B"], 66.7)
+  # Row identifier column carries the x-levels and the "Total"
+  # summary label, untouched by the y-level data.
+  expect_equal(res3$Values_1, c("A", "B", "Total"))
+})

@@ -576,7 +576,8 @@ also add group-comparison tests:</p>
 <span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary</span></span></code></pre></div>
 <p><code>table_continuous_lm()</code> covers the same reporting
 territory when you want to stay in a linear-model framework, for example
-with robust standard errors or case weights:</p>
+with robust or cluster-robust standard errors, case weights, or additive
+covariate adjustment:</p>
 <div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
 <span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
@@ -633,18 +634,26 @@ columns, with automatic handling of missing values.</p>
 <ul>
 <li>See <code>?varlist</code> to inspect variables, labels, values, and
 missing data.</li>
+<li>See <code>?freq</code> for one-way frequency tables (weights,
+sorting, custom missing values, labelled-data display modes).</li>
 <li>See <code>?cross_tab</code> for the full list of arguments (weights,
 simulation, association measures).</li>
+<li>See <code>?assoc_measures</code> for the complete list of
+association statistics; <code>?cramer_v</code> for the canonical entry
+point.</li>
 <li>See <code>?table_categorical</code> for grouped or one-way
 categorical tables.</li>
 <li>See <code>?table_continuous</code> for continuous summaries and
 group comparisons.</li>
 <li>See <code>?table_continuous_lm</code> for model-based
-mean-comparison tables with robust standard errors or case weights.</li>
-<li>See <code>?assoc_measures</code> for the complete list of
-association statistics.</li>
+mean-comparison tables with robust / cluster-robust / bootstrap /
+jackknife SE, case weights, or additive covariate adjustment.</li>
+<li>See <code>?mean_n</code>, <code>?sum_n</code>, <code>?count_n</code>
+for row-wise summaries with optional minimum-valid-values rules.</li>
 <li>See <code>?code_book</code> to generate an interactive HTML
-codebook.</li>
+codebook; <code>?label_from_names</code> to derive variable labels from
+<code>&quot;code. label&quot;</code>-style column names (e.g., LimeSurvey
+exports).</li>
 </ul>
 </div>
 

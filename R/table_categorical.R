@@ -1,9 +1,9 @@
-# ── Internal helpers for per-row association measure ─────────────────────────
+# -- Internal helpers for per-row association measure -------------------------
 
 # Pretty label for an association measure. Always ASCII so the
 # resulting string is safe to use as a data.frame column name (the
 # `out[["Kendall's Tau-b"]]` contract works on every platform) and as
-# a `glance()` value. A locale-aware Unicode upgrade (`τ`, `γ`)
+# a `glance()` value. A locale-aware Unicode upgrade (`tau`, `gamma`)
 # could be added later as a display-only print option without
 # affecting these data-side names.
 .assoc_label <- function(measure) {
@@ -254,21 +254,26 @@
 #'   `simulate_p = TRUE`. Defaults to `2000`.
 #' @param percent_digits Number of digits for percentages in report outputs.
 #'   Defaults to `1`.
-#' @param p_digits Number of digits for p-values (except `< .001`).
-#'   Defaults to `3`.
+#' @param p_digits Integer >= 1. Number of decimal places used to
+#'   render *p*-values in the `p` column (default: `3`, the APA
+#'   Publication Manual standard). Both the displayed precision and
+#'   the small-*p* threshold derive from this argument: `p_digits = 3`
+#'   prints `.045` and `<.001`; `p_digits = 4` prints `.0451` and
+#'   `<.0001`. Leading zeros are always stripped, following APA
+#'   convention.
 #' @param v_digits Number of digits for the association measure. Defaults
 #'   to `2`.
 #' @param assoc_measure Which association measure to report alongside the
 #'   chi-squared *p*-value. Accepts four input shapes:
 #'
-#'   * `"none"` — drop the column entirely.
-#'   * `"auto"` (the default) — pick a measure per row variable based
+#'   * `"none"` -- drop the column entirely.
+#'   * `"auto"` (the default) -- pick a measure per row variable based
 #'     on the variable type: a 2x2 table (binary row variable
 #'     vs. binary `by`) uses **`phi`**, a pair of ordered factors uses
 #'     **`tau_b`**, every other case uses **`cramer_v`**.
 #'   * a single string from
 #'     `c("cramer_v", "phi", "gamma", "tau_b", "tau_c", "somers_d", "lambda")`
-#'     — applied uniformly to every row variable.
+#'     -- applied uniformly to every row variable.
 #'   * a character vector with one entry per row variable. Both
 #'     **named** (`c(smoking = "phi", health = "tau_b")`, recommended;
 #'     unnamed variables fall back to `"auto"`) and **unnamed**
@@ -370,15 +375,14 @@
 #' # Tests
 #'
 #' When `by` is used, each selected variable is cross-tabulated
-#' against the grouping variable with [cross_tab()]. The omnibus
-#' chi-squared test (with optional Yates continuity correction or
-#' Monte Carlo *p*-value, see `correct` / `simulate_p`) is computed
-#' and reported in the `p` column. The chosen association measure
-#' (`assoc_measure`, with `"auto"` selecting Cramer's V for nominal
-#' variables and Kendall's Tau-b when both are ordered) is reported
-#' alongside, with optional CI via `assoc_ci`. Without `by`, the
-#' table reports the marginal frequency distribution of each variable
-#' with no inferential statistics.
+#' against the grouping variable with [cross_tab()] and the omnibus
+#' chi-squared *p*-value is reported in the `p` column. See
+#' `@param correct` / `simulate_p` to switch on Yates' continuity
+#' correction or Monte Carlo *p*-values, and `@param assoc_measure`
+#' for the per-row dispatch table used by `"auto"` (2x2 -> Phi,
+#' both ordered -> Kendall's Tau-b, otherwise Cramer's V). Without
+#' `by`, the table reports the marginal frequency distribution of
+#' each variable with no inferential statistics.
 #'
 #' For model-based comparisons (cluster-robust SE, weighted contrasts,
 #' fitted means) on continuous outcomes, see [table_continuous_lm()].
@@ -387,28 +391,9 @@
 #'
 #' # Display conventions
 #'
-#' By default (`align = "decimal"`) numeric columns are aligned on
-#' the decimal mark, the standard scientific-publication convention
-#' used by SPSS, SAS, LaTeX `siunitx`, and the native primitives of
-#' [gt::cols_align_decimal()] / `tinytable::style_tt(align = "d")`.
-#' For the printed ASCII table the alignment is achieved by padding
-#' numeric cells with leading and trailing spaces so dots line up
-#' vertically. Pass `align = "auto"` to revert to the legacy uniform
-#' right-alignment used in spicy < 0.11.0.
-#'
-#' *p*-values are formatted with `p_digits` decimal places (default
-#' 3, the APA standard). Leading zeros on *p* are always stripped
-#' (`.045`, not `0.045`).
-#'
-#' Optional output engines require suggested packages:
-#' \itemize{
-#'   \item \pkg{tinytable} for `output = "tinytable"`
-#'   \item \pkg{gt} for `output = "gt"`
-#'   \item \pkg{flextable} for `output = "flextable"`
-#'   \item \pkg{flextable} + \pkg{officer} for `output = "word"`
-#'   \item \pkg{openxlsx2} for `output = "excel"`
-#'   \item \pkg{clipr} for `output = "clipboard"`
-#' }
+#' Decimal alignment, *p*-value formatting, and required suggested
+#' packages per output engine are documented under `@param align`,
+#' `@param p_digits`, and `@param output` respectively.
 #'
 #' @family spicy tables
 #' @seealso [table_continuous()] for empirical comparisons on
@@ -501,9 +486,9 @@
 #' #   table_categorical(sochealth,
 #' #                     select = c(smoking, physical_activity),
 #' #                     by = sex)
-#' # only `output` changes. Assign to a variable to avoid the
-#' # console-friendly text fallback that some engines fall back to
-#' # when printed directly in `?` help.
+#' # only `output` changes. Assign each result to a variable -- some
+#' # engines auto-print as a console-friendly text fallback inside
+#' # the `?` help viewer.
 #'
 #' # Wide data.frame (one row per modality).
 #' table_categorical(
@@ -810,10 +795,17 @@ table_categorical <- function(
     ci_hi <- if (!is.null(ar)) ar[["ci_upper"]] else NA_real_
 
     if (!is.null(p_val) && !is.null(v_val)) {
-      p_op <- if (!is.na(p_val) && p_val < 0.001) "<" else "="
+      # Numeric path: leave the small-p threshold to `format_p_value()`
+      # via `p_digits`. Setting `p_op = "<"` here based on a hardcoded
+      # 0.001 threshold would force `fmt_p()` to render `"<.0001"` for
+      # any `p < 0.001`, even when `p_digits = 4` and the true value
+      # (e.g. 0.000108) is *greater* than the displayed-precision
+      # threshold (1e-4). The `<` override is reserved for the
+      # note-parsing fallback path below where the actual p-value is
+      # only available as the literal string "p < threshold".
       return(list(
         p = p_val,
-        p_op = p_op,
+        p_op = "=",
         v = v_val,
         measure = m_name %||% "Cramer's V",
         chi2 = chi2_val %||% NA_real_,
@@ -1432,12 +1424,16 @@ table_categorical <- function(
       last_row <- nrow(body_xl) + 1
       pct_fmt <- paste0("0.", paste(rep("0", percent_digits), collapse = ""))
 
-      # Header borders (top + bottom on row 1)
+      # Header borders (top + bottom on row 1). IMPORTANT:
+      # openxlsx2::wb_add_border() defaults every side to "thin", so
+      # left/right must be explicitly NULL to avoid painting vertical
+      # rules on every header cell.
       wb <- openxlsx2::wb_add_border(
         wb,
         dims = openxlsx2::wb_dims(rows = 1, cols = 1:nc),
         top_border = "thin",
-        bottom_border = "thin"
+        bottom_border = "thin",
+        left_border = NULL, right_border = NULL
       )
       if (nrow(body_xl) > 0) {
         # Body alignment. The Variable column is always left-aligned;
@@ -1473,7 +1469,8 @@ table_categorical <- function(
         wb <- openxlsx2::wb_add_border(
           wb,
           dims = openxlsx2::wb_dims(rows = last_row, cols = 1:nc),
-          bottom_border = "thin"
+          bottom_border = "thin",
+          top_border = NULL, left_border = NULL, right_border = NULL
         )
       }
 
@@ -2527,7 +2524,7 @@ table_categorical <- function(
         dims = openxlsx2::wb_dims(rows = 3:last_row, cols = 2:nc),
         horizontal = num_horiz
       )
-      # Text columns (p, assoc, CI) — force text format
+      # Text columns (p, assoc, CI) -- force text format
       text_cols <- if (show_assoc && assoc_ci) {
         (nc - 3):nc
       } else if (show_assoc) {
@@ -2542,27 +2539,34 @@ table_categorical <- function(
       )
     }
 
-    # APA borders
+    # APA borders. IMPORTANT: openxlsx2::wb_add_border() defaults
+    # every side to "thin"; explicit NULLs on the unused sides
+    # prevent vertical / spurious rules from being painted on
+    # every styled cell.
     wb <- openxlsx2::wb_add_border(
       wb,
       dims = openxlsx2::wb_dims(rows = 1, cols = 1:nc),
-      top_border = "thin"
+      top_border = "thin",
+      bottom_border = NULL, left_border = NULL, right_border = NULL
     )
     wb <- openxlsx2::wb_add_border(
       wb,
       dims = openxlsx2::wb_dims(rows = 1, cols = grp_j),
-      bottom_border = "thin"
+      bottom_border = "thin",
+      top_border = NULL, left_border = NULL, right_border = NULL
     )
     wb <- openxlsx2::wb_add_border(
       wb,
       dims = openxlsx2::wb_dims(rows = 2, cols = 1:nc),
-      bottom_border = "thin"
+      bottom_border = "thin",
+      top_border = NULL, left_border = NULL, right_border = NULL
     )
     if (nrow(body_xl) > 0) {
       wb <- openxlsx2::wb_add_border(
         wb,
         dims = openxlsx2::wb_dims(rows = last_row, cols = 1:nc),
-        bottom_border = "thin"
+        bottom_border = "thin",
+        top_border = NULL, left_border = NULL, right_border = NULL
       )
     }
 

@@ -6,20 +6,7 @@ knitr::opts_chunk$set(
 
 build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
 
-pkgdown_dark_gt <- function(tab) {
-  tab |>
-    gt::opt_css(
-      css = paste(
-        ".gt_table, .gt_heading, .gt_col_headings, .gt_col_heading,",
-        ".gt_column_spanner_outer, .gt_column_spanner, .gt_title,",
-        ".gt_subtitle, .gt_sourcenotes, .gt_sourcenote {",
-        "  background-color: transparent !important;",
-        "  color: currentColor !important;",
-        "}",
-        sep = "\n"
-      )
-    )
-}
+source("_pkgdown-helpers.R")
 
 ## ----setup--------------------------------------------------------------------
 library(spicy)
@@ -73,6 +60,26 @@ table_continuous_lm(
   sochealth,
   select = c(wellbeing_score, bmi),
   by = age,
+  vcov = "HC3"
+)
+
+## ----adjustment-basic---------------------------------------------------------
+table_continuous_lm(
+  sochealth,
+  select = c(wellbeing_score, bmi),
+  by = sex,
+  covariates = c(age, education),
+  vcov = "HC3"
+)
+
+## ----adjustment-balanced------------------------------------------------------
+# Same model, balanced (emmeans-style) marginal means:
+table_continuous_lm(
+  sochealth,
+  select = c(wellbeing_score, bmi),
+  by = sex,
+  covariates = c(age, education),
+  adjustment = "balanced",
   vcov = "HC3"
 )
 

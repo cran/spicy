@@ -16,8 +16,11 @@ spicy_print_table(
   lines_color = "darkgrey",
   align_left_cols = NULL,
   align_center_cols = integer(0),
+  center_headers = FALSE,
+  spanners = NULL,
   group_sep_rows = integer(0),
   total_row_idx = attr(x, "total_row_idx"),
+  display_labels = NULL,
   ...
 )
 }
@@ -58,6 +61,18 @@ If \code{NULL} (the default), alignment is auto-detected based on \code{x}:
 \item{align_center_cols}{Integer vector of column indices to
 center-align. Defaults to \code{integer(0)}.}
 
+\item{center_headers}{Logical. When \code{TRUE}, column headers are
+centered above their column content even when the data itself
+is right-aligned. Passed through to \code{\link[=build_ascii_table]{build_ascii_table()}}.
+Defaults to \code{FALSE}.}
+
+\item{spanners}{Optional named list of column-group labels
+(label -> integer column indices). Passed through to
+\code{\link[=build_ascii_table]{build_ascii_table()}};
+when the table is split into horizontal panels each panel keeps
+only the spanners whose columns are fully contained in it.
+Defaults to \code{NULL} (no spanner row).}
+
 \item{group_sep_rows}{Integer vector of row indices before which a
 light dashed separator line is drawn. Defaults to \code{integer(0)}.}
 
@@ -65,36 +80,40 @@ light dashed separator line is drawn. Defaults to \code{integer(0)}.}
 identifying the totals rows; defaults to the \code{"total_row_idx"}
 attribute of \code{x} (set by \code{cross_tab()}). See \code{\link[=build_ascii_table]{build_ascii_table()}}.}
 
+\item{display_labels}{Optional character vector of length \code{ncol(x)}
+used to override \code{colnames(x)} for the printed header text only.
+Sliced per panel when the table is split across stacked panels.
+Forwarded to \code{\link[=build_ascii_table]{build_ascii_table()}}; see that function for full
+semantics. Defaults to \code{NULL}.}
+
 \item{...}{Additional arguments passed to \code{\link[=build_ascii_table]{build_ascii_table()}}.}
 }
 \value{
 Invisibly returns \code{x}, after printing the formatted ASCII table to the console.
 }
 \description{
-User-facing helper that prints a visually aligned, spicy-styled ASCII table
-created by functions such as \code{\link[=freq]{freq()}} or \code{\link[=cross_tab]{cross_tab()}}.
-It automatically adjusts column alignment, spacing, and separators for
-improved readability in console outputs.
-
-This function wraps the internal renderer \code{\link[=build_ascii_table]{build_ascii_table()}}, adding
-optional titles, notes, and automatic alignment rules depending on the type
-of table.
+User-facing helper that prints a spicy-styled ASCII table to the
+console with optional title and note, table-type-aware alignment
+defaults, and automatic horizontal panelling when the table is
+wider than the console. Wraps the internal renderer
+\code{\link[=build_ascii_table]{build_ascii_table()}}.
 }
 \details{
-\code{spicy_print_table()} detects whether the table represents frequencies
-(\code{freq}-style) or cross-tabulations (\code{cross}-style) and adjusts formatting
-accordingly:
+Table type is auto-detected from \code{x} and drives the default
+alignment when \code{align_left_cols = NULL}:
 \itemize{
-\item For \strong{frequency tables}, the first two columns (\emph{Category} and \emph{Values})
-are left-aligned.
-\item For \strong{cross tables}, only the first column (row variable) is left-aligned.
+\item \strong{frequency table} (a \code{Category} column is present): the
+first two columns (\code{Category}, \code{Values}) are left-aligned.
+\item \strong{cross table} (otherwise): only the first column (row
+variable) is left-aligned.
 }
 
-The function supports Unicode line-drawing characters and colored separators
-using the \strong{crayon} package, with graceful fallback to monochrome output when
-color is not supported.
-If the table exceeds the console width, it is split into stacked horizontal
-panels while repeating the left-most identifier columns.
+If the table is wider than the console, it is split into stacked
+horizontal panels with the left-most identifier columns repeated
+on each panel. Unicode line-drawing characters are used by
+default; coloured separators are drawn when the terminal supports
+ANSI colour (\code{\link[crayon:has_color]{crayon::has_color()}}) and fall back to monochrome
+otherwise.
 }
 \examples{
 # Simple demonstration

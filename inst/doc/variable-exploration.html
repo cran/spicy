@@ -390,11 +390,12 @@ stores the label as a proper variable label.</p>
 <span id="cb2-14"><a href="#cb2-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb2-15"><a href="#cb2-15" tabindex="-1"></a><span class="co">#&gt; $smoke</span></span>
 <span id="cb2-16"><a href="#cb2-16" tabindex="-1"></a><span class="co">#&gt; [1] &quot;Current smoker&quot;</span></span></code></pre></div>
-<p>This is especially useful for LimeSurvey CSV exports when using
-Export results -&gt; Export format: CSV -&gt; Headings: Question code
-&amp; question text, where column names look like
-<code>&quot;code. question text&quot;</code>. In this case the default separator
-is <code>&quot;. &quot;</code>.</p>
+<p>The default separator <code>&quot;. &quot;</code> was chosen to match
+<strong>LimeSurvey CSV exports</strong> taken with <em>Export results
+-&gt; Export format: CSV -&gt; Headings: Question code &amp; question
+text</em>, which produce column names of the form
+<code>&quot;code. question text&quot;</code>. Pass <code>sep =</code> to use any
+other literal separator.</p>
 </div>
 <div id="inspect-variables-with-varlist" class="section level2">
 <h2>Inspect variables with varlist()</h2>
@@ -534,6 +535,13 @@ or a tibble you can inspect directly.</p>
 call in interactive work.</p>
 <p>Use <code>code_book()</code> when you want a searchable, interactive
 codebook for review or export.</p>
+<p>The two tools share their column structure but differ in one default:
+<code>varlist()</code> shows only the <strong>observed</strong> factor
+levels in the <code>Values</code> column (Stata <code>tab</code> style),
+whereas <code>code_book()</code> shows <strong>all declared</strong>
+levels including unused ones (SPSS <code>FREQUENCIES</code> style,
+appropriate for schema documentation). Pass <code>factor_levels =</code>
+explicitly to either function to override the default.</p>
 </div>
 
 

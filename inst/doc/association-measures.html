@@ -472,9 +472,14 @@ the Pearson chi-squared test.</p>
 </div>
 <div id="phi-coefficient" class="section level3">
 <h3>Phi coefficient</h3>
-<p>For 2x2 tables, Phi is equivalent to Cramer’s V. Unlike V, Phi can be
-negative when the table is 2x2, indicating the direction of association.
-The p-value tests H0: no association (Pearson chi-squared test).</p>
+<p>For 2x2 tables, Phi is equivalent to Cramer’s V. spicy implements Phi
+as <span class="math inline">\(\sqrt{\chi^2 / n}\)</span>, matching the
+DescTools and SPSS conventions – the value is always non-negative and
+reports only the <em>strength</em> of association, not its direction. To
+recover the signed direction, compute the Pearson correlation between
+the two binary variables explicitly (e.g., <code>cor(x, y)</code> after
+coding both 0/1). The p-value tests H0: no association (Pearson
+chi-squared test).</p>
 <div class="sourceCode" id="cb5"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb5-1"><a href="#cb5-1" tabindex="-1"></a>tbl_22 <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> physical_activity, <span class="at">data =</span> sochealth)</span>
 <span id="cb5-2"><a href="#cb5-2" tabindex="-1"></a><span class="fu">phi</span>(tbl_22, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb5-3"><a href="#cb5-3" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper     p</span></span>
@@ -652,9 +657,11 @@ be changed with <code>conf_level</code>:</p>
 <p>When <code>detail = FALSE</code> (the default), functions return a
 plain numeric scalar, so R’s own formatting rules apply. When
 <code>detail = TRUE</code>, the result uses a custom print method that
-defaults to 3 decimal places. Pass <code>digits</code> to change this
-(the p-value always uses 3 decimal places or
-<code>&lt; 0.001</code>):</p>
+defaults to 3 decimal places. Pass <code>digits</code> to change the
+precision of the estimate, SE, and CI columns. The p-value follows
+APA-style formatting independent of <code>digits</code>: 3 decimal
+places with the leading zero stripped (<code>.045</code>) or
+<code>&lt;.001</code> below the threshold:</p>
 <div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>, <span class="at">digits =</span> <span class="dv">4</span>)</span>
 <span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper      p</span></span>
 <span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a><span class="co">#&gt;   0.1762    0.1203    0.2309  &lt;.001</span></span></code></pre></div>

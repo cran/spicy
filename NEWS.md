@@ -1,3 +1,94 @@
+# spicy 0.12.0
+
+## New features
+
+* New `table_regression()`: publication-ready coefficient summary
+  for one or more fitted `lm` or `glm` models, side by side. APA
+  Manual 7 formatting is the default. Highlights:
+
+  * Robust variance: classical, HC, cluster-robust (CR) with
+    Satterthwaite df, bootstrap, jackknife. Per-model `vcov`
+    accepted for SE-comparison tables.
+  * Standardisation: `refit`, `posthoc`, `basic`, `smart`,
+    `pseudo` (the last `glm` only).
+  * Average marginal effects (AME) as separate columns; AME
+    inference shares the coefficient's variance estimator so B
+    and AME are reported on the same inferential footing.
+  * Partial effect sizes: f², η², ω² for `lm` (noncentral-F CIs);
+    partial χ² for `glm`.
+  * GLM response-scale reporting via `exponentiate = TRUE`, with
+    family-appropriate labels (OR, IRR, HR, RR, MR, exp(B)) and
+    optional profile-likelihood CIs (`ci_method = "profile"`).
+  * Multiplicity correction via `p_adjust` (any
+    `stats::p.adjust()` method).
+  * Hierarchical comparison via `nested = TRUE` (ΔR² / F-change
+    for `lm`; LRT for `glm`).
+  * Display controls: variable filtering, intercept and factor
+    placement, reference-row styles, multi-model labels, stars,
+    decimal mark, per-column digits.
+  * Outputs: console, `data.frame`, long tibble, `gt`,
+    `flextable`, `tinytable`, Excel, Word, clipboard.
+    `broom::tidy()` and `broom::glance()` methods supported.
+
+  See `?table_regression` and `vignette("table-regression")`.
+
+* `table_continuous_lm()` gains additive covariate adjustment via
+  the new `covariates` argument. Two estimands for the per-group
+  adjusted means: `"proportional"` (G-computation, default) and
+  `"balanced"` (equal-weight synthetic grid). Under adjustment,
+  `f²` and `ω²` become partial effect sizes; `d` and `g` raise an
+  explanatory error. The auto-built footer documents the
+  covariates and the estimand. See `vignette("table-continuous-lm")`.
+
+* New exported `as_structured()` accessor returns a typed view of
+  a `table_regression()` result for programmatic use: raw
+  numerics, CI split into `LL` / `UL` columns, and a column-level
+  format specification.
+
+## Breaking changes
+
+* `code_book()` no longer silently truncates the export filename
+  to 120 characters. Very long titles now surface a clear
+  OS-level error. **Migration**: shorten the title or pass an
+  explicit `filename =` argument.
+
+## Bug fixes
+
+* `table_categorical()` no longer over-truncates a *p*-value in
+  the interval `(10^-p_digits, 0.001)` when `p_digits >= 4`.
+  Example: `p = 0.000108` now correctly prints as `".0001"` at
+  `p_digits = 4` (was `"<.0001"`).
+* `count_n(special = ...)` returns a length-`nrow(data)` zero
+  vector when no usable column survives the list-column filter,
+  matching the documented contract and the `count = ...` branch
+  (was `numeric(0)`, which broke `dplyr::mutate()` pipelines).
+* `lambda_gk()` and `goodman_kruskal_tau()` emit
+  `spicy_undefined_stat` and return a fully-`NA` result on
+  rank-1 contingency tables (constant predicted variable),
+  matching the existing pattern in `gamma_gk()`,
+  `kendall_tau_b()`, `somers_d()`, and `yule_q()`.
+* `cross_tab()` no longer silently overwrites a user's y-variable
+  level named `"N"`, `"Total"` or `"Values"`. The conflicting
+  reserved column is auto-renamed with a numbered suffix and a
+  single `spicy_renamed_column` warning is emitted.
+* `broom::glance()` on a `spicy_continuous_lm_table` keeps
+  `df.residual` numeric, so Satterthwaite degrees of freedom
+  from `vcov = "CR2"` / `"CR3"` are preserved verbatim instead
+  of being truncated through `as.integer()`.
+
+## Minor improvements
+
+* Console em-dash alignment: non-numeric placeholders (em-dash,
+  "NA") sit at the decimal-mark column instead of the integer-
+  part column (APA Manual 7 §7.13). Integer cells in mixed-
+  precision columns (`n` row alongside `R²`) keep their right-
+  aligned placement.
+* `R/` source is byte-pure ASCII (`tools::showNonASCIIfile()`
+  reports zero hits package-wide).
+* `openxlsx2::wb_add_border()` calls now pass `NULL` on unused
+  sides, preventing the default `"thin"` from being applied to
+  all four sides of a cell when only one rule is intended.
+
 # spicy 0.11.0
 
 ## New features
@@ -45,11 +136,10 @@
   `freq()`, `cross_tab()` and `table_*()` use
   `method = "radix"`. Output is byte-stable across locales and
   platforms, matching Stata / SPSS guarantees.
-* **Edge-case hardening.** `varlist()` / `code_book()` /
-  `cross_tab()` / `freq()` no longer crash on zero-length or
-  all-NA `Date` / `POSIXct` / `character` columns or factors
-  with no observed levels (R 4.6.0 `sort()` segfaults on these
-  inputs).
+* **Edge-case hardening.** A new length-guarded sort helper makes
+  `varlist()` / `code_book()` / `cross_tab()` / `freq()` survive
+  zero-length or all-NA `Date` / `POSIXct` / `character` columns
+  and factors with no observed levels.
 * **Snapshot-locked rendering.** `tests/testthat/test-snapshots.R`
   pins the exact console output of every spicy print method, so
   any unintended formatting drift surfaces as a PR diff.
@@ -352,7 +442,6 @@
 * `freq()` now dispatches printing correctly via S3.
 * Removed unused `collapse` and `stringi` from `Imports`.
 
-
 # spicy 0.4.2
 
 * `cross_tab()` hardening: improved vector-mode detection (including labelled vectors), stricter weight validation, safer rescaling, and clearer early errors (e.g., explicit `y = NULL`).
@@ -364,7 +453,6 @@
 * `cramer_v()` now returns `NA` with warning for degenerate tables.
 * Dependency optimization: `DT` and `clipr` moved to `Suggests`; optional runtime checks added in `code_book()` and `copy_clipboard()`.
 * Tests expanded with regression coverage for all the above edge cases.
-
 
 # spicy 0.4.1
 
@@ -393,7 +481,6 @@
 * Minor cosmetic improvement: ASCII table output no longer includes a closing
   bottom rule by default.
 
-
 # spicy 0.3.0
 
 * New function `code_book()`, which generates a comprehensive variable
@@ -420,10 +507,10 @@
 * Introduces a collection of tools for variable inspection, descriptive
   summaries, and data exploration.
 * Provides functions to:
-  - Extract variable metadata and display compact summaries (`varlist()`).
-  - Compute frequency tables (`freq()`), cross-tabulations (`cross_tab()`),
+  * Extract variable metadata and display compact summaries (`varlist()`).
+  * Compute frequency tables (`freq()`), cross-tabulations (`cross_tab()`),
     and Cramer's V for categorical associations (`cramer_v()`).
-  - Generate descriptive statistics such as means (`mean_n()`), sums
+  * Generate descriptive statistics such as means (`mean_n()`), sums
     (`sum_n()`), and counts (`count_n()`) with automatic handling of
     missing data.
-  - Copy data (`copy_clipboard()`) directly to the clipboard for quick export.
+  * Copy data (`copy_clipboard()`) directly to the clipboard for quick export.

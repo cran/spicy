@@ -376,9 +376,19 @@ test_that("gamma_gk NA path returns scalar by default and full shape with detail
 
 
 # Anti-regression: oracle values from PSPP 2.0 CROSSTABS /STATISTICS=ALL.
-# These pin spicy's point estimates to the SPSS/PSPP reference at 1e-6 on
-# four datasets (mtcars 3x3, mtcars 2x2, HairEyeColor 4x4, sochealth).
-# Generated 2026-05-01; see tmp_validation/REPORT.md for the full matrix.
+# These pin spicy's point estimates to the SPSS / PSPP reference at 1e-5
+# on four datasets:
+#
+#   * mtcars 3x3 (gear x cyl)            -- 16 statistics
+#   * mtcars 2x2 (vs x am)               -- 10 statistics
+#   * HairEyeColor 4x4 (Hair x Eye)      --  8 statistics
+#   * sochealth (smoking x education)    --  6 statistics
+#
+# Total: 40 oracle assertions. Generated against PSPP 2.0 on 2026-05-01.
+# Reproduction: install PSPP, save the four tables as .sav, run
+# `CROSSTABS /STATISTICS=ALL` on each, and compare the printed values
+# to the constants below. Each constant matches PSPP's reported value
+# to 7 decimals (rounded to 1e-5 here for cross-platform stability).
 
 test_that("PSPP oracle: mtcars 3x3 (gear x cyl)", {
   tab <- table(factor(mtcars$gear), factor(mtcars$cyl))
@@ -461,6 +471,55 @@ test_that("kendall_tau_b warns on degenerate table", {
   class(tab) <- "table"
   res <- kendall_tau_b(tab)
   expect_true(is.numeric(res))
+})
+
+test_that("lambda_gk warns + returns NA on rank-1 (constant variable) table", {
+  # Anti-regression: a 2x2 with all observations in one row had
+  # `denom = n - max_rsum = 0` -> estimate `0/0 = NaN`. The
+  # no-detail branch silently returned NaN; the detail branch
+  # errored at the unguarded `if (se > 0)` step because
+  # `is.na(NaN > 0) = NA` makes `if (NA)` raise.
+  rank1 <- matrix(c(10L, 0L, 0L, 0L), 2, 2)
+  class(rank1) <- "table"
+  dimnames(rank1) <- list(x = c("a", "b"), y = c("Y", "N"))
+
+  expect_warning(
+    res <- lambda_gk(rank1, "row"),
+    class = "spicy_undefined_stat"
+  )
+  expect_true(is.na(res))
+
+  # Detail mode: returns the fully NA-shaped result (no error).
+  expect_warning(
+    res_d <- lambda_gk(rank1, "row", detail = TRUE),
+    class = "spicy_undefined_stat"
+  )
+  expect_true(all(is.na(res_d)))
+  expect_named(
+    res_d,
+    c("estimate", "ci_lower", "ci_upper", "p_value")
+  )
+})
+
+test_that("goodman_kruskal_tau warns + returns NA on rank-1 table", {
+  # Anti-regression for the parallel silent-NaN bug:
+  # `(n - v) = 0` when v = sum(rsum^2)/n = n (a single-row table)
+  # produced silent NaN. Now warns and returns NA shape.
+  rank1 <- matrix(c(10L, 0L, 0L, 0L), 2, 2)
+  class(rank1) <- "table"
+  dimnames(rank1) <- list(x = c("a", "b"), y = c("Y", "N"))
+
+  expect_warning(
+    res <- goodman_kruskal_tau(rank1, "row"),
+    class = "spicy_undefined_stat"
+  )
+  expect_true(is.na(res))
+
+  expect_warning(
+    res_d <- goodman_kruskal_tau(rank1, "row", detail = TRUE),
+    class = "spicy_undefined_stat"
+  )
+  expect_true(all(is.na(res_d)))
 })
 
 test_that("kendall_tau_c warns on 1-row table", {

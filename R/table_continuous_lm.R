@@ -1,15 +1,25 @@
 #' Continuous-outcome linear-model table
 #'
 #' @description
-#' Builds APA-style summary tables from a series of simple linear models for
-#' one or many continuous outcomes selected with tidyselect syntax.
+#' Builds APA-style summary tables from a series of linear models for one
+#' or many continuous outcomes selected with tidyselect syntax.
 #'
-#' A single predictor is supplied with `by`, and each selected numeric
-#' outcome is fit as `lm(outcome ~ by, ...)`. When `by` is categorical, the
-#' function returns a model-based mean-comparison table with fitted means by
-#' level derived from the linear model, plus an optional single difference for
-#' dichotomous predictors. When `by` is numeric, the table reports the slope
-#' and its confidence interval.
+#' A single focal predictor is supplied with `by`; each selected numeric
+#' outcome is fit as `lm(outcome ~ by, ...)`, optionally extended with
+#' additive covariates via `covariates` and case weights via `weights`.
+#' Categorical `by` produces model-based estimated marginal means by
+#' level (covariate-adjusted via `adjustment` when covariates are
+#' present), plus an optional single difference for dichotomous
+#' predictors. Numeric `by` produces the slope and its confidence
+#' interval.
+#'
+#' Inference adapts via `vcov`: classical OLS, `"HC0"`-`"HC5"`
+#' (heteroscedasticity-consistent), `"CR0"`-`"CR3"` (cluster-robust,
+#' requires `cluster`), or `"bootstrap"` / `"jackknife"` resampling.
+#' Effect sizes (Cohen's `"d"`, Hedges' `"g"`, Hays' `"omega2"`,
+#' Cohen's `"f2"`) are reported with optional noncentral *t* / *F*
+#' confidence intervals via `effect_size_ci`, and adapt under
+#' covariate adjustment (see `effect_size`).
 #'
 #' Multiple output formats are available via `output`: a printed ASCII table
 #' (`"default"`), a plain wide `data.frame` (`"data.frame"`), a raw long
@@ -23,8 +33,8 @@
 #'   pattern (character string).
 #' @param by A single predictor column. Accepts an unquoted column name or a
 #'   single character column name. The predictor can be:
-#'   - **numeric** (continuous): treated as a covariate. The table reports
-#'     the slope and its CI from `lm(y ~ by)`.
+#'   - **numeric** (continuous): treated as a continuous regressor. The
+#'     table reports the slope of `by` and its CI from `lm(y ~ by, ...)`.
 #'   - **factor** or **ordered factor**: treated as categorical. Level order
 #'     is preserved as declared; the **first level** is the reference for
 #'     the displayed contrast (R's default treatment-contrast convention).
@@ -38,6 +48,66 @@
 #'
 #'   Rows with `NA` in `by` are excluded from the analytic sample for each
 #'   outcome (NAs in `y` and `weights` are also excluded; see Details).
+#' @param covariates Optional additive covariates to adjust each per-outcome
+#'   linear model for. Accepts a tidyselect expression (e.g.
+#'   `covariates = c(age, sex)`, `covariates = tidyselect::all_of(cov_vec)`,
+#'   `covariates = tidyselect::starts_with("control_")`) or a literal
+#'   character vector of column names. Each covariate must be numeric,
+#'   integer, logical, factor, or character; covariates that also appear
+#'   in `select` are silently auto-excluded from the outcome list (a
+#'   variable cannot be both outcome and adjustment), and a covariate
+#'   that equals `by` raises an error (a variable cannot be both
+#'   predictor and adjustment).
+#'
+#'   When non-empty, each model is fitted as `lm(y ~ by + cov1 + cov2 + ...)`
+#'   and the reported estimate / SE / p-value / CI on `by` are
+#'   covariate-adjusted via the focal coefficient. For categorical `by`,
+#'   the displayed `emmean` is the covariate-adjusted estimated marginal
+#'   mean -- see `adjustment` for the choice of estimand
+#'   (G-computation by default vs. equal-weight averaging). The omnibus
+#'   test of `by` is the Wald *F* restricted to the focal coefficients
+#'   (computed via `sandwich` / `clubSandwich` for HC* / CR* mode), so
+#'   adding covariates does not contaminate the omnibus statistic with
+#'   covariate contributions. Effect sizes adapt automatically -- see
+#'   `effect_size`.
+#'
+#'   v1 supports additive covariates only. Formula syntax with
+#'   interactions or transforms (`covariates = ~ age * sex`,
+#'   `covariates = ~ I(age^2)`) is reserved for a future release; passing
+#'   a formula raises a `spicy_unsupported` error with a migration hint.
+#'
+#'   Rows with `NA` in any covariate are dropped from the analytic
+#'   sample for each outcome (complete-cases per outcome, matching the
+#'   existing `by` / `weights` NA handling).
+#' @param adjustment How the covariate-adjusted estimated marginal
+#'   means (the `emmean` / `emmean_se` / `emmean_ci_*` columns) are
+#'   computed when `covariates` is non-empty. One of:
+#'   - `"proportional"` (the default; matches Stata `margins` and
+#'     [marginaleffects::avg_predictions()]): G-computation on the
+#'     observed sample. For each focal level of `by`, the model
+#'     predicts at every observation with `by` set to that level
+#'     (covariates kept at their observed values), and the
+#'     predictions are averaged. Population-weighted by construction
+#'     -- the empirical joint distribution of covariates is the
+#'     reference. Best when the goal is "what is the predicted
+#'     mean in *this* population if everyone had `by = lvl`".
+#'   - `"balanced"` (matches [emmeans::emmeans()] default and the
+#'     SPSS UNIANOVA EMMEANS / SAS LSMEANS conventions): synthetic
+#'     grid of factor-covariate level combinations x numeric
+#'     covariates fixed at their sample mean, with each grid cell
+#'     weighted equally. Treats the design as if covariates were
+#'     balanced -- the "marginal mean assuming a balanced design"
+#'     estimand. Best when the goal is to report a covariate-purified
+#'     comparison independent of the empirical covariate distribution.
+#'
+#'   Both methods reduce to the same linear-contrast formula
+#'   `emmean = avg_row %*% beta` and inherit the spicy variance
+#'   pipeline (HC* / CR* / bootstrap / jackknife). They give the
+#'   same answer when there are no covariates, and also when all
+#'   covariates are numeric / logical (no factor levels to expand
+#'   over). The two estimands diverge only when at least one
+#'   factor / character covariate has non-uniform observed
+#'   proportions.
 #' @param exclude Columns to exclude from `select`. Supports tidyselect syntax
 #'   and character vectors of column names.
 #' @param regex Logical. If `FALSE` (the default), uses tidyselect helpers. If
@@ -54,7 +124,7 @@
 #'   `weights` are excluded from the analytic sample for each outcome,
 #'   alongside rows with `NA` in `y` or `by`. When supplied, weights are
 #'   passed to `lm(..., weights = ...)`, so coefficients become weighted
-#'   least-squares estimates and `R²`, adjusted `R²`, and the four effect
+#'   least-squares estimates and `\eqn{R^2}{R^2}`, adjusted `\eqn{R^2}{R^2}`, and the four effect
 #'   sizes are computed from the corresponding weighted sums of squares
 #'   (see the *Weights* section in Details).
 #' @param vcov Variance estimator used for standard errors, confidence
@@ -97,7 +167,7 @@
 #'     1985). Inference is asymptotic (`z` / `chi^2(q)`).
 #'
 #'   The `HC*` variants are computed via [sandwich::vcovHC()].
-#'   Coefficients (means, contrasts, slopes), `R²`, and the standardized
+#'   Coefficients (means, contrasts, slopes), `\eqn{R^2}{R^2}`, and the standardized
 #'   effect sizes (`f2`, `d`, `g`, `omega2`) are point estimates from the
 #'   OLS/WLS fit and are not affected by `vcov`; only their standard errors,
 #'   CIs, and the test statistic of the contrast change.
@@ -144,10 +214,10 @@
 #' @param effect_size Character. Effect-size column to include in the wide and
 #'   rendered outputs. One of:
 #'   - `"none"` (the default): no effect-size column.
-#'   - `"f2"`: Cohen's `f² = R² / (1 - R²)`. Defined for any predictor type.
+#'   - `"f2"`: Cohen's `\eqn{f^2}{f^2} = \eqn{R^2}{R^2} / (1 - \eqn{R^2}{R^2})`. Defined for any predictor type.
 #'     Familiar from Cohen (1988); standard input for a-priori power analysis.
-#'     Note that for a single-predictor model, `f²` is a monotone transform of
-#'     `R²` and adds no information beyond it.
+#'     Note that for a single-predictor model, `\eqn{f^2}{f^2}` is a monotone transform of
+#'     `\eqn{R^2}{R^2}` and adds no information beyond it.
 #'   - `"d"`: Cohen's `d = beta_hat / sigma_hat`, where `beta_hat` is the
 #'     model coefficient (the displayed difference) and `sigma_hat` is the
 #'     residual standard deviation from the fitted model. Defined only when
@@ -156,7 +226,7 @@
 #'   - `"g"`: Hedges' `g = J * d` with the small-sample correction
 #'     `J = 1 - 3 / (4 * df_resid - 1)`. Same domain as `"d"`.
 #'   - `"omega2"`: Hays' `omega-squared`, a bias-corrected estimator of the
-#'     population variance explained, less optimistic than `R²` for small
+#'     population variance explained, less optimistic than `\eqn{R^2}{R^2}` for small
 #'     samples. Defined for any predictor type and truncated at 0.
 #'
 #'   When `weights` is supplied, `"d"`, `"g"`, and `"omega2"` are derived from
@@ -165,6 +235,17 @@
 #'   with the weighted contrast and its CI shown in the table. All effect
 #'   sizes are point estimates derived from the OLS/WLS fit and are **not**
 #'   affected by `vcov`.
+#'
+#'   **Under covariate adjustment** (`covariates` non-empty):
+#'   - `"f2"` and `"omega2"` become the **partial** *\eqn{f^2}{f^2}* / partial *\eqn{\omega^2}{omega^2}*,
+#'     derived from the partial *F* of `by` via [stats::drop1()] --
+#'     the correctly-defined effect size when the model is adjusted.
+#'     For numeric `by`, partial *\eqn{f^2}{f^2}* equals the squared partial
+#'     correlation of `by` with the outcome, divided by `(1 - r^2_partial)`.
+#'   - `"d"` and `"g"` raise a `spicy_unsupported` error: Cohen's *d*
+#'     and Hedges' *g* have no canonical extension to adjusted models
+#'     (the pooled SD is undefined under adjustment). Use `"f2"` or
+#'     `"omega2"` instead -- both generalise via partial *F*.
 #' @param effect_size_ci Logical. If `TRUE` and `effect_size != "none"`, adds
 #'   a confidence interval for the effect size derived from inversion of the
 #'   appropriate noncentral distribution (noncentral t for `"d"` / `"g"`;
@@ -180,12 +261,12 @@
 #'   warning.
 #' @param r2 Character. Fit statistic to include in the wide and rendered
 #'   outputs. One of:
-#'   - `"r2"` (default): the model `R²` (`summary(lm)$r.squared`).
-#'   - `"adj_r2"`: adjusted `R²`, penalising for `df_effect` relative to the
+#'   - `"r2"` (default): the model `\eqn{R^2}{R^2}` (`summary(lm)$r.squared`).
+#'   - `"adj_r2"`: adjusted `\eqn{R^2}{R^2}`, penalising for `df_effect` relative to the
 #'     residual degrees of freedom.
 #'   - `"none"`: omit the fit-statistic column.
 #'
-#'   When `weights` is supplied, `R²` and adjusted `R²` are the weighted
+#'   When `weights` is supplied, `\eqn{R^2}{R^2}` and adjusted `\eqn{R^2}{R^2}` are the weighted
 #'   least-squares versions reported by `summary(lm(..., weights = ...))`.
 #' @param ci Logical. If `TRUE`, includes contrast confidence-interval columns
 #'   in the wide and rendered outputs when a single contrast is shown.
@@ -198,8 +279,8 @@
 #'   intervals (default: `0.95`). Must be between 0 and 1 exclusive.
 #' @param digits Number of decimal places for descriptive values, regression
 #'   coefficients, and test statistics (default: `2`).
-#' @param fit_digits Number of decimal places for model-fit columns (`R²` or
-#'   adjusted `R²`) in wide and rendered outputs (default: `2`).
+#' @param fit_digits Number of decimal places for model-fit columns (`\eqn{R^2}{R^2}` or
+#'   adjusted `\eqn{R^2}{R^2}`) in wide and rendered outputs (default: `2`).
 #' @param effect_size_digits Number of decimal places for the effect-size
 #'   column (`f2`, `d`, `g`, or `omega2`) in wide and rendered outputs
 #'   (default: `2`).
@@ -264,7 +345,7 @@
 #'   \item `"data.frame"`: a plain wide `data.frame` with one row per
 #'     outcome and numeric columns for means (categorical `by`) or slope
 #'     (numeric `by`), optional contrast and CI, optional test statistic,
-#'     `p`, fit statistic (`R²` or adjusted `R²`), effect size, optional
+#'     `p`, fit statistic (`\eqn{R^2}{R^2}` or adjusted `\eqn{R^2}{R^2}`), effect size, optional
 #'     `effect_size_ci_lower` / `effect_size_ci_upper` (when
 #'     `effect_size_ci = TRUE`), `n`, and `Weighted n`.
 #'   \item `"long"`: a raw `data.frame` with one block per outcome and 28
@@ -291,18 +372,22 @@
 #' @details
 #' # Model and outputs
 #'
-#' `table_continuous_lm()` is designed for article-style bivariate reporting:
-#' a single predictor supplied with `by`, and one simple model per selected
-#' continuous outcome. The model fit is always `lm(outcome ~ by, ...)`,
-#' optionally with `weights`. For categorical predictors, the reported means
-#' are model-based fitted means for each level of `by`, and contrasts are
-#' derived from the same fitted linear model. For an unweighted
-#' `lm(y ~ factor)` with classical variance, the fitted means coincide
-#' numerically with empirical subgroup means; the *model-based* qualifier
-#' matters because (a) under `weights` the means become weighted
-#' least-squares estimates, (b) their CIs are derived from the model `vcov`
-#' (classical or `HC*`), and (c) tests, *p*-values, and effect sizes all
-#' come from the same fitted model, keeping the table internally consistent.
+#' `table_continuous_lm()` is designed for article-style reporting around
+#' a single focal predictor: one model per selected continuous outcome,
+#' fitted as `lm(outcome ~ by, ...)` and optionally extended with case
+#' `weights` and additive `covariates` (`lm(outcome ~ by + cov1 + ...)`).
+#' For categorical `by`, the reported means are model-based fitted means
+#' (or covariate-adjusted estimated marginal means; see `adjustment`) for
+#' each level, and contrasts come from the same fitted linear model. For
+#' an unweighted `lm(y ~ factor)` with classical variance and no
+#' covariates, the fitted means coincide numerically with empirical
+#' subgroup means; the *model-based* qualifier matters because (a) under
+#' `weights` the means become weighted least-squares estimates, (b) their
+#' CIs derive from the model `vcov` (classical, `HC*`, `CR*`,
+#' bootstrap or jackknife), (c) under `covariates` they become
+#' adjusted marginal means, and (d) tests, *p*-values and effect sizes
+#' all come from the same fitted model, keeping the table internally
+#' consistent.
 #'
 #' Compared with [table_continuous()], this function is the model-based
 #' companion: choose it when you want heteroskedasticity-consistent standard
@@ -316,13 +401,13 @@
 #'
 #' Effect size is selected explicitly via `effect_size` (defaults to
 #' `"none"`). All variants are derived from the same fitted model as the
-#' displayed coefficients, `R²`, and CIs, so the effect size stays
+#' displayed coefficients, `\eqn{R^2}{R^2}`, and CIs, so the effect size stays
 #' internally consistent with the rest of the table.
 #'
 #' \itemize{
-#'   \item `"f2"`: Cohen's `f² = R² / (1 - R²)` (Cohen 1988). Defined
-#'     for any predictor type. For a single-predictor model, `f²` is a
-#'     monotone transform of `R²` and adds no information beyond it; its
+#'   \item `"f2"`: Cohen's `\eqn{f^2}{f^2} = \eqn{R^2}{R^2} / (1 - \eqn{R^2}{R^2})` (Cohen 1988). Defined
+#'     for any predictor type. For a single-predictor model, `\eqn{f^2}{f^2}` is a
+#'     monotone transform of `\eqn{R^2}{R^2}` and adds no information beyond it; its
 #'     primary use is in *a priori* power analysis (e.g. G*Power).
 #'   \item `"d"`, `"g"`: standardized mean difference (Cohen's *d* or Hedges'
 #'     *g*), defined only when `by` has exactly two non-empty levels.
@@ -346,6 +431,14 @@
 #' test statistic of the contrast but not the standardized magnitude
 #' itself.
 #'
+#' **Under covariate adjustment** (`covariates` non-empty), `"f2"` and
+#' `"omega2"` become the partial *\eqn{f^2}{f^2}* / partial *\eqn{\omega^2}{omega^2}* of `by`, derived
+#' from the partial *F* via [stats::drop1()] restricted to the focal
+#' term. `"d"` and `"g"` raise a `spicy_unsupported` error: the pooled
+#' standard deviation has no canonical extension under adjustment, so
+#' Cohen's *d* and Hedges' *g* are undefined for adjusted models. See
+#' `effect_size` for the full dispatch.
+#'
 #' Confidence intervals for the effect size are available via
 #' `effect_size_ci = TRUE` and use the modern noncentral-distribution
 #' inversion approach, the consensus standard in commercial statistical
@@ -361,7 +454,7 @@
 #'     correction.
 #'   \item `"omega2"`, `"f2"`: noncentral *F* inversion (Steiger 2004).
 #'     Bounds are converted from the noncentrality parameter using
-#'     `omega² = ncp / (ncp + N)` and `f² = ncp / N` respectively, with
+#'     `omega^2 = ncp / (ncp + N)` and `\eqn{f^2}{f^2} = ncp / N` respectively, with
 #'     `N = df1 + df2 + 1` (total sample size).
 #' }
 #' For the weighted case, the CI uses raw (unweighted) group counts and
@@ -426,7 +519,7 @@
 #' sample is small; use the jackknife as a closed-form, deterministic
 #' alternative.
 #'
-#' `R²`, adjusted `R²`, and the effect sizes remain ordinary
+#' `\eqn{R^2}{R^2}`, adjusted `\eqn{R^2}{R^2}`, and the effect sizes remain ordinary
 #' least-squares (or weighted least-squares) statistics regardless of
 #' `vcov`.
 #'
@@ -435,8 +528,8 @@
 #' When `weights` is supplied, `table_continuous_lm()` fits weighted
 #' linear models via `lm(..., weights = ...)`. Means become weighted
 #' least-squares estimates and contrasts and slopes are weighted. The
-#' fit statistics `R²` and adjusted `R²`, as well as Hays' `omega²`
-#' and Cohen's `f²`, use the corresponding **weighted sums of squares**
+#' fit statistics `\eqn{R^2}{R^2}` and adjusted `\eqn{R^2}{R^2}`, as well as Hays' `omega^2`
+#' and Cohen's `\eqn{f^2}{f^2}`, use the corresponding **weighted sums of squares**
 #' from the WLS fit. Cohen's `d` and Hedges' `g` use the **WLS
 #' coefficient and the model's weighted residual standard deviation**
 #' (`summary(fit)$sigma`), which is the standard convention for
@@ -463,6 +556,10 @@
 #' in the wide outputs; instead, the table reports level-specific means
 #' plus the overall `F` test when `statistic = TRUE` (or `F(df1, df2)`
 #' when the degrees of freedom are constant across outcomes).
+#'
+#' When `covariates` is non-empty, the printed ASCII table appends an
+#' APA-style footer naming the covariates and the chosen estimand, e.g.
+#' `Note. Adjusted for age, education (proportional).`
 #'
 #' Optional output engines require the corresponding suggested packages:
 #' \itemize{
@@ -614,7 +711,7 @@
 #' @examples
 #' # --- Basic usage ---------------------------------------------------------
 #'
-#' # Default: ASCII table with model-based means, p, and R².
+#' # Default: ASCII table with model-based means, p, and \eqn{R^2}{R^2}.
 #' table_continuous_lm(
 #'   sochealth,
 #'   select = c(wellbeing_score, bmi),
@@ -651,7 +748,7 @@
 #'   effect_size_ci = TRUE
 #' )
 #'
-#' # Cohen's f² alongside R² (familiar power-analysis effect size).
+#' # Cohen's \eqn{f^2}{f^2} alongside \eqn{R^2}{R^2} (familiar power-analysis effect size).
 #' table_continuous_lm(
 #'   sochealth,
 #'   select = c(wellbeing_score, bmi),
@@ -688,16 +785,52 @@
 #'   vcov = "CR2"
 #' )
 #'
+#' # --- Covariate adjustment ----------------------------------------------
+#'
+#' # Adjust the comparison of `wellbeing_score` and `bmi` by `sex` for `age`
+#' # and `education`. The footer surfaces the adjustment estimand
+#' # ("proportional" by default = G-computation, matching Stata `margins`).
+#' table_continuous_lm(
+#'   sochealth,
+#'   select = c(wellbeing_score, bmi),
+#'   by = sex,
+#'   covariates = c(age, education),
+#'   vcov = "HC3"
+#' )
+#'
+#' # Same model with the emmeans / SPSS UNIANOVA convention (equal-weight
+#' # marginal means on a synthetic covariate grid).
+#' table_continuous_lm(
+#'   sochealth,
+#'   select = c(wellbeing_score, bmi),
+#'   by = sex,
+#'   covariates = c(age, education),
+#'   adjustment = "balanced",
+#'   vcov = "HC3"
+#' )
+#'
+#' # Effect sizes adjust automatically: f2 / omega2 become partial
+#' # effect sizes via partial F (drop1) restricted to the focal `by`.
+#' # d / g are undefined under adjustment and raise spicy_unsupported.
+#' table_continuous_lm(
+#'   sochealth,
+#'   select = c(wellbeing_score, bmi),
+#'   by = sex,
+#'   covariates = c(age, education),
+#'   effect_size = "f2",
+#'   effect_size_ci = TRUE
+#' )
+#'
 #' # --- Article-style polish -----------------------------------------------
 #'
-#' # Pretty outcome labels and adjusted R².
+#' # Pretty outcome labels and adjusted \eqn{R^2}{R^2}.
 #' table_continuous_lm(
 #'   sochealth,
 #'   select = c(wellbeing_score, bmi),
 #'   by = sex,
 #'   labels = c(
 #'     wellbeing_score = "WHO-5 wellbeing (0-100)",
-#'     bmi = "Body-mass index (kg/m²)"
+#'     bmi = "Body-mass index (kg/m^2)"
 #'   ),
 #'   r2 = "adj_r2"
 #' )
@@ -801,6 +934,8 @@ table_continuous_lm <- function(
   data,
   select = tidyselect::everything(),
   by,
+  covariates = NULL,
+  adjustment = c("proportional", "balanced"),
   exclude = NULL,
   regex = FALSE,
   weights = NULL,
@@ -934,6 +1069,7 @@ table_continuous_lm <- function(
   effect_size <- match.arg(effect_size)
   r2 <- match.arg(r2)
   align <- match.arg(align)
+  adjustment <- match.arg(adjustment)
 
   by_quo <- rlang::enquo(by)
   by_name <- resolve_single_column_selection(by_quo, data, "by")
@@ -1076,9 +1212,44 @@ table_continuous_lm <- function(
     )
   }
 
+  # Resolve `covariates` (additive only in v1; tidyselect / character).
+  # Auto-exclude covariates from `numeric_outcomes` -- a variable
+  # cannot be both outcome and adjustment. Mirrors the silent
+  # auto-exclusion of `by` from `select` above.
+  covariates_quo <- rlang::enquo(covariates)
+  covariates_names <- resolve_covariates_argument(
+    covariates_quo,
+    data,
+    select_names = numeric_outcomes,
+    by_name = by_name
+  )
+  numeric_outcomes <- setdiff(numeric_outcomes, covariates_names)
+
+  # Cohen's d / Hedges' g are undefined under covariate adjustment.
+  # Reject up front so the user gets a clean error rather than a
+  # silent dispatch to an inappropriate formula.
+  if (length(covariates_names) > 0L && effect_size %in% c("d", "g")) {
+    spicy_abort(
+      c(
+        sprintf(
+          "`effect_size = \"%s\"` is undefined for covariate-adjusted models.",
+          effect_size
+        ),
+        "i" = "Use `effect_size = \"f2\"` or `\"omega2\"` instead (both generalise to partial effect sizes via partial F)."
+      ),
+      class = "spicy_unsupported"
+    )
+  }
+
   if (length(numeric_outcomes) == 0L) {
     spicy_warn("No numeric outcome columns selected.", class = "spicy_no_selection")
     return(data.frame())
+  }
+
+  covariates_df <- if (length(covariates_names) > 0L) {
+    data[, covariates_names, drop = FALSE]
+  } else {
+    NULL
   }
 
   outcome_labels <- vapply(
@@ -1103,6 +1274,7 @@ table_continuous_lm <- function(
       fit_outcome_lm_rows(
         y = data[[numeric_outcomes[i]]],
         predictor = by_vector,
+        covariates = covariates_df,
         weights = weights_vec,
         cluster = cluster_vec,
         outcome_name = numeric_outcomes[i],
@@ -1112,7 +1284,8 @@ table_continuous_lm <- function(
         contrast = contrast,
         ci_level = ci_level,
         effect_size = effect_size,
-        boot_n = boot_n
+        boot_n = boot_n,
+        adjustment = adjustment
       )
     }
   )
@@ -1129,6 +1302,12 @@ table_continuous_lm <- function(
   attr(result, "by_label") <- by_label
   attr(result, "vcov_type") <- vcov
   attr(result, "contrast") <- contrast
+  attr(result, "covariates") <- covariates_names
+  attr(result, "adjustment") <- if (length(covariates_names) > 0L) {
+    adjustment
+  } else {
+    NA_character_
+  }
   attr(result, "weights_used") <- !is.null(weights_vec)
   attr(result, "show_statistic") <- statistic
   attr(result, "show_p_value") <- p_value
@@ -1204,6 +1383,7 @@ table_continuous_lm <- function(
 fit_outcome_lm_rows <- function(
   y,
   predictor,
+  covariates = NULL,
   weights,
   cluster = NULL,
   outcome_name,
@@ -1213,8 +1393,10 @@ fit_outcome_lm_rows <- function(
   contrast,
   ci_level,
   effect_size = "none",
-  boot_n = 1000L
+  boot_n = 1000L,
+  adjustment = c("proportional", "balanced")
 ) {
+  adjustment <- match.arg(adjustment)
   keep <- !is.na(y) & !is.na(predictor)
   if (!is.null(weights)) {
     keep <- keep & !is.na(weights)
@@ -1222,17 +1404,26 @@ fit_outcome_lm_rows <- function(
   if (!is.null(cluster)) {
     keep <- keep & !is.na(cluster)
   }
+  if (!is.null(covariates) && ncol(covariates) > 0L) {
+    keep <- keep & stats::complete.cases(covariates)
+  }
 
   y <- y[keep]
   predictor <- predictor[keep]
   weights <- if (is.null(weights)) NULL else weights[keep]
   cluster <- if (is.null(cluster)) NULL else cluster[keep]
+  covariates <- if (is.null(covariates)) {
+    NULL
+  } else {
+    covariates[keep, , drop = FALSE]
+  }
 
   if (is.numeric(predictor)) {
     return(
       fit_numeric_predictor_lm_rows(
         y = y,
         x = predictor,
+        covariates = covariates,
         weights = weights,
         cluster = cluster,
         outcome_name = outcome_name,
@@ -1249,6 +1440,7 @@ fit_outcome_lm_rows <- function(
   fit_categorical_predictor_lm_rows(
     y = y,
     x = predictor,
+    covariates = covariates,
     weights = weights,
     cluster = cluster,
     outcome_name = outcome_name,
@@ -1258,13 +1450,15 @@ fit_outcome_lm_rows <- function(
     contrast = contrast,
     ci_level = ci_level,
     effect_size = effect_size,
-    boot_n = boot_n
+    boot_n = boot_n,
+    adjustment = adjustment
   )
 }
 
 fit_numeric_predictor_lm_rows <- function(
   y,
   x,
+  covariates = NULL,
   weights,
   cluster = NULL,
   outcome_name,
@@ -1284,11 +1478,19 @@ fit_numeric_predictor_lm_rows <- function(
     ))
   }
 
-  model_df <- data.frame(y = y, x = x)
-  fit <- if (is.null(weights)) {
-    stats::lm(y ~ x, data = model_df)
+  has_covs <- !is.null(covariates) && ncol(covariates) > 0L
+  model_df <- if (has_covs) {
+    cbind(data.frame(y = y, x = x), covariates)
   } else {
-    stats::lm(y ~ x, data = model_df, weights = weights)
+    data.frame(y = y, x = x)
+  }
+  rhs_terms <- if (has_covs) c("x", names(covariates)) else "x"
+  formula <- stats::reformulate(rhs_terms, response = "y")
+
+  fit <- if (is.null(weights)) {
+    stats::lm(formula, data = model_df)
+  } else {
+    stats::lm(formula, data = model_df, weights = weights)
   }
 
   vc <- compute_lm_vcov(
@@ -1298,8 +1500,19 @@ fit_numeric_predictor_lm_rows <- function(
     weights = weights,
     boot_n = boot_n
   )
-  model_stats <- compute_lm_model_stats(fit)
 
+  # `focal_term = "x"` activates the partial-F path in
+  # compute_lm_model_stats / compute_es_ci_lm so f^2 and omega^2 are
+  # restricted to x and ignore covariate contributions to R^2. When
+  # there are no covariates the model is bivariate and focal_term
+  # is NULL; the model-level F coincides with the focal F.
+  focal_term <- if (has_covs) "x" else NULL
+  model_stats <- compute_lm_model_stats(fit, focal_term = focal_term)
+
+  # `coef_idx = 2L`: x is always the 2nd coefficient (after the
+  # intercept). When covariates are present they come AFTER x in the
+  # design matrix because `reformulate(c("x", cov_names))` orders
+  # terms left-to-right, so position 2 still picks out x.
   inf <- compute_lm_coef_inference(
     fit,
     coef_idx = 2L,
@@ -1309,7 +1522,7 @@ fit_numeric_predictor_lm_rows <- function(
     ci_level = ci_level
   )
 
-  es_ci <- compute_es_ci_lm(fit, effect_size, ci_level)
+  es_ci <- compute_es_ci_lm(fit, effect_size, ci_level, focal_term = focal_term)
 
   data.frame(
     variable = outcome_name,
@@ -1347,6 +1560,7 @@ fit_numeric_predictor_lm_rows <- function(
 fit_categorical_predictor_lm_rows <- function(
   y,
   x,
+  covariates = NULL,
   weights,
   cluster = NULL,
   outcome_name,
@@ -1356,8 +1570,10 @@ fit_categorical_predictor_lm_rows <- function(
   contrast,
   ci_level,
   effect_size = "none",
-  boot_n = 1000L
+  boot_n = 1000L,
+  adjustment = c("proportional", "balanced")
 ) {
+  adjustment <- match.arg(adjustment)
   x <- droplevels(coerce_lm_factor(x))
   if (length(y) < 2L || nlevels(x) < 2L) {
     return(make_empty_lm_rows(
@@ -1368,11 +1584,19 @@ fit_categorical_predictor_lm_rows <- function(
     ))
   }
 
-  model_df <- data.frame(y = y, x = x)
-  fit <- if (is.null(weights)) {
-    stats::lm(y ~ x, data = model_df)
+  has_covs <- !is.null(covariates) && ncol(covariates) > 0L
+  model_df <- if (has_covs) {
+    cbind(data.frame(y = y, x = x), covariates)
   } else {
-    stats::lm(y ~ x, data = model_df, weights = weights)
+    data.frame(y = y, x = x)
+  }
+  rhs_terms <- if (has_covs) c("x", names(covariates)) else "x"
+  formula <- stats::reformulate(rhs_terms, response = "y")
+
+  fit <- if (is.null(weights)) {
+    stats::lm(formula, data = model_df)
+  } else {
+    stats::lm(formula, data = model_df, weights = weights)
   }
 
   vc <- compute_lm_vcov(
@@ -1389,22 +1613,65 @@ fit_categorical_predictor_lm_rows <- function(
   } else {
     stats::qnorm(1 - (1 - ci_level) / 2)
   }
-  model_stats <- compute_lm_model_stats(fit)
+  focal_term <- if (has_covs) "x" else NULL
+  model_stats <- compute_lm_model_stats(fit, focal_term = focal_term)
 
+  # Covariate-adjusted estimated marginal means.
+  #
+  # Without covariates: bivariate fast path -- a single `newdata`
+  # containing one row per level of `x`, vectorised through
+  # `model.matrix()` and a single matrix multiplication. emmean =
+  # group mean.
+  #
+  # With covariates: the per-level `avg_row` is built by
+  # `build_emmean_avg_row()`, which dispatches on `adjustment`:
+  #   * `"proportional"` (default; G-computation) averages the
+  #     observed covariate distribution with `x` set to the focal
+  #     level. Matches Stata `margins` and
+  #     `marginaleffects::avg_predictions()`.
+  #   * `"balanced"` averages a synthetic grid of factor-covariate
+  #     levels x numeric covariates at the sample mean. Matches
+  #     `emmeans::emmeans()` default and SPSS UNIANOVA EMMEANS.
+  # Both reduce to the same linear-contrast formula
+  # (`avg_row %*% cf`); only `avg_row` differs.
   levs <- levels(x)
-  newdata <- data.frame(x = factor(levs, levels = levs))
-  design <- stats::model.matrix(
-    stats::delete.response(stats::terms(fit)),
-    newdata
-  )
-  emmean <- as.vector(design %*% cf)
-  emmean_se <- sqrt(rowSums((design %*% vc) * design))
+  if (!has_covs) {
+    newdata <- data.frame(x = factor(levs, levels = levs))
+    design <- stats::model.matrix(
+      stats::delete.response(stats::terms(fit)),
+      newdata
+    )
+    emmean <- as.vector(design %*% cf)
+    emmean_se <- sqrt(rowSums((design %*% vc) * design))
+  } else {
+    emmean <- numeric(length(levs))
+    emmean_se <- numeric(length(levs))
+    for (i in seq_along(levs)) {
+      avg_row <- build_emmean_avg_row(
+        fit,
+        x_focal_level = levs[i],
+        x_levels = levs,
+        covariates_observed = covariates,
+        method = adjustment
+      )
+      emmean[i] <- sum(avg_row * cf)
+      emmean_se[i] <- sqrt(sum((avg_row %*% vc) * avg_row))
+    }
+  }
 
-  # Global Wald F (k > 2 ANOVA-style, or t² for binary). Dispatches
-  # to clubSandwich::Wald_test() with HTZ/Satterthwaite for CR mode.
+  # Global Wald F restricted to the focal term `x`. With covariates,
+  # `seq_along(cf)[-1]` would also pick up covariate coefficients,
+  # producing an omnibus F that mixes the focal effect with covariate
+  # nuisance -- wrong. Restrict to coefficients whose term assignment
+  # equals the position of `x` in the model's term list.
+  x_coef_idx <- which(stats::model.matrix(fit) |>
+    attr("assign") == which(attr(stats::terms(fit), "term.labels") == "x"))
+  if (length(x_coef_idx) == 0L) {
+    x_coef_idx <- seq_along(cf)[-1]
+  }
   wald <- compute_lm_wald_test(
     fit,
-    coef_idx_set = seq_along(cf)[-1],
+    coef_idx_set = x_coef_idx,
     vc = vc,
     vcov_type = vcov_type,
     cluster = cluster
@@ -1412,7 +1679,7 @@ fit_categorical_predictor_lm_rows <- function(
 
   show_reference <- identical(contrast, "auto") && nlevels(x) == 2L
 
-  es_ci <- compute_es_ci_lm(fit, effect_size, ci_level)
+  es_ci <- compute_es_ci_lm(fit, effect_size, ci_level, focal_term = focal_term)
 
   out <- data.frame(
     variable = rep(outcome_name, length(levs)),
@@ -1524,1871 +1791,3 @@ make_empty_lm_rows <- function(
     stringsAsFactors = FALSE
   )
 }
-
-is_supported_lm_predictor <- function(x) {
-  is.numeric(x) || is.factor(x) || is.character(x) || is.logical(x)
-}
-
-coerce_lm_factor <- function(x) {
-  if (is.factor(x)) {
-    return(x)
-  }
-  factor(x)
-}
-
-detect_weights_column_name <- function(quo, data) {
-  if (rlang::quo_is_null(quo)) {
-    return(NULL)
-  }
-
-  val <- tryCatch(
-    rlang::eval_tidy(quo, env = rlang::quo_get_env(quo)),
-    error = function(e) NULL
-  )
-  if (is.character(val) && length(val) == 1L && val %in% names(data)) {
-    return(val)
-  }
-
-  pos <- tryCatch(
-    tidyselect::eval_select(quo, data),
-    error = function(e) integer(0)
-  )
-  if (length(pos) == 1L) {
-    return(names(pos))
-  }
-
-  NULL
-}
-
-# Internal: resolve a `cluster` argument from a public function call
-# into either NULL or a single atomic vector of length nrow(data).
-# Accepts the same forms as `weights` (NULL, unquoted column name,
-# character column name, or a raw vector evaluated in the calling
-# environment), but without the numeric-only restriction: cluster IDs
-# may be factor, character, integer, or any atomic type.
-#
-# Multi-way clustering (`cluster = list(c1, c2)`) is intentionally
-# not supported in this iteration, because the canonical R backends
-# disagree: clubSandwich (used here for CR2/CR3 with Satterthwaite
-# df) only supports a single cluster vector, while sandwich::vcovCL
-# supports multi-way but only at CR0/CR1. A future release may add a
-# dedicated `multiway` argument that routes to sandwich::vcovCL.
-resolve_cluster_argument <- function(quo, data, arg = "cluster") {
-  if (rlang::quo_is_null(quo)) {
-    return(NULL)
-  }
-
-  sentinel <- new.env(parent = emptyenv())
-  val <- tryCatch(
-    rlang::eval_tidy(
-      quo,
-      data = data,
-      env = rlang::quo_get_env(quo)
-    ),
-    error = function(e) sentinel
-  )
-
-  if (identical(val, sentinel)) {
-    spicy_abort(
-      sprintf(
-        paste0(
-          "`%s` must be NULL, an atomic vector, or a single column ",
-          "name in `data`."
-        ),
-        arg
-      ), class = "spicy_invalid_input")
-  }
-
-  if (is.null(val)) {
-    return(NULL)
-  }
-
-  if (is.list(val) && !is.atomic(val)) {
-    spicy_abort(
-      sprintf(
-        paste0(
-          "Multi-way clustering (`%s` as a list / data.frame) is not ",
-          "supported in this version. Supply a single atomic cluster ",
-          "vector or column name. For two-way clustering at CR0 / CR1 ",
-          "level, use `sandwich::vcovCL()` directly on the fitted ",
-          "`lm()`."
-        ),
-        arg
-      ), class = "spicy_invalid_input")
-  }
-
-  if (is.character(val) && length(val) == 1L && val %in% names(data)) {
-    val <- data[[val]]
-  }
-
-  if (!is.atomic(val)) {
-    spicy_abort(
-      sprintf(
-        paste0(
-          "`%s` must be NULL, an atomic vector, or a single column ",
-          "name in `data`."
-        ),
-        arg
-      ), class = "spicy_invalid_input")
-  }
-
-  if (length(val) != nrow(data)) {
-    spicy_abort(
-      sprintf(
-        "Cluster `%s` must have length `nrow(data)` (got %d, expected %d).",
-        arg,
-        length(val),
-        nrow(data)
-      ), class = "spicy_invalid_input")
-  }
-
-  val
-}
-
-compute_lm_vcov <- function(
-  fit,
-  type = "classical",
-  cluster = NULL,
-  weights = NULL,
-  boot_n = 1000L
-) {
-  if (identical(type, "classical")) {
-    return(stats::vcov(fit))
-  }
-
-  if (identical(type, "bootstrap")) {
-    return(compute_lm_vcov_bootstrap(
-      fit,
-      cluster = cluster,
-      weights = weights,
-      boot_n = boot_n
-    ))
-  }
-
-  if (identical(type, "jackknife")) {
-    return(compute_lm_vcov_jackknife(
-      fit,
-      cluster = cluster,
-      weights = weights
-    ))
-  }
-
-  if (startsWith(type, "HC")) {
-    return(tryCatch(
-      sandwich::vcovHC(fit, type = type),
-      error = function(e) {
-        spicy_warn(
-          c(
-            sprintf(
-              "Robust `vcov = \"%s\"` could not be computed.",
-              type
-            ),
-            "x" = paste0("Underlying error: ", conditionMessage(e)),
-            "i" = "Falling back to the classical OLS variance; the result may contain NA."
-          ),
-          class = "spicy_fallback"
-        )
-        stats::vcov(fit)
-      }
-    ))
-  }
-
-  if (startsWith(type, "CR")) {
-    if (is.null(cluster)) {
-      spicy_abort(
-        sprintf(
-          "`vcov = \"%s\"` requires `cluster` to be specified.",
-          type
-        ), class = "spicy_invalid_input")
-    }
-    if (!requireNamespace("clubSandwich", quietly = TRUE)) {
-      spicy_abort(
-        sprintf(
-          paste0(
-            "`vcov = \"%s\"` requires the 'clubSandwich' package. ",
-            "Install it with install.packages(\"clubSandwich\")."
-          ),
-          type
-        ), class = "spicy_invalid_input")
-    }
-    return(tryCatch(
-      clubSandwich::vcovCR(fit, type = type, cluster = cluster),
-      error = function(e) {
-        spicy_warn(
-          c(
-            sprintf(
-              "Cluster-robust `vcov = \"%s\"` could not be computed.",
-              type
-            ),
-            "x" = paste0("Underlying error: ", conditionMessage(e)),
-            "i" = "Falling back to the classical OLS variance; the result may contain NA."
-          ),
-          class = "spicy_fallback"
-        )
-        stats::vcov(fit)
-      }
-    ))
-  }
-
-  spicy_abort(
-    sprintf("Unknown `vcov` type \"%s\".", type), class = "spicy_invalid_input")
-}
-
-# Internal: nonparametric / cluster bootstrap variance-covariance
-# matrix of the coefficient vector. Resamples observations (or whole
-# clusters when `cluster` is supplied), refits `lm()` on each
-# replicate, and returns the empirical covariance of the bootstrapped
-# coefficients. References: Davison & Hinkley (1997); Cameron, Gelbach
-# & Miller (2008) for the cluster bootstrap.
-compute_lm_vcov_bootstrap <- function(
-  fit,
-  cluster = NULL,
-  weights = NULL,
-  boot_n = 1000L
-) {
-  mf <- stats::model.frame(fit)
-  # Drop the auxiliary "(weights)" column, if any: it carries a
-  # parenthesised name that confuses `lm()` when `mf` is passed back
-  # in as `data`. Weights are reattached explicitly via `weights =`.
-  mf[["(weights)"]] <- NULL
-  formula <- stats::formula(fit)
-  n_obs <- nrow(mf)
-  orig_coefs <- stats::coef(fit)
-  k <- length(orig_coefs)
-  coef_names <- names(orig_coefs)
-
-  if (is.null(weights)) {
-    weights <- stats::weights(fit)
-  }
-
-  refit <- function(boot_idx) {
-    sub_data <- mf[boot_idx, , drop = FALSE]
-    sub_w <- if (is.null(weights)) NULL else weights[boot_idx]
-    args <- list(formula = formula, data = sub_data)
-    if (!is.null(sub_w)) {
-      args$weights <- sub_w
-    }
-    tryCatch(
-      suppressWarnings(do.call(stats::lm, args)),
-      error = function(e) NULL
-    )
-  }
-
-  beta_boot <- matrix(NA_real_, nrow = boot_n, ncol = k)
-  colnames(beta_boot) <- coef_names
-
-  if (is.null(cluster)) {
-    # Nonparametric obs bootstrap
-    for (b in seq_len(boot_n)) {
-      boot_idx <- sample.int(n_obs, n_obs, replace = TRUE)
-      fit_b <- refit(boot_idx)
-      if (!is.null(fit_b)) {
-        coefs_b <- stats::coef(fit_b)
-        common <- intersect(names(coefs_b), coef_names)
-        beta_boot[b, common] <- coefs_b[common]
-      }
-    }
-  } else {
-    # Cluster bootstrap: resample whole clusters
-    unique_g <- unique(cluster)
-    G <- length(unique_g)
-    cl_indices <- split(seq_along(cluster), cluster)
-    for (b in seq_len(boot_n)) {
-      boot_g <- sample(unique_g, G, replace = TRUE)
-      boot_idx <- unlist(cl_indices[as.character(boot_g)], use.names = FALSE)
-      fit_b <- refit(boot_idx)
-      if (!is.null(fit_b)) {
-        coefs_b <- stats::coef(fit_b)
-        common <- intersect(names(coefs_b), coef_names)
-        beta_boot[b, common] <- coefs_b[common]
-      }
-    }
-  }
-
-  valid <- stats::complete.cases(beta_boot)
-  n_valid <- sum(valid)
-  if (n_valid < 10L) {
-    spicy_warn(
-      c(
-        sprintf(
-          "Bootstrap: only %d / %d replicates were valid; the bootstrap vcov is unreliable.",
-          n_valid,
-          boot_n
-        ),
-        "i" = "Falling back to the classical OLS variance."
-      ),
-      class = "spicy_fallback"
-    )
-    return(stats::vcov(fit))
-  }
-  if (n_valid < boot_n %/% 2L) {
-    spicy_warn(
-      c(
-        sprintf(
-          "Bootstrap: %d / %d replicates failed (likely rank-deficient resamples).",
-          boot_n - n_valid,
-          boot_n
-        ),
-        "i" = sprintf(
-          "The bootstrap vcov is computed from the %d valid replicates.",
-          n_valid
-        )
-      ),
-      class = "spicy_fallback"
-    )
-  }
-
-  beta_boot <- beta_boot[valid, , drop = FALSE]
-  stats::cov(beta_boot)
-}
-
-# Internal: leave-one-out (or leave-one-cluster-out) jackknife
-# variance-covariance matrix of the coefficient vector. References:
-# Quenouille (1956) and Tukey (1958) for the original jackknife;
-# MacKinnon & White (1985) for the linear-regression form.
-compute_lm_vcov_jackknife <- function(
-  fit,
-  cluster = NULL,
-  weights = NULL
-) {
-  mf <- stats::model.frame(fit)
-  mf[["(weights)"]] <- NULL
-  formula <- stats::formula(fit)
-  n_obs <- nrow(mf)
-  orig_coefs <- stats::coef(fit)
-  k <- length(orig_coefs)
-  coef_names <- names(orig_coefs)
-
-  if (is.null(weights)) {
-    weights <- stats::weights(fit)
-  }
-
-  refit <- function(jack_idx) {
-    sub_data <- mf[jack_idx, , drop = FALSE]
-    sub_w <- if (is.null(weights)) NULL else weights[jack_idx]
-    args <- list(formula = formula, data = sub_data)
-    if (!is.null(sub_w)) {
-      args$weights <- sub_w
-    }
-    tryCatch(
-      suppressWarnings(do.call(stats::lm, args)),
-      error = function(e) NULL
-    )
-  }
-
-  if (is.null(cluster)) {
-    G <- n_obs
-    units <- seq_len(n_obs)
-    leave_out <- function(g) which(units != g)
-  } else {
-    unique_g <- unique(cluster)
-    G <- length(unique_g)
-    leave_out <- function(g) which(cluster != unique_g[g])
-  }
-
-  beta_jack <- matrix(NA_real_, nrow = G, ncol = k)
-  colnames(beta_jack) <- coef_names
-  for (g in seq_len(G)) {
-    fit_g <- refit(leave_out(g))
-    if (!is.null(fit_g)) {
-      coefs_g <- stats::coef(fit_g)
-      common <- intersect(names(coefs_g), coef_names)
-      beta_jack[g, common] <- coefs_g[common]
-    }
-  }
-
-  valid <- stats::complete.cases(beta_jack)
-  n_valid <- sum(valid)
-  if (n_valid < 2L) {
-    spicy_warn(
-      c(
-        "Jackknife: fewer than 2 valid leave-out replicates.",
-        "i" = "Falling back to the classical OLS variance."
-      ),
-      class = "spicy_fallback"
-    )
-    return(stats::vcov(fit))
-  }
-  beta_jack <- beta_jack[valid, , drop = FALSE]
-  beta_mean <- colMeans(beta_jack)
-  centered <- sweep(beta_jack, 2L, beta_mean, FUN = "-")
-  scale <- (n_valid - 1L) / n_valid
-  scale * crossprod(centered)
-}
-
-# Internal: single-coefficient inference (estimate, SE, t, df, p, CI).
-# For classical / HC* mode, uses df.residual(fit) and the supplied vcov.
-# For CR* mode, uses clubSandwich::coef_test() with Satterthwaite df.
-# Falls back to df.residual + supplied vcov if coef_test fails.
-compute_lm_coef_inference <- function(
-  fit,
-  coef_idx,
-  vc,
-  vcov_type,
-  cluster = NULL,
-  ci_level = 0.95
-) {
-  cf <- stats::coef(fit)
-  estimate <- unname(cf[coef_idx])
-
-  # Resampling-based vcov: asymptotic z inference (df = Inf).
-  if (vcov_type %in% c("bootstrap", "jackknife")) {
-    se_est <- sqrt(diag(vc))[coef_idx]
-    stat <- estimate / se_est
-    crit <- stats::qnorm(1 - (1 - ci_level) / 2)
-    pval <- 2 * stats::pnorm(abs(stat), lower.tail = FALSE)
-    return(list(
-      estimate = estimate,
-      se = unname(se_est),
-      statistic = unname(stat),
-      df = Inf,
-      p.value = unname(pval),
-      ci_lower = estimate - crit * unname(se_est),
-      ci_upper = estimate + crit * unname(se_est),
-      test_type = "z"
-    ))
-  }
-
-  if (startsWith(vcov_type, "CR") && !is.null(cluster)) {
-    ct <- tryCatch(
-      clubSandwich::coef_test(
-        fit,
-        vcov = vc,
-        cluster = cluster,
-        test = "Satterthwaite"
-      ),
-      error = function(e) NULL
-    )
-    if (
-      !is.null(ct) &&
-        is.data.frame(ct) &&
-        nrow(ct) >= coef_idx &&
-        all(c("df_Satt", "p_Satt", "SE", "tstat") %in% names(ct))
-    ) {
-      df <- ct$df_Satt[coef_idx]
-      se_est <- ct$SE[coef_idx]
-      stat <- ct$tstat[coef_idx]
-      pval <- ct$p_Satt[coef_idx]
-      crit <- if (is.finite(df) && df > 0) {
-        stats::qt(1 - (1 - ci_level) / 2, df = df)
-      } else {
-        stats::qnorm(1 - (1 - ci_level) / 2)
-      }
-      return(list(
-        estimate = estimate,
-        se = unname(se_est),
-        statistic = unname(stat),
-        df = as.double(unname(df)),
-        p.value = unname(pval),
-        ci_lower = estimate - crit * unname(se_est),
-        ci_upper = estimate + crit * unname(se_est),
-        test_type = "t"
-      ))
-    }
-  }
-
-  # Classical / HC* / CR fallback path
-  se_est <- sqrt(diag(vc))[coef_idx]
-  df <- stats::df.residual(fit)
-  stat <- estimate / se_est
-  crit <- if (is.finite(df) && df > 0) {
-    stats::qt(1 - (1 - ci_level) / 2, df = df)
-  } else {
-    stats::qnorm(1 - (1 - ci_level) / 2)
-  }
-  pval <- 2 * stats::pt(abs(stat), df = df, lower.tail = FALSE)
-  list(
-    estimate = estimate,
-    se = unname(se_est),
-    statistic = unname(stat),
-    df = as.double(unname(df)),
-    p.value = unname(pval),
-    ci_lower = estimate - crit * unname(se_est),
-    ci_upper = estimate + crit * unname(se_est),
-    test_type = "t"
-  )
-}
-
-# Internal: multi-coefficient Wald F (used for the global test in
-# k > 2 categorical predictors). For CR* mode uses
-# clubSandwich::Wald_test() with the HTZ (Hotelling-T-squared with
-# Satterthwaite df) method; for classical / HC* uses the Wald F with
-# df.residual.
-compute_lm_wald_test <- function(
-  fit,
-  coef_idx_set,
-  vc,
-  vcov_type,
-  cluster = NULL
-) {
-  cf <- stats::coef(fit)
-  beta_sub <- cf[coef_idx_set]
-  q <- length(beta_sub)
-  df_resid_classical <- stats::df.residual(fit)
-
-  if (q == 0L) {
-    return(list(
-      statistic = NA_real_,
-      df1 = NA_integer_,
-      df2 = NA_integer_,
-      p.value = NA_real_,
-      test_type = NA_character_
-    ))
-  }
-
-  # Resampling-based vcov: asymptotic chi^2 (Wald) test, df = q.
-  if (vcov_type %in% c("bootstrap", "jackknife")) {
-    vc_sub <- vc[coef_idx_set, coef_idx_set, drop = FALSE]
-    chi2 <- tryCatch(
-      as.numeric(crossprod(beta_sub, solve(vc_sub, beta_sub))),
-      error = function(e) NA_real_
-    )
-    pval <- if (is.na(chi2) || !is.finite(chi2)) {
-      NA_real_
-    } else {
-      stats::pchisq(chi2, df = q, lower.tail = FALSE)
-    }
-    return(list(
-      statistic = chi2,
-      df1 = as.integer(q),
-      df2 = Inf,
-      p.value = pval,
-      test_type = "chi2"
-    ))
-  }
-
-  if (startsWith(vcov_type, "CR") && !is.null(cluster)) {
-    constraints <- tryCatch(
-      clubSandwich::constrain_zero(coef_idx_set, coefs = cf),
-      error = function(e) NULL
-    )
-    wt <- if (!is.null(constraints)) {
-      tryCatch(
-        clubSandwich::Wald_test(
-          fit,
-          constraints = constraints,
-          vcov = vc,
-          cluster = cluster,
-          test = "HTZ"
-        ),
-        error = function(e) NULL
-      )
-    } else {
-      NULL
-    }
-    if (
-      !is.null(wt) &&
-        is.data.frame(wt) &&
-        nrow(wt) >= 1L &&
-        all(c("Fstat", "df_num", "df_denom", "p_val") %in% names(wt))
-    ) {
-      return(list(
-        statistic = unname(wt$Fstat[1]),
-        df1 = as.integer(unname(wt$df_num[1])),
-        df2 = as.double(unname(wt$df_denom[1])),
-        p.value = unname(wt$p_val[1]),
-        test_type = "F"
-      ))
-    }
-  }
-
-  # Classical / HC* path
-  vc_sub <- vc[coef_idx_set, coef_idx_set, drop = FALSE]
-  global_stat <- tryCatch(
-    as.numeric(crossprod(beta_sub, solve(vc_sub, beta_sub)) / q),
-    error = function(e) NA_real_
-  )
-  global_p <- if (is.na(global_stat) || !is.finite(global_stat)) {
-    NA_real_
-  } else {
-    stats::pf(global_stat, q, df_resid_classical, lower.tail = FALSE)
-  }
-  list(
-    statistic = global_stat,
-    df1 = as.integer(q),
-    df2 = as.double(df_resid_classical),
-    p.value = global_p,
-    test_type = "F"
-  )
-}
-
-compute_lm_model_stats <- function(fit) {
-  sm <- summary(fit)
-  r2 <- unname(sm$r.squared)
-  adj_r2 <- unname(sm$adj.r.squared)
-  sigma_hat <- unname(sm$sigma)
-  df_resid <- stats::df.residual(fit)
-  cf <- stats::coef(fit)
-  df_effect <- length(cf) - 1L
-
-  f2 <- if (is.na(r2) || r2 >= 1) NA_real_ else r2 / (1 - r2)
-
-  d <- if (
-    length(cf) < 2L ||
-      !is.finite(sigma_hat) ||
-      sigma_hat <= 0 ||
-      anyNA(cf[2])
-  ) {
-    NA_real_
-  } else {
-    unname(cf[2]) / sigma_hat
-  }
-
-  g <- if (is.na(d) || !is.finite(df_resid) || df_resid <= 1) {
-    NA_real_
-  } else {
-    (1 - 3 / (4 * df_resid - 1)) * d
-  }
-
-  omega2 <- compute_lm_omega2(fit, df_effect, df_resid)
-
-  list(r2 = r2, adj_r2 = adj_r2, f2 = f2, d = d, g = g, omega2 = omega2)
-}
-
-compute_lm_omega2 <- function(fit, df_effect, df_resid) {
-  if (
-    !is.finite(df_effect) ||
-      df_effect < 1L ||
-      !is.finite(df_resid) ||
-      df_resid <= 0
-  ) {
-    return(NA_real_)
-  }
-  y <- stats::model.response(stats::model.frame(fit))
-  if (!is.numeric(y)) {
-    return(NA_real_)
-  }
-  resid <- stats::residuals(fit)
-  w <- stats::weights(fit)
-  if (is.null(w)) {
-    w <- rep(1, length(resid))
-  }
-  if (length(w) != length(y) || length(resid) != length(y)) {
-    return(NA_real_)
-  }
-  sw <- sum(w)
-  if (!is.finite(sw) || sw <= 0) {
-    return(NA_real_)
-  }
-  y_bar_w <- sum(w * y) / sw
-  ss_total <- sum(w * (y - y_bar_w)^2)
-  ss_resid <- sum(w * resid^2)
-  if (!is.finite(ss_total) || ss_total <= 0) {
-    return(NA_real_)
-  }
-  ss_effect <- ss_total - ss_resid
-  mse <- ss_resid / df_resid
-  omega2 <- (ss_effect - df_effect * mse) / (ss_total + mse)
-  if (!is.finite(omega2)) {
-    return(NA_real_)
-  }
-  max(0, omega2)
-}
-
-pick_es_type_lm <- function(effect_size) {
-  if (identical(effect_size, "none")) NA_character_ else effect_size
-}
-
-pick_es_value_lm <- function(model_stats, effect_size) {
-  if (identical(effect_size, "none")) {
-    return(NA_real_)
-  }
-  switch(
-    effect_size,
-    f2 = model_stats$f2,
-    d = model_stats$d,
-    g = model_stats$g,
-    omega2 = model_stats$omega2,
-    spicy_abort(paste0("Unknown `effect_size`: ", effect_size), class = "spicy_invalid_input")
-  )
-}
-
-# ---- Effect-size confidence intervals -----------------------------------
-#
-# CIs use the modern noncentral-distribution inversion approach
-# (Steiger & Fouladi 1997; Steiger 2004; Goulet-Pelletier & Cousineau
-# 2018, 2021). Verified empirically against the `effectsize` package.
-
-find_ncp_t_lm <- function(t_obs, df, p) {
-  if (
-    !is.finite(t_obs) ||
-      !is.finite(df) ||
-      df <= 0 ||
-      !is.finite(p) ||
-      p <= 0 ||
-      p >= 1
-  ) {
-    return(NA_real_)
-  }
-
-  pt_diff <- function(ncp) {
-    suppressWarnings(stats::pt(t_obs, df = df, ncp = ncp)) - p
-  }
-
-  half_width <- max(50, 5 * abs(t_obs) + 20)
-  lo <- t_obs - half_width
-  hi <- t_obs + half_width
-  f_lo <- pt_diff(lo)
-  f_hi <- pt_diff(hi)
-  expand <- 0L
-  while (
-    is.finite(f_lo) &&
-      is.finite(f_hi) &&
-      f_lo * f_hi > 0 &&
-      expand < 6L
-  ) {
-    half_width <- half_width * 2
-    lo <- t_obs - half_width
-    hi <- t_obs + half_width
-    f_lo <- pt_diff(lo)
-    f_hi <- pt_diff(hi)
-    expand <- expand + 1L
-  }
-  if (!is.finite(f_lo) || !is.finite(f_hi) || f_lo * f_hi > 0) {
-    return(NA_real_)
-  }
-
-  tryCatch(
-    stats::uniroot(
-      pt_diff,
-      interval = c(lo, hi),
-      tol = 1e-8,
-      maxiter = 200
-    )$root,
-    error = function(e) NA_real_
-  )
-}
-
-find_ncp_f_lm <- function(f_obs, df1, df2, p) {
-  if (
-    !is.finite(f_obs) ||
-      f_obs < 0 ||
-      !is.finite(df1) ||
-      df1 <= 0 ||
-      !is.finite(df2) ||
-      df2 <= 0 ||
-      !is.finite(p) ||
-      p <= 0 ||
-      p >= 1
-  ) {
-    return(NA_real_)
-  }
-
-  pf_diff <- function(ncp) {
-    suppressWarnings(stats::pf(f_obs, df1 = df1, df2 = df2, ncp = ncp)) - p
-  }
-
-  if (pf_diff(0) <= 0) {
-    return(0)
-  }
-
-  hi <- max(100, 5 * f_obs * (df1 + df2))
-  f_hi <- pf_diff(hi)
-  expand <- 0L
-  while (is.finite(f_hi) && f_hi > 0 && expand < 6L) {
-    hi <- hi * 2
-    f_hi <- pf_diff(hi)
-    expand <- expand + 1L
-  }
-  if (!is.finite(f_hi) || f_hi > 0) {
-    return(NA_real_)
-  }
-
-  tryCatch(
-    stats::uniroot(
-      pf_diff,
-      interval = c(0, hi),
-      tol = 1e-8,
-      maxiter = 200
-    )$root,
-    error = function(e) NA_real_
-  )
-}
-
-compute_smd_ci_lm <- function(fit, ci_level, hedges_correct) {
-  d <- unname(stats::coef(fit)[2]) / summary(fit)$sigma
-  if (!is.finite(d)) {
-    return(c(NA_real_, NA_real_))
-  }
-
-  predictor_name <- all.vars(stats::formula(fit))[2]
-  mf <- stats::model.frame(fit)
-  x <- mf[[predictor_name]]
-  if (is.null(x) || !is.factor(x)) {
-    return(c(NA_real_, NA_real_))
-  }
-  group_counts <- table(x)
-  if (length(group_counts) != 2L) {
-    return(c(NA_real_, NA_real_))
-  }
-  n1 <- as.integer(group_counts[1])
-  n2 <- as.integer(group_counts[2])
-  df_resid <- stats::df.residual(fit)
-  if (!is.finite(df_resid) || df_resid <= 1) {
-    return(c(NA_real_, NA_real_))
-  }
-
-  n_harm <- (n1 * n2) / (n1 + n2)
-  t_obs <- d * sqrt(n_harm)
-  alpha <- 1 - ci_level
-
-  ncp_lo <- find_ncp_t_lm(t_obs, df_resid, 1 - alpha / 2)
-  ncp_hi <- find_ncp_t_lm(t_obs, df_resid, alpha / 2)
-
-  bounds <- c(ncp_lo, ncp_hi) / sqrt(n_harm)
-  if (isTRUE(hedges_correct)) {
-    j <- 1 - 3 / (4 * df_resid - 1)
-    bounds <- j * bounds
-  }
-  bounds
-}
-
-extract_lm_f_stat <- function(fit) {
-  sm <- summary(fit)
-  fst <- sm$fstatistic
-  if (is.null(fst) || length(fst) < 3L) {
-    return(NULL)
-  }
-  list(
-    f_obs = unname(fst[["value"]]),
-    df1 = unname(fst[["numdf"]]),
-    df2 = unname(fst[["dendf"]])
-  )
-}
-
-compute_omega2_ci_lm <- function(fit, ci_level) {
-  fs <- extract_lm_f_stat(fit)
-  if (is.null(fs) || !is.finite(fs$f_obs) || fs$f_obs <= 0) {
-    return(c(NA_real_, NA_real_))
-  }
-  alpha <- 1 - ci_level
-  ncp_lo <- find_ncp_f_lm(fs$f_obs, fs$df1, fs$df2, 1 - alpha / 2)
-  ncp_hi <- find_ncp_f_lm(fs$f_obs, fs$df1, fs$df2, alpha / 2)
-  if (anyNA(c(ncp_lo, ncp_hi))) {
-    return(c(NA_real_, NA_real_))
-  }
-  n_total <- fs$df1 + fs$df2 + 1L
-  bounds <- c(ncp_lo, ncp_hi) / (c(ncp_lo, ncp_hi) + n_total)
-  pmax(0, bounds)
-}
-
-compute_f2_ci_lm <- function(fit, ci_level) {
-  fs <- extract_lm_f_stat(fit)
-  if (is.null(fs) || !is.finite(fs$f_obs) || fs$f_obs <= 0) {
-    return(c(NA_real_, NA_real_))
-  }
-  alpha <- 1 - ci_level
-  ncp_lo <- find_ncp_f_lm(fs$f_obs, fs$df1, fs$df2, 1 - alpha / 2)
-  ncp_hi <- find_ncp_f_lm(fs$f_obs, fs$df1, fs$df2, alpha / 2)
-  if (anyNA(c(ncp_lo, ncp_hi))) {
-    return(c(NA_real_, NA_real_))
-  }
-  n_total <- fs$df1 + fs$df2 + 1L
-  c(ncp_lo, ncp_hi) / n_total
-}
-
-compute_es_ci_lm <- function(fit, effect_size, ci_level) {
-  if (identical(effect_size, "none")) {
-    return(c(NA_real_, NA_real_))
-  }
-  switch(
-    effect_size,
-    f2 = compute_f2_ci_lm(fit, ci_level),
-    d = compute_smd_ci_lm(fit, ci_level, hedges_correct = FALSE),
-    g = compute_smd_ci_lm(fit, ci_level, hedges_correct = TRUE),
-    omega2 = compute_omega2_ci_lm(fit, ci_level),
-    spicy_abort(paste0("Unknown `effect_size`: ", effect_size), class = "spicy_invalid_input")
-  )
-}
-
-build_wide_raw_continuous_lm <- function(
-  x,
-  show_statistic = TRUE,
-  show_p_value = TRUE,
-  show_n = TRUE,
-  show_weighted_n = FALSE,
-  effect_size = "none",
-  effect_size_ci = FALSE,
-  r2_type = "r2",
-  ci = TRUE,
-  ci_level = 0.95
-) {
-  vars <- unique(x$variable)
-  first_block <- x[x$variable == vars[1], , drop = FALSE]
-  by_type <- unique(first_block$predictor_type)[1]
-  ci_ll_name <- paste0(round(ci_level * 100), "% CI LL")
-  ci_ul_name <- paste0(round(ci_level * 100), "% CI UL")
-  include_es <- !identical(effect_size, "none")
-  include_es_ci <- include_es && isTRUE(effect_size_ci)
-  include_r2 <- !identical(r2_type, "none")
-
-  out <- data.frame(
-    Variable = vapply(
-      vars,
-      function(v) x$label[match(v, x$variable)],
-      character(1)
-    ),
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
-
-  if (identical(by_type, "categorical")) {
-    for (lev in first_block$level) {
-      out[[paste0("M (", lev, ")")]] <- NA_real_
-    }
-    if (nrow(first_block) == 2L) {
-      out[[get_delta_label_lm(first_block)]] <- NA_real_
-      if (isTRUE(ci)) {
-        out[[ci_ll_name]] <- NA_real_
-        out[[ci_ul_name]] <- NA_real_
-      }
-    }
-  } else {
-    out$B <- NA_real_
-    if (isTRUE(ci)) {
-      out[[ci_ll_name]] <- NA_real_
-      out[[ci_ul_name]] <- NA_real_
-    }
-  }
-
-  test_header <- get_test_header_lm(x, show_statistic, exact = TRUE)
-  if (!is.null(test_header)) {
-    out[[test_header]] <- NA_real_
-  }
-  if (show_p_value) {
-    out$p <- NA_real_
-  }
-  if (include_r2) {
-    out[[format_r2_header_lm(r2_type)]] <- NA_real_
-  }
-  if (include_es) {
-    out[[format_effect_size_header_lm(effect_size)]] <- NA_real_
-    if (include_es_ci) {
-      out$effect_size_ci_lower <- NA_real_
-      out$effect_size_ci_upper <- NA_real_
-    }
-  }
-  if (show_n) {
-    out$n <- NA_integer_
-  }
-  if (show_weighted_n) {
-    out[["Weighted n"]] <- NA_real_
-  }
-
-  for (i in seq_along(vars)) {
-    block <- x[x$variable == vars[i], , drop = FALSE]
-    test_row <- get_test_row_index_lm(block)
-
-    if (identical(by_type, "categorical")) {
-      for (j in seq_len(nrow(block))) {
-        out[i, paste0("M (", block$level[j], ")")] <- block$emmean[j]
-      }
-      if (nrow(block) == 2L) {
-        delta_name <- get_delta_label_lm(block)
-        out[[delta_name]][i] <- block$estimate[test_row]
-        if (isTRUE(ci)) {
-          out[[ci_ll_name]][i] <- block$estimate_ci_lower[test_row]
-          out[[ci_ul_name]][i] <- block$estimate_ci_upper[test_row]
-        }
-      }
-    } else {
-      out$B[i] <- block$estimate[1]
-      if (isTRUE(ci)) {
-        out[[ci_ll_name]][i] <- block$estimate_ci_lower[1]
-        out[[ci_ul_name]][i] <- block$estimate_ci_upper[1]
-      }
-    }
-
-    if (!is.null(test_header)) {
-      out[[test_header]][i] <- block$statistic[test_row]
-    }
-    if (show_p_value) {
-      out$p[i] <- block$p.value[test_row]
-    }
-    if (include_r2) {
-      out[[format_r2_header_lm(r2_type)]][i] <- get_r2_value_lm(block, r2_type)
-    }
-    if (include_es) {
-      out[[format_effect_size_header_lm(effect_size)]][i] <- block$es_value[1]
-      if (include_es_ci) {
-        out$effect_size_ci_lower[i] <- block$es_ci_lower[1]
-        out$effect_size_ci_upper[i] <- block$es_ci_upper[1]
-      }
-    }
-    if (show_n) {
-      out$n[i] <- block$n[1]
-    }
-    if (show_weighted_n) {
-      out[["Weighted n"]][i] <- block$weighted_n[1]
-    }
-  }
-
-  out
-}
-
-build_wide_display_df_continuous_lm <- function(
-  x,
-  digits = 2L,
-  decimal_mark = ".",
-  ci_level = 0.95,
-  show_statistic = TRUE,
-  show_p_value = TRUE,
-  show_n = TRUE,
-  show_weighted_n = FALSE,
-  effect_size = "none",
-  effect_size_ci = FALSE,
-  r2_type = "r2",
-  ci = TRUE,
-  fit_digits = 2L,
-  effect_size_digits = 2L,
-  p_digits = 3L
-) {
-  vars <- unique(x$variable)
-  first_block <- x[x$variable == vars[1], , drop = FALSE]
-  by_type <- unique(first_block$predictor_type)[1]
-  ci_ll_name <- paste0(round(ci_level * 100), "% CI LL")
-  ci_ul_name <- paste0(round(ci_level * 100), "% CI UL")
-  include_es <- !identical(effect_size, "none")
-  include_es_ci <- include_es && isTRUE(effect_size_ci)
-  include_r2 <- !identical(r2_type, "none")
-  r2_header <- format_r2_header_lm(r2_type)
-
-  out <- data.frame(
-    Variable = vapply(
-      vars,
-      function(v) x$label[match(v, x$variable)],
-      character(1)
-    ),
-    check.names = FALSE,
-    stringsAsFactors = FALSE
-  )
-
-  if (identical(by_type, "categorical")) {
-    for (lev in first_block$level) {
-      out[[paste0("M (", lev, ")")]] <- ""
-    }
-    if (nrow(first_block) == 2L) {
-      out[[get_delta_label_lm(first_block)]] <- ""
-      if (isTRUE(ci)) {
-        out[[ci_ll_name]] <- ""
-        out[[ci_ul_name]] <- ""
-      }
-    }
-  } else {
-    out$B <- ""
-    if (isTRUE(ci)) {
-      out[[ci_ll_name]] <- ""
-      out[[ci_ul_name]] <- ""
-    }
-  }
-
-  test_header <- get_test_header_lm(x, show_statistic, exact = TRUE)
-  if (!is.null(test_header)) {
-    out[[test_header]] <- ""
-  }
-  if (show_p_value) {
-    out$p <- ""
-  }
-  if (include_r2) {
-    out[[r2_header]] <- ""
-  }
-  if (include_es) {
-    out[[format_effect_size_header_lm(effect_size)]] <- ""
-  }
-  if (show_n) {
-    out$n <- ""
-  }
-  if (show_weighted_n) {
-    out[["Weighted n"]] <- ""
-  }
-
-  for (i in seq_along(vars)) {
-    block <- x[x$variable == vars[i], , drop = FALSE]
-    test_row <- get_test_row_index_lm(block)
-    if (identical(by_type, "categorical")) {
-      for (j in seq_len(nrow(block))) {
-        out[i, paste0("M (", block$level[j], ")")] <- format_number(
-          block$emmean[j],
-          digits,
-          decimal_mark
-        )
-      }
-      if (nrow(block) == 2L) {
-        delta_name <- get_delta_label_lm(block)
-        out[[delta_name]][i] <- format_number(
-          block$estimate[test_row],
-          digits,
-          decimal_mark
-        )
-        if (isTRUE(ci)) {
-          out[[ci_ll_name]][i] <- format_number(
-            block$estimate_ci_lower[test_row],
-            digits,
-            decimal_mark
-          )
-          out[[ci_ul_name]][i] <- format_number(
-            block$estimate_ci_upper[test_row],
-            digits,
-            decimal_mark
-          )
-        }
-      }
-    } else {
-      out$B[i] <- format_number(block$estimate[1], digits, decimal_mark)
-      if (isTRUE(ci)) {
-        out[[ci_ll_name]][i] <- format_number(
-          block$estimate_ci_lower[1],
-          digits,
-          decimal_mark
-        )
-        out[[ci_ul_name]][i] <- format_number(
-          block$estimate_ci_upper[1],
-          digits,
-          decimal_mark
-        )
-      }
-    }
-
-    if (!is.null(test_header)) {
-      out[[test_header]][i] <- format_number(
-        block$statistic[test_row],
-        digits,
-        decimal_mark
-      )
-    }
-    if (show_p_value) {
-      out$p[i] <- format_p_value(
-        block$p.value[test_row],
-        decimal_mark,
-        digits = p_digits
-      )
-    }
-    if (include_es) {
-      es_str <- format_number(
-        block$es_value[1],
-        effect_size_digits,
-        decimal_mark
-      )
-      if (include_es_ci) {
-        es_lo <- format_number(
-          block$es_ci_lower[1],
-          effect_size_digits,
-          decimal_mark
-        )
-        es_hi <- format_number(
-          block$es_ci_upper[1],
-          effect_size_digits,
-          decimal_mark
-        )
-        if (nzchar(es_str) && nzchar(es_lo) && nzchar(es_hi)) {
-          sep <- ci_bracket_separator(decimal_mark)
-          es_str <- paste0(es_str, " [", es_lo, sep, es_hi, "]")
-        }
-      }
-      out[[format_effect_size_header_lm(effect_size)]][i] <- es_str
-    }
-    if (include_r2) {
-      out[[r2_header]][i] <- format_number(
-        get_r2_value_lm(block, r2_type),
-        fit_digits,
-        decimal_mark
-      )
-    }
-    if (show_n) {
-      out$n[i] <- if (is.na(block$n[1])) {
-        ""
-      } else {
-        as.character(as.integer(block$n[1]))
-      }
-    }
-    if (show_weighted_n) {
-      out[["Weighted n"]][i] <- if (is.na(block$weighted_n[1])) {
-        ""
-      } else {
-        format_number(block$weighted_n[1], digits, decimal_mark)
-      }
-    }
-  }
-
-  out
-}
-
-export_continuous_lm_table <- function(
-  display_df,
-  output,
-  ci_level,
-  align = "decimal",
-  decimal_mark = ".",
-  excel_path,
-  excel_sheet,
-  clipboard_delim,
-  word_path
-) {
-  ci_pct <- paste0(round(ci_level * 100), "%")
-  ci_ll <- paste0(ci_pct, " CI LL")
-  ci_ul <- paste0(ci_pct, " CI UL")
-  has_ci <- all(c(ci_ll, ci_ul) %in% names(display_df))
-
-  # For engines without native decimal alignment (flextable, word,
-  # clipboard), pre-pad numeric cells with leading/trailing spaces so
-  # decimal points line up vertically. gt and tinytable have native
-  # decimal alignment and are handled with their own API. Excel keeps
-  # the engine-default alignment (proportional fonts make cell-string
-  # padding unreliable; native decimal alignment in Excel would
-  # require writing raw numbers + a number format).
-  use_decimal <- identical(align, "decimal")
-  needs_padding_engine <- output %in%
-    c("flextable", "word", "clipboard")
-  if (use_decimal && needs_padding_engine) {
-    numeric_cols <- setdiff(seq_along(display_df), 1L)
-    for (j in numeric_cols) {
-      display_df[[j]] <- decimal_align_strings(
-        display_df[[j]],
-        decimal_mark = decimal_mark
-      )
-    }
-  }
-
-  if (identical(output, "tinytable")) {
-    if (!requireNamespace("tinytable", quietly = TRUE)) {
-      spicy_abort("Install package 'tinytable'.", class = "spicy_missing_pkg")
-    }
-    old_tt_opt <- getOption("tinytable_print_output")
-    options(tinytable_print_output = "html")
-    on.exit(options(tinytable_print_output = old_tt_opt), add = TRUE)
-
-    display_df <- rename_ci_cols_lm(display_df, ci_ll, ci_ul)
-    col_keys <- names(display_df)
-    nc <- length(col_keys)
-    ll_pos <- which(col_keys == "LL")
-    ul_pos <- which(col_keys == "UL")
-
-    sub_labels <- rep("", nc)
-    if (has_ci) {
-      sub_labels[ll_pos] <- "LL"
-      sub_labels[ul_pos] <- "UL"
-    }
-    colnames(display_df) <- sub_labels
-
-    gspec <- list()
-    for (j in seq_along(col_keys)) {
-      if (has_ci && col_keys[j] %in% c("LL", "UL")) {
-        next
-      }
-      gspec[[col_keys[j]]] <- j
-    }
-    if (has_ci) {
-      gspec[[paste0(ci_pct, " CI")]] <- c(ll_pos, ul_pos)
-    }
-
-    tt <- tinytable::tt(display_df)
-    tt <- tinytable::group_tt(tt, j = gspec)
-    tt <- tinytable::theme_empty(tt)
-    tt <- tinytable::style_tt(tt, j = 1, align = "l")
-    if (ncol(display_df) > 1L) {
-      numeric_j <- setdiff(seq_len(nc), 1L)
-      if (use_decimal && length(numeric_j) > 0L) {
-        for (rj in numeric_j) {
-          tt <- tinytable::style_tt(tt, j = rj, align = "d")
-        }
-      } else if (identical(align, "center") && length(numeric_j) > 0L) {
-        tt <- tinytable::style_tt(tt, j = numeric_j, align = "c")
-      } else if (identical(align, "right") && length(numeric_j) > 0L) {
-        for (rj in numeric_j) {
-          tt <- tinytable::style_tt(tt, j = rj, align = "r")
-        }
-      } else {
-        right_j <- which(col_keys %in% c("n", "Weighted n", "p"))
-        center_j <- setdiff(seq_len(nc), c(1L, right_j))
-        if (length(center_j) > 0L) {
-          tt <- tinytable::style_tt(tt, j = center_j, align = "c")
-        }
-        if (length(right_j) > 0L) {
-          for (rj in right_j) {
-            tt <- tinytable::style_tt(tt, j = rj, align = "r")
-          }
-        }
-      }
-      spanner_center_j <- setdiff(seq_len(nc), 1L)
-      if (length(spanner_center_j) > 0L) {
-        tt <- tinytable::style_tt(tt, i = -1, j = spanner_center_j, align = "c")
-      }
-      tt <- tinytable::style_tt(tt, i = -1, j = 1L, align = "l")
-      tt <- tinytable::style_tt(
-        tt,
-        i = -1,
-        j = seq_len(nc),
-        line = "t",
-        line_width = 0.06
-      )
-      if (has_ci) {
-        tt <- tinytable::style_tt(
-          tt,
-          i = -1,
-          j = c(ll_pos, ul_pos),
-          line = "b",
-          line_width = 0.06
-        )
-      }
-      tt <- tinytable::style_tt(
-        tt,
-        i = 0,
-        j = seq_len(nc),
-        line = "b",
-        line_width = 0.06
-      )
-      tt <- tinytable::style_tt(
-        tt,
-        i = nrow(display_df),
-        j = seq_len(nc),
-        line = "b",
-        line_width = 0.06
-      )
-      p_j <- which(col_keys == "p")
-      if (length(p_j) == 1L) {
-        tt <- tinytable::style_tt(
-          tt,
-          j = p_j,
-          html_css = "white-space: nowrap;"
-        )
-      }
-    }
-    return(tt)
-  }
-
-  if (identical(output, "gt")) {
-    if (!requireNamespace("gt", quietly = TRUE)) {
-      spicy_abort("Install package 'gt'.", class = "spicy_missing_pkg")
-    }
-
-    display_df <- rename_ci_cols_lm(display_df, ci_ll, ci_ul)
-    col_keys <- names(display_df)
-    tbl <- gt::gt(display_df)
-
-    label_list <- stats::setNames(as.list(rep("", length(col_keys))), col_keys)
-    if (has_ci && "LL" %in% col_keys) {
-      label_list[["LL"]] <- "LL"
-    }
-    if (has_ci && "UL" %in% col_keys) {
-      label_list[["UL"]] <- "UL"
-    }
-    tbl <- gt::cols_label(tbl, .list = label_list)
-
-    single_cols <- setdiff(col_keys, c("LL", "UL"))
-    for (col in single_cols) {
-      tbl <- gt::tab_spanner(
-        tbl,
-        label = col,
-        columns = col,
-        id = paste0("spn_", make.names(col))
-      )
-    }
-    if (has_ci) {
-      tbl <- gt::tab_spanner(
-        tbl,
-        label = paste0(ci_pct, " CI"),
-        columns = c("LL", "UL")
-      )
-    }
-
-    tbl <- gt::cols_align(tbl, align = "left", columns = "Variable")
-    numeric_cols <- setdiff(col_keys, "Variable")
-    if (use_decimal && length(numeric_cols) > 0L) {
-      tbl <- gt::cols_align_decimal(tbl, columns = numeric_cols)
-    } else if (identical(align, "center") && length(numeric_cols) > 0L) {
-      tbl <- gt::cols_align(tbl, align = "center", columns = numeric_cols)
-    } else if (identical(align, "right") && length(numeric_cols) > 0L) {
-      tbl <- gt::cols_align(tbl, align = "right", columns = numeric_cols)
-    } else {
-      # "auto": legacy per-column rule
-      center_cols <- setdiff(col_keys, c("Variable", "n", "p"))
-      if (length(center_cols) > 0L) {
-        tbl <- gt::cols_align(tbl, align = "center", columns = center_cols)
-      }
-      right_cols <- intersect(c("n", "Weighted n", "p"), col_keys)
-      if (length(right_cols) > 0L) {
-        tbl <- gt::cols_align(tbl, align = "right", columns = right_cols)
-      }
-    }
-
-    rule <- gt::cell_borders(
-      sides = "bottom",
-      color = "currentColor",
-      weight = gt::px(1)
-    )
-    rule_top <- gt::cell_borders(
-      sides = "top",
-      color = "currentColor",
-      weight = gt::px(1)
-    )
-    tbl <- gt::tab_options(
-      tbl,
-      table.border.top.width = gt::px(0),
-      table.border.bottom.width = gt::px(0),
-      table_body.border.top.width = gt::px(0),
-      table_body.border.bottom.width = gt::px(0),
-      table_body.hlines.color = "transparent",
-      column_labels.border.top.width = gt::px(0),
-      column_labels.border.bottom.width = gt::px(0),
-      column_labels.border.lr.color = "transparent"
-    )
-    tbl <- gt::tab_style(
-      tbl,
-      style = rule_top,
-      locations = gt::cells_column_spanners()
-    )
-    if (has_ci) {
-      tbl <- gt::tab_style(
-        tbl,
-        style = rule_top,
-        locations = gt::cells_column_labels(columns = c("LL", "UL"))
-      )
-    }
-    tbl <- gt::tab_style(
-      tbl,
-      style = rule,
-      locations = gt::cells_column_labels()
-    )
-    tbl <- gt::tab_style(
-      tbl,
-      style = rule,
-      locations = gt::cells_body(rows = nrow(display_df))
-    )
-    tbl <- gt::tab_style(
-      tbl,
-      style = gt::cell_text(align = "left"),
-      locations = gt::cells_column_labels(columns = "Variable")
-    )
-    non_variable_cols <- setdiff(col_keys, "Variable")
-    if (length(non_variable_cols) > 0L) {
-      tbl <- gt::tab_style(
-        tbl,
-        style = gt::cell_text(align = "center"),
-        locations = gt::cells_column_labels(columns = non_variable_cols)
-      )
-    }
-    tbl <- gt::tab_style(
-      tbl,
-      style = gt::cell_text(align = "left"),
-      locations = gt::cells_column_spanners(spanners = "spn_Variable")
-    )
-
-    ci_css_sel <- if (has_ci) {
-      paste(
-        vapply(
-          c("LL", "UL"),
-          function(id) sprintf('.gt_table thead tr:last-child th[id="%s"]', id),
-          character(1)
-        ),
-        collapse = ",\n"
-      )
-    } else {
-      ""
-    }
-    apa_css <- paste(
-      ".gt_table thead tr:first-child {",
-      "  border-top: 1px solid currentColor !important;",
-      "}",
-      ".gt_table thead tr.gt_spanner_row {",
-      "  border-bottom-style: none !important;",
-      "}",
-      ".gt_table thead th, .gt_table thead td {",
-      "  background-color: transparent !important;",
-      "}",
-      if (has_ci) paste0(ci_css_sel, " {") else "",
-      if (has_ci) "  border-top: 1px solid currentColor !important;" else "",
-      if (has_ci) "}" else "",
-      ".gt_table thead tr:last-child {",
-      "  border-bottom: 1px solid currentColor !important;",
-      "}",
-      ".gt_table tbody tr:last-child {",
-      "  border-bottom: 1px solid currentColor !important;",
-      "}",
-      ".gt_table tbody tr {",
-      "  border-top-style: none !important;",
-      "  border-bottom-style: none !important;",
-      "}",
-      ".gt_table .gt_col_heading, .gt_table .gt_spanner {",
-      "  white-space: nowrap !important;",
-      "}",
-      ".gt_table .gt_row .gt_right, .gt_table .gt_row .gt_center {",
-      "  white-space: nowrap !important;",
-      "}",
-      sep = "\n"
-    )
-    tbl <- gt::opt_css(tbl, css = apa_css)
-
-    return(tbl)
-  }
-
-  if (output %in% c("flextable", "word")) {
-    if (!requireNamespace("flextable", quietly = TRUE)) {
-      spicy_abort("Install package 'flextable'.", class = "spicy_missing_pkg")
-    }
-    if (
-      identical(output, "word") &&
-        !requireNamespace("officer", quietly = TRUE)
-    ) {
-      spicy_abort("Install package 'officer'.", class = "spicy_missing_pkg")
-    }
-
-    display_df <- rename_ci_cols_lm(display_df, ci_ll, ci_ul)
-    col_keys <- names(display_df)
-    hdrs <- build_header_rows_lm(col_keys, ci_pct)
-    map <- data.frame(
-      col_keys = col_keys,
-      top = hdrs$top,
-      bottom = hdrs$bottom,
-      stringsAsFactors = FALSE,
-      check.names = FALSE
-    )
-
-    ft <- flextable::flextable(display_df)
-    ft <- flextable::set_header_df(ft, mapping = map, key = "col_keys")
-    ft <- flextable::merge_h(ft, part = "header")
-
-    bd <- spicy_fp_border(color = "black", width = 1)
-    ci_j <- which(col_keys %in% c("LL", "UL"))
-    left_j <- 1L
-    numeric_j <- setdiff(seq_along(col_keys), left_j)
-
-    ft <- flextable::align(ft, j = left_j, part = "header", align = "left")
-    ft <- flextable::align(ft, j = left_j, part = "body", align = "left")
-
-    if (use_decimal && length(numeric_j) > 0L) {
-      # Cells are pre-padded for decimal alignment; right-align the
-      # padded strings preserves the dot-aligned column. Use a
-      # monospace font in the body so character widths match. (For
-      # proportional fonts, alignment is approximate.)
-      ft <- flextable::align(ft, j = numeric_j, part = "header", align = "center")
-      ft <- flextable::align(ft, j = numeric_j, part = "body", align = "right")
-      ft <- flextable::font(
-        ft,
-        j = numeric_j,
-        part = "body",
-        fontname = "Consolas"
-      )
-    } else if (identical(align, "center") && length(numeric_j) > 0L) {
-      ft <- flextable::align(ft, j = numeric_j, part = "all", align = "center")
-    } else if (identical(align, "right") && length(numeric_j) > 0L) {
-      ft <- flextable::align(ft, j = numeric_j, part = "header", align = "center")
-      ft <- flextable::align(ft, j = numeric_j, part = "body", align = "right")
-    } else {
-      # "auto": legacy per-column rule
-      right_j <- which(col_keys %in% c("n", "Weighted n", "p"))
-      center_j <- setdiff(seq_along(col_keys), c(left_j, right_j))
-      if (length(center_j) > 0L) {
-        ft <- flextable::align(ft, j = center_j, part = "all", align = "center")
-      }
-      if (length(right_j) > 0L) {
-        ft <- flextable::align(ft, j = right_j, part = "header", align = "center")
-        ft <- flextable::align(ft, j = right_j, part = "body", align = "right")
-      }
-    }
-
-    ft <- flextable::hline_top(ft, part = "header", border = bd)
-    if (has_ci) {
-      ft <- flextable::hline(
-        ft,
-        i = 1,
-        j = ci_j,
-        part = "header",
-        border = bd
-      )
-    }
-    ft <- flextable::hline_bottom(ft, part = "header", border = bd)
-    ft <- flextable::hline_bottom(ft, part = "body", border = bd)
-    if ("p" %in% col_keys) {
-      ft <- flextable::compose(
-        ft,
-        j = which(col_keys == "p"),
-        part = "body",
-        value = flextable::as_paragraph(
-          flextable::as_chunk(display_df[[which(col_keys == "p")]])
-        )
-      )
-    }
-    ft <- flextable::autofit(ft)
-
-    if (identical(output, "word")) {
-      if (is.null(word_path) || !nzchar(word_path)) {
-        spicy_abort(
-          "`word_path` must be provided for `output = \"word\"`.", class = "spicy_invalid_input")
-      }
-      flextable::save_as_docx(ft, path = word_path)
-      return(word_path)
-    }
-
-    return(ft)
-  }
-
-  if (identical(output, "excel")) {
-    if (!requireNamespace("openxlsx2", quietly = TRUE)) {
-      spicy_abort("Install package 'openxlsx2'.", class = "spicy_missing_pkg")
-    }
-    if (is.null(excel_path) || !nzchar(excel_path)) {
-      spicy_abort(
-        "`excel_path` must be provided for `output = \"excel\"`.", class = "spicy_invalid_input")
-    }
-
-    display_df <- rename_ci_cols_lm(display_df, ci_ll, ci_ul)
-    col_keys <- names(display_df)
-    nc <- length(col_keys)
-    hdrs <- build_header_rows_lm(col_keys, ci_pct)
-    ci_j <- which(col_keys %in% c("LL", "UL"))
-
-    wb <- openxlsx2::wb_workbook()
-    wb <- openxlsx2::wb_add_worksheet(wb, excel_sheet)
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      x = as.data.frame(t(hdrs$top), stringsAsFactors = FALSE),
-      start_row = 1,
-      col_names = FALSE
-    )
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      x = as.data.frame(t(hdrs$bottom), stringsAsFactors = FALSE),
-      start_row = 2,
-      col_names = FALSE
-    )
-    wb <- openxlsx2::wb_add_data(
-      wb,
-      x = display_df,
-      start_row = 3,
-      col_names = FALSE,
-      row_names = FALSE
-    )
-    if (has_ci) {
-      wb <- openxlsx2::wb_merge_cells(
-        wb,
-        dims = openxlsx2::wb_dims(rows = 1, cols = ci_j)
-      )
-    }
-    last_row <- 2 + nrow(display_df)
-
-    left_cols <- 1L
-    right_cols <- which(col_keys %in% c("n", "Weighted n", "p"))
-    center_cols <- setdiff(seq_len(nc), c(left_cols, right_cols))
-    header_rows <- 1:2
-    body_rows <- if (last_row >= 3) 3:last_row else integer(0)
-
-    wb <- openxlsx2::wb_add_cell_style(
-      wb,
-      dims = openxlsx2::wb_dims(rows = 1:last_row, cols = left_cols),
-      horizontal = "left"
-    )
-    if (length(center_cols) > 0L) {
-      wb <- openxlsx2::wb_add_cell_style(
-        wb,
-        dims = openxlsx2::wb_dims(rows = header_rows, cols = center_cols),
-        horizontal = "center",
-        vertical = "center"
-      )
-      if (length(body_rows) > 0L) {
-        wb <- openxlsx2::wb_add_cell_style(
-          wb,
-          dims = openxlsx2::wb_dims(rows = body_rows, cols = center_cols),
-          horizontal = "center",
-          vertical = "center"
-        )
-      }
-    }
-    if (length(right_cols) > 0L) {
-      wb <- openxlsx2::wb_add_cell_style(
-        wb,
-        dims = openxlsx2::wb_dims(rows = header_rows, cols = right_cols),
-        horizontal = "center",
-        vertical = "center"
-      )
-    }
-    if (length(right_cols) > 0L && length(body_rows) > 0L) {
-      wb <- openxlsx2::wb_add_cell_style(
-        wb,
-        dims = openxlsx2::wb_dims(rows = body_rows, cols = right_cols),
-        horizontal = "right"
-      )
-    }
-
-    wb <- openxlsx2::wb_add_border(
-      wb,
-      dims = openxlsx2::wb_dims(rows = 1, cols = 1:nc),
-      top_border = "thin"
-    )
-    if (has_ci) {
-      wb <- openxlsx2::wb_add_border(
-        wb,
-        dims = openxlsx2::wb_dims(rows = 1, cols = ci_j),
-        bottom_border = "thin"
-      )
-    }
-    wb <- openxlsx2::wb_add_border(
-      wb,
-      dims = openxlsx2::wb_dims(rows = 2, cols = 1:nc),
-      bottom_border = "thin"
-    )
-    if (nrow(display_df) > 0) {
-      wb <- openxlsx2::wb_add_border(
-        wb,
-        dims = openxlsx2::wb_dims(rows = last_row, cols = 1:nc),
-        bottom_border = "thin"
-      )
-    }
-    openxlsx2::wb_save(wb, excel_path, overwrite = TRUE)
-    return(excel_path)
-  }
-
-  if (identical(output, "clipboard")) {
-    if (!requireNamespace("clipr", quietly = TRUE)) {
-      spicy_abort("Install package 'clipr'.", class = "spicy_missing_pkg")
-    }
-
-    display_df <- rename_ci_cols_lm(display_df, ci_ll, ci_ul)
-    col_keys <- names(display_df)
-    hdrs <- build_header_rows_lm(col_keys, ci_pct)
-    clip_mat <- rbind(hdrs$top, hdrs$bottom, as.matrix(display_df))
-    lines <- apply(clip_mat, 1, function(r) {
-      paste(r, collapse = clipboard_delim)
-    })
-    clipr::write_clip(paste(lines, collapse = "\n"))
-    message("Linear-model table copied to clipboard.")
-    return(invisible(display_df))
-  }
-
-  spicy_abort("Unknown output format.", class = "spicy_invalid_input")
-}
-
-rename_ci_cols_lm <- function(display_df, ci_ll, ci_ul) {
-  names(display_df)[names(display_df) == ci_ll] <- "LL"
-  names(display_df)[names(display_df) == ci_ul] <- "UL"
-  display_df
-}
-
-build_header_rows_lm <- function(col_keys, ci_pct) {
-  nc <- length(col_keys)
-  top <- col_keys
-  top[col_keys == "LL"] <- paste0(ci_pct, " CI")
-  top[col_keys == "UL"] <- paste0(ci_pct, " CI")
-  bottom <- rep("", nc)
-  bottom[col_keys == "LL"] <- "LL"
-  bottom[col_keys == "UL"] <- "UL"
-  list(top = top, bottom = bottom)
-}
-
-get_delta_label_lm <- function(block) {
-  paste0("\u0394 (", block$level[2], " - ", block$level[1], ")")
-}
-
-get_test_row_index_lm <- function(block) {
-  if (identical(unique(block$predictor_type)[1], "continuous")) {
-    return(1L)
-  }
-  if (nrow(block) == 2L && any(!is.na(block$estimate))) {
-    return(which(!is.na(block$estimate))[1])
-  }
-  1L
-}
-
-get_test_header_lm <- function(block, show_statistic = TRUE, exact = TRUE) {
-  if (!isTRUE(show_statistic)) {
-    return(NULL)
-  }
-
-  # df1 is always integer (number of constraints). df2 may be a
-  # fractional Satterthwaite df under cluster-robust inference;
-  # show as integer when whole, with a single decimal otherwise
-  # (e.g. `t(45.3)` instead of `t(45)`). Asymptotic methods (z,
-  # chi2) carry no df2 in the displayed header.
-  format_df <- function(d) {
-    d <- unname(d)
-    if (!is.finite(d)) {
-      return("")
-    }
-    if (abs(d - round(d)) < .Machine$double.eps^0.5) {
-      return(as.character(as.integer(round(d))))
-    }
-    formatC(d, format = "f", digits = 1L)
-  }
-
-  # Choose the displayed test. For numeric or binary categorical
-  # predictors, the user-relevant test is the single-coefficient
-  # contrast (`"t"` or asymptotic `"z"`). For k > 2 categorical
-  # predictors, it is the multi-coefficient global Wald (`"F"` or
-  # asymptotic `"chi2"`). When both kinds appear in the block (binary
-  # categorical: row 1 has `"F"`, row 2 has `"t"`), the single-coef
-  # one wins because that is the row the wide table actually shows.
-  test_types <- unique(stats::na.omit(block$test_type))
-  if (length(test_types) == 0L) {
-    return(NULL)
-  }
-  single_coef <- intersect(test_types, c("t", "z"))
-  multi_coef <- intersect(test_types, c("F", "chi2"))
-  chosen <- if (length(single_coef) > 0L) single_coef[1] else multi_coef[1]
-  if (length(chosen) == 0L || is.na(chosen)) {
-    return(test_types[1])
-  }
-
-  rows_for_chosen <- which(block$test_type == chosen)
-  df1_vals <- unique(stats::na.omit(block$df1[rows_for_chosen]))
-  df2_vals <- unique(stats::na.omit(block$df2[rows_for_chosen]))
-
-  if (identical(chosen, "z")) {
-    return("z")
-  }
-  if (identical(chosen, "chi2")) {
-    if (isTRUE(exact) && length(df1_vals) == 1L) {
-      return(paste0("\u03C7\u00B2(", format_df(df1_vals), ")"))
-    }
-    return("\u03C7\u00B2")
-  }
-  if (identical(chosen, "t")) {
-    if (isTRUE(exact) && length(df2_vals) == 1L) {
-      return(paste0("t(", format_df(df2_vals), ")"))
-    }
-    return("t")
-  }
-  if (identical(chosen, "F")) {
-    if (isTRUE(exact) && length(df1_vals) == 1L && length(df2_vals) == 1L) {
-      return(
-        paste0(
-          "F(",
-          format_df(df1_vals),
-          ", ",
-          format_df(df2_vals),
-          ")"
-        )
-      )
-    }
-    return("F")
-  }
-  chosen
-}
-
-format_effect_size_header_lm <- function(effect_size = "f2") {
-  switch(
-    effect_size,
-    f2 = "f\u00B2",
-    d = "d",
-    g = "g",
-    omega2 = "\u03C9\u00B2",
-    effect_size
-  )
-}
-
-format_r2_header_lm <- function(r2_type = "r2") {
-  switch(
-    r2_type,
-    r2 = "R\u00B2",
-    adj_r2 = "Adj. R\u00B2",
-    r2_type
-  )
-}
-
-get_r2_value_lm <- function(block, r2_type = "r2") {
-  switch(
-    r2_type,
-    r2 = block$r2[1],
-    adj_r2 = block$adj_r2[1],
-    NA_real_
-  )
-}
-

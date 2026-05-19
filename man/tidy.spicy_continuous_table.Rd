@@ -23,9 +23,8 @@ A \code{tbl_df} (when \code{tibble} is installed) or a plain
 Standard \code{\link[broom:tidy]{broom::tidy()}} and \code{\link[broom:glance]{broom::glance()}} interfaces for an
 object returned by \code{\link[=table_continuous]{table_continuous()}}. They re-shape the
 underlying long-format data into the two canonical broom views so
-the descriptive table can be consumed by \code{gtsummary},
-\code{modelsummary}, \code{parameters}, and any other tidyverse-stats
-pipeline.
+the descriptive table can be consumed by any downstream
+tidyverse-stats pipeline.
 }
 \details{
 \code{tidy()} returns one row per \verb{(variable x group)} (or per
@@ -36,12 +35,12 @@ empirical mean), \code{std.error} (\code{sd / sqrt(n)}), \code{conf.low},
 \code{min}, \code{max}, \code{sd}. The \code{outcome} column carries the variable name
 and \code{label} the human-readable label.
 
-\code{glance()} returns one row per \code{variable} with the omnibus group
-comparison (when \code{by} is used) and the requested effect size:
-\code{outcome}, \code{label}, \code{test_type}, \code{statistic}, \code{df}, \code{df.residual},
-\code{p.value}, \code{es_type}, \code{es_value}, \code{es_ci_lower}, \code{es_ci_upper},
-\code{n_total}. Without \code{by}, only \code{outcome}, \code{label}, and \code{n_total}
-are populated; the other columns are \code{NA}.
+\code{glance()} returns one row per outcome with the omnibus group
+comparison (when \code{by} is used) and the requested effect size.
+Columns: \code{outcome}, \code{label}, \code{test_type}, \code{statistic}, \code{df},
+\code{df.residual}, \code{p.value}, \code{es_type}, \code{es_value}, \code{es_ci_lower},
+\code{es_ci_upper}, \code{n_total}. Without \code{by}, only \code{outcome}, \code{label},
+and \code{n_total} are populated; the other columns are \code{NA}.
 }
 \seealso{
 \code{\link[=as.data.frame.spicy_continuous_table]{as.data.frame.spicy_continuous_table()}} for the raw

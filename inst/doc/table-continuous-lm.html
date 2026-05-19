@@ -345,11 +345,15 @@ R</h1>
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(spicy)</span></code></pre></div>
 <p><code>table_continuous_lm()</code> is the model-based companion to
 <code>table_continuous()</code>. It fits one linear model per selected
-continuous outcome using <code>lm(outcome ~ by, ...)</code>, then
-returns a compact reporting table. This makes it the better choice when
-you want to stay in a linear-model workflow, add
-heteroskedasticity-consistent standard errors, or apply case
-weights.</p>
+continuous outcome –
+<code>lm(outcome ~ by + covariate1 + covariate2 + ...)</code> if
+covariates are supplied, otherwise <code>lm(outcome ~ by)</code> – and
+returns a compact reporting table. This is the right choice when you
+want to stay in a linear-model workflow with
+heteroskedasticity-consistent or cluster-robust standard errors,
+bootstrap / jackknife variance, case weights, additive covariate
+adjustment, or one of four effect-size families (<code>f2</code>,
+Cohen’s <em>d</em>, Hedges’ <em>g</em>, Hays’ <span class="math inline">\(\omega^2\)</span>) with noncentral CIs.</p>
 <div id="basic-usage" class="section level2">
 <h2>Basic usage</h2>
 <p>Use <code>select</code> for one or more continuous outcomes and
@@ -496,6 +500,138 @@ reports the slope rather than group means:</p>
 use <code>output = &quot;data.frame&quot;</code> for the wide raw table or
 <code>output = &quot;long&quot;</code> for the analytic long table.</p>
 </div>
+<div id="covariate-adjustment" class="section level2">
+<h2>Covariate adjustment</h2>
+<p>When the comparison of <code>by</code>-group means is potentially
+confounded by other variables, supply them through
+<code>covariates</code>. Each per-outcome linear model becomes
+<code>lm(outcome ~ by + covariate1 + covariate2 + ...)</code>, and the
+reported <code>Δ</code> (categorical <code>by</code>) or slope (numeric
+<code>by</code>), its CI, <em>p</em>, R² and effect size are all
+<strong>adjusted for</strong> the covariates. The default ASCII print
+emits an APA-style footer naming the adjustment so the reader knows
+which estimand they are reading.</p>
+<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
+<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">covariates =</span> <span class="fu">c</span>(age, education),</span>
+<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>  <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span></span>
+<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a>)</span>
+<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
+<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Female)  M (Male)  Δ (Male - Female) </span></span>
+<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   67.27      70.93          3.65        </span></span>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   25.65      26.23          0.58        </span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI LL  95% CI UL    p     R²    n   </span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   2.08       5.23     &lt;.001  0.22  1200 </span></span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.19       0.97      .004  0.16  1188 </span></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; Note. Adjusted for age, education (proportional).</span></span></code></pre></div>
+<p><code>covariates</code> accepts the full tidyselect vocabulary
+(<code>c(age, sex)</code>,
+<code>tidyselect::starts_with(&quot;life_sat_&quot;)</code>,
+<code>tidyselect::all_of(cov_names)</code>) or a literal character
+vector. A covariate that also appears in <code>select</code> is silently
+auto-excluded from the outcome list (mirroring how <code>by</code> /
+<code>weights</code> are excluded from <code>select</code>); a covariate
+equal to <code>by</code> is rejected up front.</p>
+<div id="two-estimands-for-the-adjusted-marginal-means" class="section level3">
+<h3>Two estimands for the adjusted marginal means</h3>
+<p>Two methodologically distinct conventions exist for computing the
+covariate-adjusted per-group means displayed in the table (the
+<code>M (level)</code> columns of the printed output, and the
+<code>emmean</code> / <code>emmean_se</code> /
+<code>emmean_ci_lower</code> / <code>emmean_ci_upper</code> columns of
+the <code>output = &quot;long&quot;</code> data frame) when <code>by</code> is
+categorical. <code>table_continuous_lm()</code> exposes the choice via
+<code>adjustment</code>; both are valid but produce different numerical
+answers when at least one factor covariate has non-uniform observed
+proportions.</p>
+<ul>
+<li><p><code>adjustment = &quot;proportional&quot;</code> (the
+<strong>default</strong>) — G-computation / population-weighted
+standardisation. For each focal level of <code>by</code>, predictions
+are evaluated at every observation in the data with <code>by</code>
+replaced by that level (covariates kept at their observed values), then
+averaged. This is the convention of Stata’s <code>margins</code> and
+<code>marginaleffects::avg_predictions(variables)</code>.
+Interpretation: <em>“What is the predicted mean in this population if
+everyone had <code>by = lvl</code>, holding their actual covariate
+profile?”</em>. Best for causal / counterfactual reporting.</p></li>
+<li><p><code>adjustment = &quot;balanced&quot;</code> — equal-weight averaging on
+a synthetic grid. Factor-covariate level combinations are crossed and
+weighted uniformly (<code>1 / k</code>); numeric covariates are fixed at
+their sample mean. This is the convention of
+<code>emmeans::emmeans()</code> (default), SPSS UNIANOVA EMMEANS, and
+SAS LSMEANS. Interpretation: <em>“What is the predicted mean assuming a
+balanced covariate design?”</em>. Best for descriptive / ANOVA-style APA
+reporting.</p></li>
+</ul>
+<p>The two methods coincide trivially when <code>covariates</code> is
+<code>NULL</code>, and also when all covariates are numeric or logical
+(no factor levels to expand over). They diverge only when categorical
+covariate proportions are skewed in the observed data.</p>
+<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="co"># Same model, balanced (emmeans-style) marginal means:</span></span>
+<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  sochealth,</span>
+<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
+<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>  <span class="at">covariates =</span> <span class="fu">c</span>(age, education),</span>
+<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a>  <span class="at">adjustment =</span> <span class="st">&quot;balanced&quot;</span>,</span>
+<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a>  <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span></span>
+<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a>)</span>
+<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
+<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Female)  M (Male)  Δ (Male - Female) </span></span>
+<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   69.93      73.59          3.65        </span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   25.04      25.62          0.58        </span></span>
+<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI LL  95% CI UL    p     R²    n   </span></span>
+<span id="cb9-18"><a href="#cb9-18" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb9-19"><a href="#cb9-19" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   2.08       5.23     &lt;.001  0.22  1200 </span></span>
+<span id="cb9-20"><a href="#cb9-20" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.19       0.97      .004  0.16  1188 </span></span>
+<span id="cb9-21"><a href="#cb9-21" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb9-22"><a href="#cb9-22" tabindex="-1"></a><span class="co">#&gt; Note. Adjusted for age, education (balanced).</span></span></code></pre></div>
+</div>
+<div id="effect-sizes-under-adjustment" class="section level3">
+<h3>Effect sizes under adjustment</h3>
+<p>Adding covariates changes which effect sizes remain meaningful:</p>
+<ul>
+<li><code>effect_size = &quot;f2&quot;</code> and <code>&quot;omega2&quot;</code> are
+reported as <strong>partial</strong> <em>f²</em> / partial <em>ω²</em>
+via <code>stats::drop1()</code> restricted to the focal term — the
+correct generalisation of the bivariate effect size to a
+covariate-adjusted model.</li>
+<li><code>effect_size = &quot;d&quot;</code> and <code>&quot;g&quot;</code> raise
+<code>spicy_unsupported</code>: Cohen’s <em>d</em> and Hedges’
+<em>g</em> have no defined extension under adjustment (the pooled SD has
+no canonical analogue). The error message points to <code>f2</code> /
+<code>omega2</code> as the partial-F generalisations.</li>
+</ul>
+<p>Both effect-size variants and their noncentral CIs (when
+<code>effect_size_ci = TRUE</code>) are computed from the same fitted
+model as the displayed coefficients and remain invariant to
+<code>vcov</code> (HC* / CR* / bootstrap / jackknife only affect the
+contrast SE).</p>
+</div>
+<div id="scope-additive-only-in-v1" class="section level3">
+<h3>Scope: additive only in v1</h3>
+<p><code>covariates</code> accepts additive terms only. Formula syntax
+with interactions or transforms (<code>covariates = ~ age * sex</code>,
+<code>covariates = ~ I(age^2)</code>) raises
+<code>spicy_unsupported</code> with a migration hint. Interactions and
+polynomials are reserved for a future spicy release. To fit a
+fully-specified model right now, do so with <code>lm()</code> directly
+and inspect via <code>summary()</code> or
+<code>table_regression()</code> (which accepts interaction / polynomial
+/ <code>I()</code> terms natively).</p>
+</div>
+</div>
 <div id="effect-sizes" class="section level2">
 <h2>Effect sizes</h2>
 <p><code>table_continuous_lm()</code> supports four effect sizes via the
@@ -508,85 +644,85 @@ statistic but not the standardized effect size itself).</p>
 <p>Cohen’s <em>d</em> and Hedges’ <em>g</em> are the conventions for
 two-group comparisons (Cohen 1988; Hedges and Olkin 1985; APA 2020) and
 require <code>by</code> to have exactly two non-empty levels:</p>
-<div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb8-3"><a href="#cb8-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb8-4"><a href="#cb8-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
-<span id="cb8-5"><a href="#cb8-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;d&quot;</span></span>
-<span id="cb8-6"><a href="#cb8-6" tabindex="-1"></a>)</span>
-<span id="cb8-7"><a href="#cb8-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
-<span id="cb8-8"><a href="#cb8-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-9"><a href="#cb8-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
-<span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
-<span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
-<span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²     d     n   </span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────</span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11  1175 </span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01  1163</span></span></code></pre></div>
+<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;d&quot;</span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>)</span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
+<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
+<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
+<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²     d     n   </span></span>
+<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────</span></span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11  1175 </span></span>
+<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01  1163</span></span></code></pre></div>
 <p>Hedges’ <em>g</em> applies the small-sample correction
 <code>J = 1 - 3/(4·df_resid - 1)</code>. It is generally preferred over
 raw <em>d</em> in published reports (Goulet-Pelletier and Cousineau
 2018):</p>
-<div class="sourceCode" id="cb9"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb9-1"><a href="#cb9-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb9-2"><a href="#cb9-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb9-3"><a href="#cb9-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb9-4"><a href="#cb9-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
-<span id="cb9-5"><a href="#cb9-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span></span>
-<span id="cb9-6"><a href="#cb9-6" tabindex="-1"></a>)</span>
-<span id="cb9-7"><a href="#cb9-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
-<span id="cb9-8"><a href="#cb9-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb9-9"><a href="#cb9-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
-<span id="cb9-10"><a href="#cb9-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
-<span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
-<span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
-<span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²     g     n   </span></span>
-<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────</span></span>
-<span id="cb9-16"><a href="#cb9-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11  1175 </span></span>
-<span id="cb9-17"><a href="#cb9-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01  1163</span></span></code></pre></div>
+<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
+<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span></span>
+<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>)</span>
+<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
+<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
+<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
+<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
+<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²     g     n   </span></span>
+<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────</span></span>
+<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11  1175 </span></span>
+<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01  1163</span></span></code></pre></div>
 <p>For categorical predictors with three or more levels (or numeric
 predictors), use Hays’ <code>omega²</code> for a less biased estimate of
 the population variance explained (Hays 1963; Olejnik and Algina 2003;
 Lakens 2013):</p>
-<div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
-<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;omega2&quot;</span></span>
-<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a>)</span>
-<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Highest education level</span></span>
-<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Lower secondary)  M (Upper secondary) </span></span>
-<span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
-<span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │        67.68                81.56        </span></span>
-<span id="cb10-12"><a href="#cb10-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │        26.17                23.55        </span></span>
-<span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Tertiary)    p     R²    ω²    n   </span></span>
-<span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────────</span></span>
-<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │    66.10      &lt;.001  0.21  0.21  1200 </span></span>
-<span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │    26.35      &lt;.001  0.13  0.13  1188</span></span></code></pre></div>
+<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;omega2&quot;</span></span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>)</span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Highest education level</span></span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Lower secondary)  M (Upper secondary) </span></span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │        67.68                81.56        </span></span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │        26.17                23.55        </span></span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Tertiary)    p     R²    ω²    n   </span></span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────────</span></span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │    66.10      &lt;.001  0.21  0.21  1200 </span></span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │    26.35      &lt;.001  0.13  0.13  1188</span></span></code></pre></div>
 <p>Cohen’s <code>f²</code> (= <code>R² / (1 - R²)</code>) is the effect
 size familiar from power-analysis frameworks (e.g. G*Power) and is
 defined for any predictor type:</p>
-<div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb11-4"><a href="#cb11-4" tabindex="-1"></a>  <span class="at">by =</span> age,</span>
-<span id="cb11-5"><a href="#cb11-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;f2&quot;</span></span>
-<span id="cb11-6"><a href="#cb11-6" tabindex="-1"></a>)</span>
-<span id="cb11-7"><a href="#cb11-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Age (years)</span></span>
-<span id="cb11-8"><a href="#cb11-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb11-9"><a href="#cb11-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  B    95% CI LL  95% CI UL    p     R²    f²  </span></span>
-<span id="cb11-10"><a href="#cb11-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────────────────</span></span>
-<span id="cb11-11"><a href="#cb11-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 0.04    -0.02      0.10      .177  0.00  0.00 </span></span>
-<span id="cb11-12"><a href="#cb11-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 0.04     0.02      0.05     &lt;.001  0.02  0.02 </span></span>
-<span id="cb11-13"><a href="#cb11-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb11-14"><a href="#cb11-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  n   </span></span>
-<span id="cb11-15"><a href="#cb11-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────</span></span>
-<span id="cb11-16"><a href="#cb11-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 1200 </span></span>
-<span id="cb11-17"><a href="#cb11-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 1188</span></span></code></pre></div>
+<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">by =</span> age,</span>
+<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;f2&quot;</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>)</span>
+<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Age (years)</span></span>
+<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  B    95% CI LL  95% CI UL    p     R²    f²  </span></span>
+<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────────────────</span></span>
+<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 0.04    -0.02      0.10      .177  0.00  0.00 </span></span>
+<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 0.04     0.02      0.05     &lt;.001  0.02  0.02 </span></span>
+<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  n   </span></span>
+<span id="cb13-15"><a href="#cb13-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────</span></span>
+<span id="cb13-16"><a href="#cb13-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 1200 </span></span>
+<span id="cb13-17"><a href="#cb13-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 1188</span></span></code></pre></div>
 </div>
 <div id="confidence-intervals-for-effect-sizes" class="section level2">
 <h2>Confidence intervals for effect sizes</h2>
@@ -609,58 +745,58 @@ approximation that is biased for small samples.</li>
 </ul>
 <p>In the printed and rendered outputs, the effect size is displayed
 with the bracketed CI (article-ready):</p>
-<div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
-<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
-<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
-<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a>)</span>
-<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
-<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
-<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
-<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
-<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
-<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²            g          </span></span>
-<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────────</span></span>
-<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11 [-0.25, 0.03] </span></span>
-<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01 [-0.15, 0.13] </span></span>
-<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  n   </span></span>
-<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────</span></span>
-<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 1175 </span></span>
-<span id="cb12-23"><a href="#cb12-23" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 1163</span></span></code></pre></div>
+<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
+<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
+<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
+<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>)</span>
+<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Current smoker</span></span>
+<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (No)  M (Yes)  Δ (Yes - No)  95% CI LL </span></span>
+<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 69.36    67.65      -1.72        -3.91   </span></span>
+<span id="cb14-13"><a href="#cb14-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 25.96    25.93      -0.03        -0.55   </span></span>
+<span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI UL   p     R²            g          </span></span>
+<span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼────────────────────────────────────────────</span></span>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   0.47     .124  0.00  -0.11 [-0.25, 0.03] </span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.49     .905  0.00  -0.01 [-0.15, 0.13] </span></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="co">#&gt;  Variable                      │  n   </span></span>
+<span id="cb14-21"><a href="#cb14-21" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼──────</span></span>
+<span id="cb14-22"><a href="#cb14-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 1175 </span></span>
+<span id="cb14-23"><a href="#cb14-23" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 1163</span></span></code></pre></div>
 <p>The CI level follows <code>ci_level</code> (default
 <code>0.95</code>). For programmatic access, the wide raw output exposes
 separate numeric columns, and the long output always includes them:</p>
-<div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">select =</span> wellbeing_score,</span>
-<span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
-<span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;data.frame&quot;</span></span>
-<span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a>)</span>
-<span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt;                                      Variable   M (No)  M (Yes) Δ (Yes - No)</span></span>
-<span id="cb13-10"><a href="#cb13-10" tabindex="-1"></a><span class="co">#&gt; wellbeing_score WHO-5 wellbeing index (0-100) 69.36317 67.64538    -1.717793</span></span>
-<span id="cb13-11"><a href="#cb13-11" tabindex="-1"></a><span class="co">#&gt;                 95% CI LL 95% CI UL         p          R²          g</span></span>
-<span id="cb13-12"><a href="#cb13-12" tabindex="-1"></a><span class="co">#&gt; wellbeing_score -3.906437 0.4708504 0.1238546 0.002017481 -0.1098571</span></span>
-<span id="cb13-13"><a href="#cb13-13" tabindex="-1"></a><span class="co">#&gt;                 effect_size_ci_lower effect_size_ci_upper    n</span></span>
-<span id="cb13-14"><a href="#cb13-14" tabindex="-1"></a><span class="co">#&gt; wellbeing_score           -0.2497291           0.03006164 1175</span></span></code></pre></div>
-<div class="sourceCode" id="cb14"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb14-1"><a href="#cb14-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">table_continuous_lm</span>(</span>
-<span id="cb14-2"><a href="#cb14-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb14-3"><a href="#cb14-3" tabindex="-1"></a>  <span class="at">select =</span> wellbeing_score,</span>
-<span id="cb14-4"><a href="#cb14-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
-<span id="cb14-5"><a href="#cb14-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
-<span id="cb14-6"><a href="#cb14-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb14-7"><a href="#cb14-7" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;long&quot;</span></span>
-<span id="cb14-8"><a href="#cb14-8" tabindex="-1"></a>)</span>
-<span id="cb14-9"><a href="#cb14-9" tabindex="-1"></a>out[, <span class="fu">c</span>(<span class="st">&quot;variable&quot;</span>, <span class="st">&quot;es_type&quot;</span>, <span class="st">&quot;es_value&quot;</span>, <span class="st">&quot;es_ci_lower&quot;</span>, <span class="st">&quot;es_ci_upper&quot;</span>)]</span>
-<span id="cb14-10"><a href="#cb14-10" tabindex="-1"></a><span class="co">#&gt;          variable es_type   es_value es_ci_lower es_ci_upper</span></span>
-<span id="cb14-11"><a href="#cb14-11" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_score       g -0.1098571  -0.2497291  0.03006164</span></span>
-<span id="cb14-12"><a href="#cb14-12" tabindex="-1"></a><span class="co">#&gt; 2 wellbeing_score    &lt;NA&gt;         NA          NA          NA</span></span></code></pre></div>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">select =</span> wellbeing_score,</span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;data.frame&quot;</span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>)</span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a><span class="co">#&gt;                                      Variable   M (No)  M (Yes) Δ (Yes - No)</span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt; wellbeing_score WHO-5 wellbeing index (0-100) 69.36317 67.64538    -1.717793</span></span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt;                 95% CI LL 95% CI UL         p          R²          g</span></span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt; wellbeing_score -3.906437 0.4708504 0.1238546 0.002017481 -0.1098571</span></span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt;                 effect_size_ci_lower effect_size_ci_upper    n</span></span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt; wellbeing_score           -0.2497291           0.03006164 1175</span></span></code></pre></div>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">table_continuous_lm</span>(</span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>  <span class="at">select =</span> wellbeing_score,</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>  <span class="at">by =</span> smoking,</span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;long&quot;</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>)</span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>out[, <span class="fu">c</span>(<span class="st">&quot;variable&quot;</span>, <span class="st">&quot;es_type&quot;</span>, <span class="st">&quot;es_value&quot;</span>, <span class="st">&quot;es_ci_lower&quot;</span>, <span class="st">&quot;es_ci_upper&quot;</span>)]</span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">#&gt;          variable es_type   es_value es_ci_lower es_ci_upper</span></span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_score       g -0.1098571  -0.2497291  0.03006164</span></span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a><span class="co">#&gt; 2 wellbeing_score    &lt;NA&gt;         NA          NA          NA</span></span></code></pre></div>
 <p>When <code>weights</code> is supplied, all four effect sizes (and
 their CIs) are computed from the weighted least-squares fit, keeping
 them consistent with the weighted contrast and its CI (DuMouchel and
@@ -674,29 +810,29 @@ appropriate.</p>
 <h2>Article-style polish</h2>
 <p>Pretty outcome labels and a comma decimal separator (useful for
 European reporting):</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(</span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>    <span class="at">wellbeing_score =</span> <span class="st">&quot;WHO-5 wellbeing (0-100)&quot;</span>,</span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>    <span class="at">bmi =</span> <span class="st">&quot;Body-mass index (kg/m²)&quot;</span></span>
-<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  ),</span>
-<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
-<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a>  <span class="at">decimal_mark =</span> <span class="st">&quot;,&quot;</span></span>
-<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a>)</span>
-<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
-<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co">#&gt;  Variable                │ M (Female)  M (Male)  Δ (Male - Female)  95% CI LL </span></span>
-<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────┼────────────────────────────────────────────────────</span></span>
-<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing (0-100) │   67,16      71,05          3,89           2,13    </span></span>
-<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt;  Body-mass index (kg/m²) │   25,69      26,20          0,51           0,09    </span></span>
-<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt;  Variable                │ 95% CI UL    p     R²           g           n   </span></span>
-<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────┼─────────────────────────────────────────────────</span></span>
-<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing (0-100) │   5,64     &lt;,001  0,02  0,25 [0,14; 0,36]  1200 </span></span>
-<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a><span class="co">#&gt;  Body-mass index (kg/m²) │   0,93      ,018  0,00  0,14 [0,02; 0,25]  1188</span></span></code></pre></div>
+<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a><span class="fu">table_continuous_lm</span>(</span>
+<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
+<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>  <span class="at">labels =</span> <span class="fu">c</span>(</span>
+<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>    <span class="at">wellbeing_score =</span> <span class="st">&quot;WHO-5 wellbeing (0-100)&quot;</span>,</span>
+<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>    <span class="at">bmi =</span> <span class="st">&quot;Body-mass index (kg/m²)&quot;</span></span>
+<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a>  ),</span>
+<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
+<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb17-11"><a href="#cb17-11" tabindex="-1"></a>  <span class="at">decimal_mark =</span> <span class="st">&quot;,&quot;</span></span>
+<span id="cb17-12"><a href="#cb17-12" tabindex="-1"></a>)</span>
+<span id="cb17-13"><a href="#cb17-13" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
+<span id="cb17-14"><a href="#cb17-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb17-15"><a href="#cb17-15" tabindex="-1"></a><span class="co">#&gt;  Variable                │ M (Female)  M (Male)  Δ (Male - Female)  95% CI LL </span></span>
+<span id="cb17-16"><a href="#cb17-16" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────┼────────────────────────────────────────────────────</span></span>
+<span id="cb17-17"><a href="#cb17-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing (0-100) │   67,16      71,05          3,89           2,13    </span></span>
+<span id="cb17-18"><a href="#cb17-18" tabindex="-1"></a><span class="co">#&gt;  Body-mass index (kg/m²) │   25,69      26,20          0,51           0,09    </span></span>
+<span id="cb17-19"><a href="#cb17-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb17-20"><a href="#cb17-20" tabindex="-1"></a><span class="co">#&gt;  Variable                │ 95% CI UL    p     R²           g           n   </span></span>
+<span id="cb17-21"><a href="#cb17-21" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────┼─────────────────────────────────────────────────</span></span>
+<span id="cb17-22"><a href="#cb17-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing (0-100) │   5,64     &lt;,001  0,02  0,25 [0,14; 0,36]  1200 </span></span>
+<span id="cb17-23"><a href="#cb17-23" tabindex="-1"></a><span class="co">#&gt;  Body-mass index (kg/m²) │   0,93      ,018  0,00  0,14 [0,02; 0,25]  1188</span></span></code></pre></div>
 </div>
 <div id="publication-ready-output" class="section level2">
 <h2>Publication-ready output</h2>
@@ -704,75 +840,74 @@ European reporting):</p>
 summary-table helpers, including <code>tinytable</code>,
 <code>gt</code>, <code>flextable</code>, <code>excel</code>,
 <code>word</code>, and <code>clipboard</code>.</p>
-<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a><span class="fu">pkgdown_dark_gt</span>(</span>
-<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  <span class="fu">table_continuous_lm</span>(</span>
-<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>    sochealth,</span>
-<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi, life_sat_health),</span>
-<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>    <span class="at">by =</span> sex,</span>
-<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>    <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span>,</span>
-<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>    <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
-<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;gt&quot;</span></span>
-<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>  )</span>
-<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a>)</span></code></pre></div>
+<div class="sourceCode" id="cb18"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb18-1"><a href="#cb18-1" tabindex="-1"></a><span class="fu">pkgdown_dark_gt</span>(</span>
+<span id="cb18-2"><a href="#cb18-2" tabindex="-1"></a>  <span class="fu">table_continuous_lm</span>(</span>
+<span id="cb18-3"><a href="#cb18-3" tabindex="-1"></a>    sochealth,</span>
+<span id="cb18-4"><a href="#cb18-4" tabindex="-1"></a>    <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi, life_sat_health),</span>
+<span id="cb18-5"><a href="#cb18-5" tabindex="-1"></a>    <span class="at">by =</span> sex,</span>
+<span id="cb18-6"><a href="#cb18-6" tabindex="-1"></a>    <span class="at">vcov =</span> <span class="st">&quot;HC3&quot;</span>,</span>
+<span id="cb18-7"><a href="#cb18-7" tabindex="-1"></a>    <span class="at">statistic =</span> <span class="cn">TRUE</span>,</span>
+<span id="cb18-8"><a href="#cb18-8" tabindex="-1"></a>    <span class="at">output =</span> <span class="st">&quot;gt&quot;</span></span>
+<span id="cb18-9"><a href="#cb18-9" tabindex="-1"></a>  )</span>
+<span id="cb18-10"><a href="#cb18-10" tabindex="-1"></a>)</span></code></pre></div>
 </div>
 <div id="tidying-for-downstream-pipelines" class="section level2">
 <h2>Tidying for downstream pipelines</h2>
 <p><code>table_continuous_lm()</code> returns an object that can be
 coerced to a plain <code>data.frame</code> / <code>tbl_df</code>
 (stripping the spicy formatting attributes) or piped into
-<code>broom::tidy()</code> / <code>broom::glance()</code> for use with
-<code>gtsummary</code>, <code>modelsummary</code>,
-<code>parameters</code>, or any other tidyverse-stats workflow:</p>
-<div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">table_continuous_lm</span>(</span>
-<span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>  sochealth,</span>
-<span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
-<span id="cb17-4"><a href="#cb17-4" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
-<span id="cb17-5"><a href="#cb17-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
-<span id="cb17-6"><a href="#cb17-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
-<span id="cb17-7"><a href="#cb17-7" tabindex="-1"></a>)</span>
-<span id="cb17-8"><a href="#cb17-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
-<span id="cb17-9"><a href="#cb17-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb17-10"><a href="#cb17-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Female)  M (Male)  Δ (Male - Female) </span></span>
-<span id="cb17-11"><a href="#cb17-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
-<span id="cb17-12"><a href="#cb17-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   67.16      71.05          3.89        </span></span>
-<span id="cb17-13"><a href="#cb17-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   25.69      26.20          0.51        </span></span>
-<span id="cb17-14"><a href="#cb17-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb17-15"><a href="#cb17-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI LL  95% CI UL    p     R²  </span></span>
-<span id="cb17-16"><a href="#cb17-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────</span></span>
-<span id="cb17-17"><a href="#cb17-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   2.13       5.64     &lt;.001  0.02 </span></span>
-<span id="cb17-18"><a href="#cb17-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.09       0.93      .018  0.00 </span></span>
-<span id="cb17-19"><a href="#cb17-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb17-20"><a href="#cb17-20" tabindex="-1"></a><span class="co">#&gt;  Variable                      │         g           n   </span></span>
-<span id="cb17-21"><a href="#cb17-21" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────</span></span>
-<span id="cb17-22"><a href="#cb17-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 0.25 [0.14, 0.36]  1200 </span></span>
-<span id="cb17-23"><a href="#cb17-23" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 0.14 [0.02, 0.25]  1188</span></span>
-<span id="cb17-24"><a href="#cb17-24" tabindex="-1"></a></span>
-<span id="cb17-25"><a href="#cb17-25" tabindex="-1"></a><span class="co"># One row per estimated parameter: emmean per level, contrast for</span></span>
-<span id="cb17-26"><a href="#cb17-26" tabindex="-1"></a><span class="co"># binary predictors, slope for numeric predictors.</span></span>
-<span id="cb17-27"><a href="#cb17-27" tabindex="-1"></a>broom<span class="sc">::</span><span class="fu">tidy</span>(out)</span>
-<span id="cb17-28"><a href="#cb17-28" tabindex="-1"></a><span class="co">#&gt; # A tibble: 6 × 10</span></span>
-<span id="cb17-29"><a href="#cb17-29" tabindex="-1"></a><span class="co">#&gt;   outcome        label term  estimate_type estimate std.error conf.low conf.high</span></span>
-<span id="cb17-30"><a href="#cb17-30" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;          &lt;chr&gt; &lt;chr&gt; &lt;chr&gt;            &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;</span></span>
-<span id="cb17-31"><a href="#cb17-31" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_sco… WHO-… Fema… emmean          67.2       0.623  65.9       68.4  </span></span>
-<span id="cb17-32"><a href="#cb17-32" tabindex="-1"></a><span class="co">#&gt; 2 wellbeing_sco… WHO-… Male  emmean          71.0       0.644  69.8       72.3  </span></span>
-<span id="cb17-33"><a href="#cb17-33" tabindex="-1"></a><span class="co">#&gt; 3 wellbeing_sco… WHO-… Male… difference       3.89      0.896   2.13       5.64 </span></span>
-<span id="cb17-34"><a href="#cb17-34" tabindex="-1"></a><span class="co">#&gt; 4 bmi            Body… Fema… emmean          25.7       0.150  25.4       26.0  </span></span>
-<span id="cb17-35"><a href="#cb17-35" tabindex="-1"></a><span class="co">#&gt; 5 bmi            Body… Male  emmean          26.2       0.155  25.9       26.5  </span></span>
-<span id="cb17-36"><a href="#cb17-36" tabindex="-1"></a><span class="co">#&gt; 6 bmi            Body… Male… difference       0.512     0.216   0.0888     0.935</span></span>
-<span id="cb17-37"><a href="#cb17-37" tabindex="-1"></a><span class="co">#&gt; # ℹ 2 more variables: statistic &lt;dbl&gt;, p.value &lt;dbl&gt;</span></span>
-<span id="cb17-38"><a href="#cb17-38" tabindex="-1"></a></span>
-<span id="cb17-39"><a href="#cb17-39" tabindex="-1"></a><span class="co"># One row per outcome with model-level statistics: r.squared,</span></span>
-<span id="cb17-40"><a href="#cb17-40" tabindex="-1"></a><span class="co"># adj.r.squared, F / t, df, p.value, nobs, weighted_n, plus the</span></span>
-<span id="cb17-41"><a href="#cb17-41" tabindex="-1"></a><span class="co"># effect-size summary.</span></span>
-<span id="cb17-42"><a href="#cb17-42" tabindex="-1"></a>broom<span class="sc">::</span><span class="fu">glance</span>(out)</span>
-<span id="cb17-43"><a href="#cb17-43" tabindex="-1"></a><span class="co">#&gt; # A tibble: 2 × 16</span></span>
-<span id="cb17-44"><a href="#cb17-44" tabindex="-1"></a><span class="co">#&gt;   outcome     label predictor_type test_type statistic    df df.residual p.value</span></span>
-<span id="cb17-45"><a href="#cb17-45" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;       &lt;chr&gt; &lt;chr&gt;          &lt;chr&gt;         &lt;dbl&gt; &lt;int&gt;       &lt;int&gt;   &lt;dbl&gt;</span></span>
-<span id="cb17-46"><a href="#cb17-46" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_… WHO-… categorical    F             18.8      1        1198 1.55e-5</span></span>
-<span id="cb17-47"><a href="#cb17-47" tabindex="-1"></a><span class="co">#&gt; 2 bmi         Body… categorical    F              5.64     1        1186 1.78e-2</span></span>
-<span id="cb17-48"><a href="#cb17-48" tabindex="-1"></a><span class="co">#&gt; # ℹ 8 more variables: r.squared &lt;dbl&gt;, adj.r.squared &lt;dbl&gt;, es_type &lt;chr&gt;,</span></span>
-<span id="cb17-49"><a href="#cb17-49" tabindex="-1"></a><span class="co">#&gt; #   es_value &lt;dbl&gt;, es_ci_lower &lt;dbl&gt;, es_ci_upper &lt;dbl&gt;, nobs &lt;int&gt;,</span></span>
-<span id="cb17-50"><a href="#cb17-50" tabindex="-1"></a><span class="co">#&gt; #   weighted_n &lt;dbl&gt;</span></span></code></pre></div>
+<code>broom::tidy()</code> / <code>broom::glance()</code> for any
+downstream tidyverse-stats workflow:</p>
+<div class="sourceCode" id="cb19"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb19-1"><a href="#cb19-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">table_continuous_lm</span>(</span>
+<span id="cb19-2"><a href="#cb19-2" tabindex="-1"></a>  sochealth,</span>
+<span id="cb19-3"><a href="#cb19-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(wellbeing_score, bmi),</span>
+<span id="cb19-4"><a href="#cb19-4" tabindex="-1"></a>  <span class="at">by =</span> sex,</span>
+<span id="cb19-5"><a href="#cb19-5" tabindex="-1"></a>  <span class="at">effect_size =</span> <span class="st">&quot;g&quot;</span>,</span>
+<span id="cb19-6"><a href="#cb19-6" tabindex="-1"></a>  <span class="at">effect_size_ci =</span> <span class="cn">TRUE</span></span>
+<span id="cb19-7"><a href="#cb19-7" tabindex="-1"></a>)</span>
+<span id="cb19-8"><a href="#cb19-8" tabindex="-1"></a><span class="co">#&gt; Continuous outcomes by Sex</span></span>
+<span id="cb19-9"><a href="#cb19-9" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb19-10"><a href="#cb19-10" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ M (Female)  M (Male)  Δ (Male - Female) </span></span>
+<span id="cb19-11"><a href="#cb19-11" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
+<span id="cb19-12"><a href="#cb19-12" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   67.16      71.05          3.89        </span></span>
+<span id="cb19-13"><a href="#cb19-13" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   25.69      26.20          0.51        </span></span>
+<span id="cb19-14"><a href="#cb19-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb19-15"><a href="#cb19-15" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI LL  95% CI UL    p     R²  </span></span>
+<span id="cb19-16"><a href="#cb19-16" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼───────────────────────────────────</span></span>
+<span id="cb19-17"><a href="#cb19-17" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   2.13       5.64     &lt;.001  0.02 </span></span>
+<span id="cb19-18"><a href="#cb19-18" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.09       0.93      .018  0.00 </span></span>
+<span id="cb19-19"><a href="#cb19-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb19-20"><a href="#cb19-20" tabindex="-1"></a><span class="co">#&gt;  Variable                      │         g           n   </span></span>
+<span id="cb19-21"><a href="#cb19-21" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────</span></span>
+<span id="cb19-22"><a href="#cb19-22" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │ 0.25 [0.14, 0.36]  1200 </span></span>
+<span id="cb19-23"><a href="#cb19-23" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │ 0.14 [0.02, 0.25]  1188</span></span>
+<span id="cb19-24"><a href="#cb19-24" tabindex="-1"></a></span>
+<span id="cb19-25"><a href="#cb19-25" tabindex="-1"></a><span class="co"># One row per estimated parameter: emmean per level, contrast for</span></span>
+<span id="cb19-26"><a href="#cb19-26" tabindex="-1"></a><span class="co"># binary predictors, slope for numeric predictors.</span></span>
+<span id="cb19-27"><a href="#cb19-27" tabindex="-1"></a>broom<span class="sc">::</span><span class="fu">tidy</span>(out)</span>
+<span id="cb19-28"><a href="#cb19-28" tabindex="-1"></a><span class="co">#&gt; # A tibble: 6 × 10</span></span>
+<span id="cb19-29"><a href="#cb19-29" tabindex="-1"></a><span class="co">#&gt;   outcome        label term  estimate_type estimate std.error conf.low conf.high</span></span>
+<span id="cb19-30"><a href="#cb19-30" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;          &lt;chr&gt; &lt;chr&gt; &lt;chr&gt;            &lt;dbl&gt;     &lt;dbl&gt;    &lt;dbl&gt;     &lt;dbl&gt;</span></span>
+<span id="cb19-31"><a href="#cb19-31" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_sco… WHO-… Fema… emmean          67.2       0.623  65.9       68.4  </span></span>
+<span id="cb19-32"><a href="#cb19-32" tabindex="-1"></a><span class="co">#&gt; 2 wellbeing_sco… WHO-… Male  emmean          71.0       0.644  69.8       72.3  </span></span>
+<span id="cb19-33"><a href="#cb19-33" tabindex="-1"></a><span class="co">#&gt; 3 wellbeing_sco… WHO-… Male… difference       3.89      0.896   2.13       5.64 </span></span>
+<span id="cb19-34"><a href="#cb19-34" tabindex="-1"></a><span class="co">#&gt; 4 bmi            Body… Fema… emmean          25.7       0.150  25.4       26.0  </span></span>
+<span id="cb19-35"><a href="#cb19-35" tabindex="-1"></a><span class="co">#&gt; 5 bmi            Body… Male  emmean          26.2       0.155  25.9       26.5  </span></span>
+<span id="cb19-36"><a href="#cb19-36" tabindex="-1"></a><span class="co">#&gt; 6 bmi            Body… Male… difference       0.512     0.216   0.0888     0.935</span></span>
+<span id="cb19-37"><a href="#cb19-37" tabindex="-1"></a><span class="co">#&gt; # ℹ 2 more variables: statistic &lt;dbl&gt;, p.value &lt;dbl&gt;</span></span>
+<span id="cb19-38"><a href="#cb19-38" tabindex="-1"></a></span>
+<span id="cb19-39"><a href="#cb19-39" tabindex="-1"></a><span class="co"># One row per outcome with model-level statistics: r.squared,</span></span>
+<span id="cb19-40"><a href="#cb19-40" tabindex="-1"></a><span class="co"># adj.r.squared, F / t, df, p.value, nobs, weighted_n, plus the</span></span>
+<span id="cb19-41"><a href="#cb19-41" tabindex="-1"></a><span class="co"># effect-size summary.</span></span>
+<span id="cb19-42"><a href="#cb19-42" tabindex="-1"></a>broom<span class="sc">::</span><span class="fu">glance</span>(out)</span>
+<span id="cb19-43"><a href="#cb19-43" tabindex="-1"></a><span class="co">#&gt; # A tibble: 2 × 16</span></span>
+<span id="cb19-44"><a href="#cb19-44" tabindex="-1"></a><span class="co">#&gt;   outcome     label predictor_type test_type statistic    df df.residual p.value</span></span>
+<span id="cb19-45"><a href="#cb19-45" tabindex="-1"></a><span class="co">#&gt;   &lt;chr&gt;       &lt;chr&gt; &lt;chr&gt;          &lt;chr&gt;         &lt;dbl&gt; &lt;int&gt;       &lt;dbl&gt;   &lt;dbl&gt;</span></span>
+<span id="cb19-46"><a href="#cb19-46" tabindex="-1"></a><span class="co">#&gt; 1 wellbeing_… WHO-… categorical    F             18.8      1        1198 1.55e-5</span></span>
+<span id="cb19-47"><a href="#cb19-47" tabindex="-1"></a><span class="co">#&gt; 2 bmi         Body… categorical    F              5.64     1        1186 1.78e-2</span></span>
+<span id="cb19-48"><a href="#cb19-48" tabindex="-1"></a><span class="co">#&gt; # ℹ 8 more variables: r.squared &lt;dbl&gt;, adj.r.squared &lt;dbl&gt;, es_type &lt;chr&gt;,</span></span>
+<span id="cb19-49"><a href="#cb19-49" tabindex="-1"></a><span class="co">#&gt; #   es_value &lt;dbl&gt;, es_ci_lower &lt;dbl&gt;, es_ci_upper &lt;dbl&gt;, nobs &lt;int&gt;,</span></span>
+<span id="cb19-50"><a href="#cb19-50" tabindex="-1"></a><span class="co">#&gt; #   weighted_n &lt;dbl&gt;</span></span></code></pre></div>
 </div>
 <div id="see-also" class="section level2">
 <h2>See also</h2>

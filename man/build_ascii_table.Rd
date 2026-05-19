@@ -14,8 +14,11 @@ build_ascii_table(
   lines_color = "darkgrey",
   align_left_cols = c(1L, 2L),
   align_center_cols = integer(0),
+  center_headers = FALSE,
+  spanners = NULL,
   group_sep_rows = integer(0),
   total_row_idx = NULL,
+  display_labels = NULL,
   ...
 )
 }
@@ -49,13 +52,34 @@ If \code{TRUE}, draws a closing line at the bottom of the table.}
 The color is applied only when ANSI color support is available
 (see \code{\link[crayon:has_color]{crayon::has_color()}}).}
 
-\item{align_left_cols}{Integer vector of column indices to left-align.
-Defaults to \code{c(1, 2)} for frequency tables (Category + Values).}
+\item{align_left_cols}{Integer vector of column indices to
+left-align. Defaults to \code{c(1L, 2L)} (the layout used by
+\code{freq()}-style tables); pass an explicit vector for other
+layouts.}
 
 \item{align_center_cols}{Integer vector of column indices to
 center-align. Defaults to \code{integer(0)} (no centered columns).
 Columns not in \code{align_left_cols} or \code{align_center_cols} are
 right-aligned.}
+
+\item{center_headers}{Logical. When \code{TRUE}, column headers are
+centered above their column content even when the data itself
+is right-aligned (the publication convention for
+coefficient / summary tables; matches Stata \code{regress} and
+SPSS \code{REGRESSION} output). Left-aligned columns (per
+\code{align_left_cols}) keep their header on the left. Defaults to
+\code{FALSE} for backward compatibility; the
+\code{print.spicy_regression_table} method enables it.}
+
+\item{spanners}{Optional named list defining a \emph{column group row}
+drawn above the column headers (the "spanner" / "supra-header"
+convention; APA Manual 7 §7.13).
+Names are spanner labels; values are integer vectors of 1-based
+column indices the label spans (must be contiguous). A thin
+underline rule is drawn below each spanner across its span.
+Used by \code{print.spicy_regression_table()} to display the model
+name above each model's block of sub-columns. Defaults to
+\code{NULL} (no spanner row).}
 
 \item{group_sep_rows}{Integer vector of row indices before which a
 light dashed separator line is drawn. Defaults to \code{integer(0)}.}
@@ -69,6 +93,14 @@ or "Sub-Total". Cross-tabs and frequency tables built by
 \code{cross_tab()} and \code{freq()} set this attribute on their result so
 the print methods are immune to that false positive.}
 
+\item{display_labels}{Optional character vector of length \code{ncol(x)}
+used to override \code{colnames(x)} for the rendered header row only.
+The data.frame's actual names are kept for indexing; only the
+visual header is swapped. Used by \code{print.spicy_regression_table()}
+so a \code{B + AME} table shows the bare label (\verb{95\% CI}, \code{p}) in both
+blocks rather than R's deduplicated \verb{95\% CI.2} / \code{p.2}. Defaults
+to \code{NULL} (use \code{colnames(x)} verbatim).}
+
 \item{...}{Additional arguments (currently ignored).}
 }
 \value{
@@ -76,22 +108,19 @@ A single character string containing the full ASCII-formatted table,
 suitable for direct printing with \code{cat()}.
 }
 \description{
-Low-level internal function that constructs a visually aligned ASCII table
-from a \code{data.frame}.
-It supports Unicode characters, ANSI colors, dynamic width adjustment,
-left/right alignment, and spacing control.
-This function is primarily used internally by higher-level wrappers such as
-\code{\link[=spicy_print_table]{spicy_print_table()}} or \code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}.
+Low-level rendering engine that constructs a visually aligned
+ASCII table from a \code{data.frame}. Supports Unicode line-drawing
+characters, ANSI colors via \pkg{crayon}, automatic
+colored-text-aware width detection, configurable padding, and
+per-column alignment.
 }
 \details{
-\code{build_ascii_table()} is the rendering engine that produces the aligned text
-layout of \strong{spicy-formatted tables}.
-It automatically detects cell widths (including colored text), inserts Unicode
-separators, and applies a configurable amount of horizontal padding.
-
-For most users, this function should not be called directly. Instead, use
-\code{\link[=spicy_print_table]{spicy_print_table()}} which adds headers, notes, and alignment logic
-automatically.
+Most users should not call this directly: it is wrapped by
+\code{\link[=spicy_print_table]{spicy_print_table()}} and the internal \verb{print.spicy_*} methods,
+which add titles, notes, and table-type-aware alignment defaults.
+Reach for \code{build_ascii_table()} only when you need to render an
+arbitrary \code{data.frame} to a string with the same look as
+spicy's tables.
 }
 \examples{
 # Internal usage example (for developers)

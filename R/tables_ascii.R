@@ -26,26 +26,72 @@
   padding
 }
 
+# Internal: validate / normalise the `spanners` argument. Returns
+# either NULL (no spanner row) or a named list whose values are
+# unique sorted integer column indices in 1..n_cols. Each group
+# must be contiguous (the renderer centers one label over one
+# continuous range; gaps would require multiple spanner rows).
+.validate_spanners <- function(spanners, n_cols) {
+  if (is.null(spanners)) return(NULL)
+  if (!is.list(spanners) || is.null(names(spanners)) ||
+        any(!nzchar(names(spanners)))) {
+    spicy_abort(
+      c(paste0("`spanners` must be a named list (label \u2192 ",
+                "integer column indices)."),
+        "i" = "Example: `list(\"Step 1\" = 2:5, \"Step 2\" = 6:9)`."),
+      class = "spicy_invalid_input"
+    )
+  }
+  out <- list()
+  used <- integer(0)
+  for (lbl in names(spanners)) {
+    idx <- suppressWarnings(as.integer(spanners[[lbl]]))
+    if (length(idx) == 0L || any(is.na(idx)) ||
+          any(idx < 1L) || any(idx > n_cols)) {
+      spicy_abort(
+        sprintf("`spanners[[\"%s\"]]` must be integers in 1..%d.",
+                lbl, n_cols),
+        class = "spicy_invalid_input"
+      )
+    }
+    idx <- sort(unique(idx))
+    if (any(diff(idx) != 1L)) {
+      spicy_abort(
+        sprintf("`spanners[[\"%s\"]]` must be a contiguous column range.",
+                lbl),
+        class = "spicy_invalid_input"
+      )
+    }
+    if (any(idx %in% used)) {
+      spicy_abort(
+        sprintf("Spanner \"%s\" overlaps with another spanner.", lbl),
+        class = "spicy_invalid_input"
+      )
+    }
+    used <- c(used, idx)
+    out[[lbl]] <- idx
+  }
+  # Sort spanners by leftmost column for stable rendering order.
+  out[order(vapply(out, min, integer(1)))]
+}
+
 
 #' Build a formatted ASCII table
 #'
 #' @description
-#' Low-level internal function that constructs a visually aligned ASCII table
-#' from a `data.frame`.
-#' It supports Unicode characters, ANSI colors, dynamic width adjustment,
-#' left/right alignment, and spacing control.
-#' This function is primarily used internally by higher-level wrappers such as
-#' [spicy_print_table()] or [print.spicy_freq_table()].
+#' Low-level rendering engine that constructs a visually aligned
+#' ASCII table from a `data.frame`. Supports Unicode line-drawing
+#' characters, ANSI colors via \pkg{crayon}, automatic
+#' colored-text-aware width detection, configurable padding, and
+#' per-column alignment.
 #'
 #' @details
-#' `build_ascii_table()` is the rendering engine that produces the aligned text
-#' layout of **spicy-formatted tables**.
-#' It automatically detects cell widths (including colored text), inserts Unicode
-#' separators, and applies a configurable amount of horizontal padding.
-#'
-#' For most users, this function should not be called directly. Instead, use
-#' [spicy_print_table()] which adds headers, notes, and alignment logic
-#' automatically.
+#' Most users should not call this directly: it is wrapped by
+#' [spicy_print_table()] and the internal `print.spicy_*` methods,
+#' which add titles, notes, and table-type-aware alignment defaults.
+#' Reach for `build_ascii_table()` only when you need to render an
+#' arbitrary `data.frame` to a string with the same look as
+#' spicy's tables.
 #'
 #' @param x A `data.frame` or `spicy_table` object containing the table to format.
 #'   Typically, this includes columns such as *Category*, *Values*, *Freq.*, *Percent*, etc.
@@ -70,12 +116,31 @@
 #' @param lines_color Character. Color used for table separators. Defaults to `"darkgrey"`.
 #'   The color is applied only when ANSI color support is available
 #'   (see [crayon::has_color()]).
-#' @param align_left_cols Integer vector of column indices to left-align.
-#'   Defaults to `c(1, 2)` for frequency tables (Category + Values).
+#' @param align_left_cols Integer vector of column indices to
+#'   left-align. Defaults to `c(1L, 2L)` (the layout used by
+#'   `freq()`-style tables); pass an explicit vector for other
+#'   layouts.
 #' @param align_center_cols Integer vector of column indices to
 #'   center-align. Defaults to `integer(0)` (no centered columns).
 #'   Columns not in `align_left_cols` or `align_center_cols` are
 #'   right-aligned.
+#' @param center_headers Logical. When `TRUE`, column headers are
+#'   centered above their column content even when the data itself
+#'   is right-aligned (the publication convention for
+#'   coefficient / summary tables; matches Stata `regress` and
+#'   SPSS `REGRESSION` output). Left-aligned columns (per
+#'   `align_left_cols`) keep their header on the left. Defaults to
+#'   `FALSE` for backward compatibility; the
+#'   `print.spicy_regression_table` method enables it.
+#' @param spanners Optional named list defining a *column group row*
+#'   drawn above the column headers (the "spanner" / "supra-header"
+#'   convention; APA Manual 7 §7.13).
+#'   Names are spanner labels; values are integer vectors of 1-based
+#'   column indices the label spans (must be contiguous). A thin
+#'   underline rule is drawn below each spanner across its span.
+#'   Used by `print.spicy_regression_table()` to display the model
+#'   name above each model's block of sub-columns. Defaults to
+#'   `NULL` (no spanner row).
 #' @param group_sep_rows Integer vector of row indices before which a
 #'   light dashed separator line is drawn. Defaults to `integer(0)`.
 #' @param total_row_idx Optional integer vector of 1-based row indices
@@ -86,6 +151,13 @@
 #'   or "Sub-Total". Cross-tabs and frequency tables built by
 #'   `cross_tab()` and `freq()` set this attribute on their result so
 #'   the print methods are immune to that false positive.
+#' @param display_labels Optional character vector of length `ncol(x)`
+#'   used to override `colnames(x)` for the rendered header row only.
+#'   The data.frame's actual names are kept for indexing; only the
+#'   visual header is swapped. Used by `print.spicy_regression_table()`
+#'   so a `B + AME` table shows the bare label (`95% CI`, `p`) in both
+#'   blocks rather than R's deduplicated `95% CI.2` / `p.2`. Defaults
+#'   to `NULL` (use `colnames(x)` verbatim).
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return
@@ -119,17 +191,48 @@ build_ascii_table <- function(
   lines_color = "darkgrey",
   align_left_cols = c(1L, 2L),
   align_center_cols = integer(0),
+  center_headers = FALSE,
+  spanners = NULL,
   group_sep_rows = integer(0),
   total_row_idx = NULL,
+  display_labels = NULL,
   ...
 ) {
   stopifnot(is.data.frame(x))
   padding <- .validate_padding(padding)
+  spanners <- .validate_spanners(spanners, ncol(x))
 
   df <- as.data.frame(x, check.names = FALSE)
   df[] <- lapply(df, as.character)
 
+  # `display_labels`, when supplied, override `colnames(df)` for the
+  # printed header text. The data.frame's actual colnames are still
+  # used by the caller for indexing (`x[, cols]`); only the visual
+  # header that the reader sees in the console is swapped. Lets
+  # `print.spicy_regression_table` and `clipboard_payload` show the
+  # bare label ("95% CI", "p") in both blocks of a B + AME table
+  # rather than the data-layer's deduplicated `"95% CI.2"` / `"p.2"`.
+  if (!is.null(display_labels)) {
+    stopifnot(length(display_labels) == ncol(df))
+    names(df) <- as.character(display_labels)
+  }
+
   w <- ascii_table_widths(df, padding)
+
+  # Per-column data content width (max nchar across DATA cells only,
+  # excluding the header). Used by the header-centering branch below
+  # to center the header above the visual data region rather than the
+  # padded cell width -- otherwise the header floats left of the
+  # column's visual centre because the data is right-aligned within
+  # extra padding.
+  data_widths <- vapply(
+    seq_along(df),
+    function(i) {
+      if (nrow(df) == 0L) return(0L)
+      max(crayon::col_nchar(df[[i]], type = "width"), na.rm = TRUE)
+    },
+    integer(1)
+  )
 
   # Helper for cell alignment
   pad_cell <- function(txt, width, align = "right") {
@@ -139,8 +242,17 @@ build_ascii_table <- function(
 
   sep_after <- ascii_table_separators(df, first_column_line, row_total_line)
 
-  # Build line for header or data row
-  build_line <- function(values, widths) {
+  # Build line for header or data row. `is_header = TRUE` activates
+  # `center_headers`: a column that would otherwise right-align its
+  # data renders its header CENTERED ABOVE THE DATA REGION (not the
+  # padded cell). For a decimal-aligned numeric column whose data
+  # occupies the rightmost `data_widths[i]` chars of a `widths[i]`-
+  # wide cell, the header is first centered in a `data_widths[i]`-
+  # wide field, then right-padded with whitespace so it sits over
+  # the data range, leaving the same left-padding that the data has.
+  # Left-aligned columns (typically Variable / Category / Values)
+  # keep their left header so the label hugs the column's start edge.
+  build_line <- function(values, widths, is_header = FALSE) {
     stopifnot(length(values) == length(widths))
     pieces <- character(0)
     bars <- integer(0)
@@ -154,10 +266,24 @@ build_ascii_table <- function(
         "left"
       } else if (i %in% align_center_cols) {
         "center"
+      } else if (isTRUE(is_header) && isTRUE(center_headers)) {
+        "header-center"
       } else {
         "right"
       }
-      cell <- pad_cell(values[i], widths[i], align = col_align)
+      cell <- if (identical(col_align, "header-center") &&
+                    data_widths[i] > 0L &&
+                    data_widths[i] <= widths[i]) {
+        # Center the header within the data region, then right-pad
+        # to the full cell width so the data's left margin is
+        # preserved. Visual result: header sits above the data's
+        # geometric centre, not the padded cell's centre.
+        centered_in_data <- pad_cell(values[i], data_widths[i],
+                                      align = "center")
+        pad_cell(centered_in_data, widths[i], align = "right")
+      } else {
+        pad_cell(values[i], widths[i], align = col_align)
+      }
 
       pieces <- c(pieces, cell)
       pos <- pos + nchar(cell, type = "width")
@@ -173,7 +299,7 @@ build_ascii_table <- function(
     list(text = paste0(pieces, collapse = ""), bars = bars, width = pos)
   }
 
-  header_line <- build_line(colnames(df), w)
+  header_line <- build_line(colnames(df), w, is_header = TRUE)
   data_lines <- lapply(seq_len(nrow(df)), function(i) build_line(df[i, ], w))
 
   full_width <- max(c(
@@ -227,6 +353,56 @@ build_ascii_table <- function(
   } # nocov end
 
   out <- character(0)
+
+  # --- Spanner row (column group labels above the header) ---------------
+  # Each spanner label is centered across the cell-content range of the
+  # columns it spans (start of leftmost cell -> end of rightmost cell,
+  # including the inner gutters and any separators between them). A thin
+  # underline rule (U+2500) is drawn just below the spanner, covering the
+  # same range only, so empty (un-spanned) columns get neither label nor
+  # underline. The spanner row itself contains no vertical bars.
+  if (!is.null(spanners) && length(spanners)) {
+    # Compute 1-based char-position ranges of each column's cell (the
+    # widths[i]-wide region, excluding its left/right gutters and any
+    # separator).
+    col_starts <- integer(length(w))
+    col_ends   <- integer(length(w))
+    pos <- 0L
+    for (i in seq_along(w)) {
+      pos <- pos + 1L           # left gutter
+      col_starts[i] <- pos + 1L # next char is the first cell char
+      pos <- pos + w[i]         # cell content
+      col_ends[i] <- pos
+      pos <- pos + 1L           # right gutter
+      if (i %in% sep_after) pos <- pos + 1L
+    }
+
+    spanner_chars <- rep(" ", full_width)
+    underline_chars <- rep(" ", full_width)
+    for (lbl in names(spanners)) {
+      cols <- spanners[[lbl]]
+      span_start <- col_starts[min(cols)]
+      span_end   <- col_ends[max(cols)]
+      span_width <- span_end - span_start + 1L
+      if (span_width <= 0L) next
+      lab_disp <- if (nchar(lbl, type = "width") > span_width) {
+        substr(lbl, 1L, span_width)   # truncate over-wide labels
+      } else {
+        lbl
+      }
+      n_lab <- nchar(lab_disp, type = "width")
+      left_pad <- (span_width - n_lab) %/% 2L
+      lab_pos <- span_start + left_pad
+      lab_chars <- strsplit(lab_disp, "", fixed = TRUE)[[1]]
+      for (k in seq_along(lab_chars)) {
+        spanner_chars[lab_pos + k - 1L] <- lab_chars[k]
+      }
+      for (p in span_start:span_end) underline_chars[p] <- "\u2500"
+    }
+    spanner_line <- paste(spanner_chars, collapse = "")
+    underline_line <- style(paste(underline_chars, collapse = ""))
+    out <- c(out, spanner_line, underline_line)
+  }
 
   # --- Add header
   out <- c(out, header_txt, header_rule)
@@ -381,28 +557,26 @@ ascii_table_panels <- function(
 #' Print a spicy-formatted ASCII table
 #'
 #' @description
-#' User-facing helper that prints a visually aligned, spicy-styled ASCII table
-#' created by functions such as [freq()] or [cross_tab()].
-#' It automatically adjusts column alignment, spacing, and separators for
-#' improved readability in console outputs.
-#'
-#' This function wraps the internal renderer [build_ascii_table()], adding
-#' optional titles, notes, and automatic alignment rules depending on the type
-#' of table.
+#' User-facing helper that prints a spicy-styled ASCII table to the
+#' console with optional title and note, table-type-aware alignment
+#' defaults, and automatic horizontal panelling when the table is
+#' wider than the console. Wraps the internal renderer
+#' [build_ascii_table()].
 #'
 #' @details
-#' `spicy_print_table()` detects whether the table represents frequencies
-#' (`freq`-style) or cross-tabulations (`cross`-style) and adjusts formatting
-#' accordingly:
-#' * For **frequency tables**, the first two columns (*Category* and *Values*)
-#'   are left-aligned.
-#' * For **cross tables**, only the first column (row variable) is left-aligned.
+#' Table type is auto-detected from `x` and drives the default
+#' alignment when `align_left_cols = NULL`:
+#' * **frequency table** (a `Category` column is present): the
+#'   first two columns (`Category`, `Values`) are left-aligned.
+#' * **cross table** (otherwise): only the first column (row
+#'   variable) is left-aligned.
 #'
-#' The function supports Unicode line-drawing characters and colored separators
-#' using the **crayon** package, with graceful fallback to monochrome output when
-#' color is not supported.
-#' If the table exceeds the console width, it is split into stacked horizontal
-#' panels while repeating the left-most identifier columns.
+#' If the table is wider than the console, it is split into stacked
+#' horizontal panels with the left-most identifier columns repeated
+#' on each panel. Unicode line-drawing characters are used by
+#' default; coloured separators are drawn when the terminal supports
+#' ANSI colour ([crayon::has_color()]) and fall back to monochrome
+#' otherwise.
 #'
 #' @param x A `spicy_table` or `data.frame` to be printed.
 #' @param title Optional title displayed above the table. Defaults to the
@@ -429,11 +603,26 @@ ascii_table_panels <- function(
 #'   * For `cross` tables -> `1`
 #' @param align_center_cols Integer vector of column indices to
 #'   center-align. Defaults to `integer(0)`.
+#' @param center_headers Logical. When `TRUE`, column headers are
+#'   centered above their column content even when the data itself
+#'   is right-aligned. Passed through to [build_ascii_table()].
+#'   Defaults to `FALSE`.
+#' @param spanners Optional named list of column-group labels
+#'   (label -> integer column indices). Passed through to
+#'   [build_ascii_table()];
+#'   when the table is split into horizontal panels each panel keeps
+#'   only the spanners whose columns are fully contained in it.
+#'   Defaults to `NULL` (no spanner row).
 #' @param group_sep_rows Integer vector of row indices before which a
 #'   light dashed separator line is drawn. Defaults to `integer(0)`.
 #' @param total_row_idx Optional integer vector of 1-based row indices
 #'   identifying the totals rows; defaults to the `"total_row_idx"`
 #'   attribute of `x` (set by `cross_tab()`). See [build_ascii_table()].
+#' @param display_labels Optional character vector of length `ncol(x)`
+#'   used to override `colnames(x)` for the printed header text only.
+#'   Sliced per panel when the table is split across stacked panels.
+#'   Forwarded to [build_ascii_table()]; see that function for full
+#'   semantics. Defaults to `NULL`.
 #' @param ... Additional arguments passed to [build_ascii_table()].
 #'
 #' @return
@@ -471,12 +660,16 @@ spicy_print_table <- function(
   lines_color = "darkgrey",
   align_left_cols = NULL,
   align_center_cols = integer(0),
+  center_headers = FALSE,
+  spanners = NULL,
   group_sep_rows = integer(0),
   total_row_idx = attr(x, "total_row_idx"),
+  display_labels = NULL,
   ...
 ) {
   stopifnot(is.data.frame(x))
   padding <- .validate_padding(padding)
+  spanners <- .validate_spanners(spanners, ncol(x))
 
   table_type <- if (any(grepl("^Category$", names(x)))) "freq" else "cross"
 
@@ -491,6 +684,20 @@ spicy_print_table <- function(
     attr(x, "note") <- note
   }
 
+  # Apply `display_labels` to x BEFORE the panel-split decision so
+  # `ascii_table_panels()` measures column widths against the SHORT
+  # printed labels (e.g. "B", "p"), not the deduplicated, model-
+  # prefixed dataframe names (e.g. "Model 1: B", "Model 2: p"). Without
+  # this, a multi-model table over-splits — the panel logic budgets
+  # for "Model 2: SE"-wide columns even though the printed header only
+  # shows "SE". Downstream `x[, cols]` slicing uses integer indices
+  # (not name lookup), so the resulting duplicate names ("p", "p") are
+  # harmless here.
+  if (!is.null(display_labels)) {
+    stopifnot(length(display_labels) == ncol(x))
+    names(x) <- as.character(display_labels)
+  }
+
   panel_cols <- ascii_table_panels(
     x,
     console_width = getOption("width", 80L),
@@ -503,8 +710,44 @@ spicy_print_table <- function(
   txt <- vapply(
     panel_cols,
     function(cols) {
+      # Remap spanners to per-panel column indices. When a model's
+      # columns are split across panels, each panel displays the
+      # spanner label over the surviving subset (matches modelsummary
+      # panel-split behaviour: the model name reappears at the top of
+      # every panel where any of its columns are visible).
+      panel_spanners <- NULL
+      if (!is.null(spanners) && length(spanners)) {
+        panel_spanners <- list()
+        for (lbl in names(spanners)) {
+          surviving <- intersect(spanners[[lbl]], cols)
+          if (length(surviving)) {
+            local_idx <- sort(match(surviving, cols))
+            # Drop discontiguous slivers (e.g. sticky col 1 between
+            # data cols of the same model would break contiguity --
+            # that doesn't arise in practice because the Variable
+            # column is never in a spanner).
+            if (length(local_idx) == 1L ||
+                all(diff(local_idx) == 1L)) {
+              panel_spanners[[lbl]] <- local_idx
+            }
+          }
+        }
+        if (!length(panel_spanners)) panel_spanners <- NULL
+      }
+      # `x[, cols]` uniquifies duplicate names ("B"/"B" -> "B"/"B.1");
+      # restore the originals so the header row prints the unprefixed
+      # names that the print method handed us.
+      sub <- x[, cols, drop = FALSE]
+      names(sub) <- names(x)[cols]
+      # Slice display_labels to the same panel columns so each panel
+      # gets its own header text.
+      panel_display_labels <- if (!is.null(display_labels)) {
+        display_labels[cols]
+      } else {
+        NULL
+      }
       build_ascii_table(
-        x[, cols, drop = FALSE],
+        sub,
         padding = padding,
         first_column_line = first_column_line,
         row_total_line = row_total_line,
@@ -513,8 +756,11 @@ spicy_print_table <- function(
         lines_color = lines_color,
         align_left_cols = which(cols %in% align_left_cols),
         align_center_cols = which(cols %in% align_center_cols),
+        center_headers = center_headers,
+        spanners = panel_spanners,
         group_sep_rows = group_sep_rows,
         total_row_idx = total_row_idx,
+        display_labels = panel_display_labels,
         ...
       )
     },

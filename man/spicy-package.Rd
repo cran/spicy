@@ -6,20 +6,22 @@
 \alias{spicy-package}
 \title{spicy: descriptive statistics, summary tables, and data management}
 \description{
-spicy provides a small set of opinionated, Stata-/SPSS-grade
-tools for descriptive analysis: frequency tables, cross-
-tabulations, association measures, variable inspection, and
-publication-ready summary tables.
+spicy provides tools for descriptive data analysis, variable
+inspection, and tabulation workflows: frequency tables,
+cross-tabulations with chi-squared tests and effect sizes,
+association measures for contingency tables, categorical and
+continuous summary tables, model-based linear-regression tables
+with optional additive covariate adjustment, row-wise
+descriptive summaries, interactive codebooks, variable-label
+extraction, and clipboard export.
 }
 \section{API stability}{
 
-spicy is in active pre-1.0 development. Per the policy
-documented in \code{NEWS.md} and the package roadmap, breaking
-changes are made deliberately at minor-version bumps and are
-always announced in \code{NEWS.md}. The API surface is partitioned
-as follows; users planning to embed spicy in production
-pipelines or downstream packages should rely on the \strong{stable}
-surface.
+spicy is in active pre-1.0 development. Breaking changes are
+made deliberately at minor-version bumps and are always
+announced in \code{NEWS.md}. The API surface is partitioned as
+follows; users planning to embed spicy in production pipelines
+or downstream packages should rely on the \strong{stable} surface.
 
 \strong{Stable} (signature and behaviour preserved across 0.y.z and
 into 1.0.0; documented changes only):
@@ -52,12 +54,79 @@ without notice -- avoid calling directly from downstream code):
 \item ASCII rendering primitives: \code{\link[=build_ascii_table]{build_ascii_table()}},
 \code{\link[=spicy_print_table]{spicy_print_table()}}
 }
+}
+
+\section{broom output shape}{
+
+The \code{broom::tidy()} and \code{broom::glance()} methods on
+\code{spicy_freq_table}, \code{spicy_categorical_table},
+\code{spicy_continuous_table}, and \code{spicy_continuous_lm_table} follow
+the standard broom column conventions (\code{outcome}, \code{term},
+\code{estimate}, \code{std.error}, \code{conf.low}, \code{conf.high}, \code{statistic},
+\code{p.value}, \code{df}, \code{df.residual}, \code{r.squared}, \code{adj.r.squared},
+\code{nobs}, ...). The set of columns produced by each method is
+considered \strong{stabilising}: existing columns will not be silently
+renamed or have their semantics changed within \verb{0.y.z}, and any
+breaking change is announced in \code{NEWS.md}. Adding optional new
+columns (e.g. covariate-adjustment metadata) is not a breaking
+change. Numeric columns are always returned with the type
+downstream broom-consumers expect: \code{df} integer, \code{df.residual}
+numeric (so Satterthwaite-corrected degrees of freedom from
+cluster-robust variance modes are preserved verbatim, matching
+\code{lmerTest::glance()} and the \code{afex} output convention).
+}
+
+\section{Classed conditions}{
 
 All errors and warnings emitted by the stable / stabilising
-surfaces use the documented \code{spicy_error} / \code{spicy_warning}
-class hierarchies (see \code{NEWS.md}), so downstream code can
+surfaces carry classed conditions so downstream code can
 dispatch on class via \code{tryCatch()} / \code{withCallingHandlers()}
-instead of matching message strings.
+instead of matching message strings. Each condition has a
+package-wide parent class plus a leaf class describing the
+specific cause:
+
+\describe{
+\item{\code{spicy_error}}{Catch-all parent for every error
+raised by spicy. Leaves:
+\itemize{
+\item \code{spicy_invalid_input} -- bad argument value or type.
+\item \code{spicy_invalid_data} -- bad data shape (not a
+data.frame, NA cells where forbidden, length mismatch).
+\item \code{spicy_missing_pkg} -- a Suggests dependency
+is required by the requested operation but not installed.
+\item \code{spicy_missing_column} -- a referenced column
+is not in \code{data}.
+\item \code{spicy_unsupported} -- the operation is not
+applicable to this input (e.g., Phi requested on a
+non-2x2 table).
+}
+}
+\item{\code{spicy_warning}}{Catch-all parent for every warning.
+Leaves:
+\itemize{
+\item \code{spicy_undefined_stat} -- the requested
+statistic is undefined for this input; result is \code{NA}
+(e.g., Tau-b on a table with all-zero marginals).
+\item \code{spicy_dropped_na} -- \code{NA} observations were
+silently excluded from the computation (e.g., \code{NA}
+weights).
+\item \code{spicy_ignored_arg} -- an argument was ignored
+due to context (e.g., \code{correct = TRUE} on a non-2x2
+table).
+\item \code{spicy_no_selection} -- a column selector
+produced an empty set; an empty result is returned
+rather than erroring.
+\item \code{spicy_fallback} -- the requested computation
+failed; a simpler estimator was used instead.
+\item \code{spicy_summary_failed} -- \code{\link[=varlist]{varlist()}} could not
+summarise one column; the rest of the table is fine.
+\item \code{spicy_renamed_column} -- a user data column or
+factor level collided with a spicy-internal name and was
+auto-renamed to preserve the data (emitted by
+\code{\link[=cross_tab]{cross_tab()}}).
+}
+}
+}
 }
 
 \seealso{

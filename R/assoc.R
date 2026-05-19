@@ -4,7 +4,7 @@
 # DescTools (Signorell et al.), which in turn implement the formulas from
 # Agresti (2002) and Liebetrau (1983).
 
-# ── Internal helpers ──────────────────────────────────────────────────────────
+# -- Internal helpers ----------------------------------------------------------
 
 .validate_table <- function(x, min_dim = c(2L, 2L)) {
   if (!inherits(x, "table")) {
@@ -226,7 +226,7 @@ print.spicy_assoc_detail <- function(
 }
 
 
-# ── Nominal measures ─────────────────────────────────────────────────────────
+# -- Nominal measures ---------------------------------------------------------
 
 #' Cramer's V
 #'
@@ -333,11 +333,15 @@ cramer_v <- function(
 #'   (Pearson chi-squared test).
 #'
 #' @details
-#' The phi coefficient is \eqn{\phi = \sqrt{\chi^2 / n}}.
-#' It is equivalent to Cramer's V for 2x2 tables and equals the
-#' Pearson correlation between the two binary variables. The point
-#' estimate matches the DescTools (Signorell et al., 2024) and SPSS
-#' implementations.
+#' The phi coefficient is \eqn{\phi = \sqrt{\chi^2 / n}}. It is
+#' equivalent to Cramer's V for 2x2 tables and equals the absolute
+#' value of the Pearson correlation between the two binary
+#' variables -- spicy returns only the magnitude (always
+#' non-negative), matching the DescTools (Signorell et al., 2024)
+#' and SPSS conventions. To recover the signed direction of the
+#' 2x2 association, compute the Pearson correlation directly
+#' (e.g. `cor(x, y)` after coding both variables 0/1).
+#'
 #' The confidence interval uses the Fisher z-transformation on
 #' \eqn{\phi}; see [cramer_v()] for the formula and full references.
 #'
@@ -465,10 +469,18 @@ contingency_coef <- function(
 #'
 #' @details
 #' For a 2x2 table with cells \eqn{a, b, c, d}, Yule's Q is
-#' \eqn{Q = (ad - bc) / (ad + bc)}.
-#' It is equivalent to the Goodman-Kruskal Gamma for 2x2 tables.
-#' The asymptotic standard error is
+#' \eqn{Q = (ad - bc) / (ad + bc)}. It is equivalent to the
+#' Goodman-Kruskal Gamma for 2x2 tables. The asymptotic standard
+#' error is
 #' \eqn{SE = 0.5 (1 - Q^2) \sqrt{1/a + 1/b + 1/c + 1/d}}.
+#'
+#' Edge cases: when `ad + bc = 0`, Q itself is undefined and the
+#' function returns `NA` with a `spicy_undefined_stat` warning.
+#' When any cell is zero (and `ad + bc > 0`), Q is well-defined
+#' but the SE formula divides by zero -- the point estimate is
+#' returned, and `se`, `ci_lower`, `ci_upper`, and `p_value` are
+#' all `NA`.
+#'
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
 #'
@@ -588,6 +600,33 @@ lambda_gk <- function(
   max_rsum <- max(rsum)
   max_csum <- max(csum)
 
+  # Defend the degenerate denominator zero case (a "rank-1" table
+  # where every observation is in a single row -- max_rsum = n --
+  # or in a single column -- max_csum = n -- or both for the
+  # symmetric direction). Without this guard the estimate is
+  # `0 / 0 = NaN`, the no-detail branch returns silent NaN, and
+  # the detail branch errors at the unguarded `if (se > 0)` step
+  # because `is.na(NaN) > 0` is itself NA. Mirrors the same
+  # defensive pattern in `gamma_gk()` (`C + D == 0`),
+  # `kendall_tau_b()` (`(n0 - n1)(n0 - n2) == 0`) and
+  # `somers_d()` (denom == 0).
+  denom <- switch(
+    direction,
+    symmetric = n - 0.5 * (max_csum + max_rsum),
+    column = n - max_csum,
+    row = n - max_rsum
+  )
+  if (denom == 0) {
+    spicy_warn(
+      sprintf(
+        "Lambda is undefined for direction = \"%s\" on this table (one variable is constant); returning NA.",
+        direction
+      ),
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+  }
+
   est <- switch(
     direction,
     symmetric = {
@@ -656,7 +695,7 @@ lambda_gk <- function(
   )
 
   se <- sqrt(max(0, sigma2))
-  p_value <- if (se > 0) {
+  p_value <- if (!is.na(se) && se > 0) {
     2 * stats::pnorm(-abs(est / se))
   } else {
     NA_real_
@@ -693,7 +732,12 @@ lambda_gk <- function(
 #' @details
 #' Unlike [lambda_gk()], Goodman-Kruskal's Tau uses all cell
 #' frequencies rather than only the modal categories, making it
-#' more sensitive to association patterns where lambda may be zero.
+#' more sensitive to association patterns where lambda may be
+#' zero. Goodman-Kruskal's Tau is intrinsically directional and
+#' has no canonical symmetric form (unlike [lambda_gk()] or
+#' [uncertainty_coef()]); only `"row"` and `"column"` are
+#' supported.
+#'
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
 #'
@@ -719,9 +763,29 @@ goodman_kruskal_tau <- function(
   rsum <- rowSums(x)
   csum <- colSums(x)
 
+  # Defend the degenerate denominator zero case (a "rank-1" table
+  # where every observation falls in a single row, for `direction
+  # = "row"`, or in a single column, for `direction = "column"`).
+  # Without this guard `(n - v) = 0` yields silent `NaN`. Mirrors
+  # the same defensive pattern in `gamma_gk()` and `lambda_gk()`.
+  v <- if (direction == "row") {
+    sum(rsum^2) / n
+  } else {
+    sum(csum^2) / n
+  }
+  if (n - v == 0) {
+    spicy_warn(
+      sprintf(
+        "Goodman-Kruskal Tau is undefined for direction = \"%s\" on this table (the predicted variable is constant); returning NA.",
+        direction
+      ),
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+  }
+
   if (direction == "row") {
     # Column predicts row
-    v <- sum(rsum^2) / n
     d <- 0
     for (j in seq_len(ncol(x))) {
       if (csum[j] > 0) {
@@ -731,7 +795,6 @@ goodman_kruskal_tau <- function(
     tau <- (d - v) / (n - v)
   } else {
     # Row predicts column
-    v <- sum(csum^2) / n
     d <- 0
     for (i in seq_len(nrow(x))) {
       if (rsum[i] > 0) {
@@ -846,14 +909,18 @@ goodman_kruskal_tau <- function(
 #'   The p-value tests H0: U = 0 (Wald z-test).
 #'
 #' @details
-#' The uncertainty coefficient measures association using
-#' Shannon entropy.
-#' For `direction = "row"`:
-#' \eqn{U = (H_X + H_Y - H_{XY}) / H_X}, where \eqn{H_X},
-#' \eqn{H_Y} are the marginal entropies and \eqn{H_{XY}} is
-#' the joint entropy.
-#' The symmetric version is
-#' \eqn{U = 2 (H_X + H_Y - H_{XY}) / (H_X + H_Y)}.
+#' The uncertainty coefficient measures association using Shannon
+#' entropy. Let \eqn{H_X} and \eqn{H_Y} be the marginal entropies
+#' of the **row** and **column** variables respectively, and
+#' \eqn{H_{XY}} the joint entropy.
+#' \itemize{
+#'   \item `direction = "row"` (column predicts row):
+#'     \eqn{U = (H_X + H_Y - H_{XY}) / H_X}.
+#'   \item `direction = "column"` (row predicts column):
+#'     \eqn{U = (H_X + H_Y - H_{XY}) / H_Y}.
+#'   \item `direction = "symmetric"`:
+#'     \eqn{U = 2 (H_X + H_Y - H_{XY}) / (H_X + H_Y)}.
+#' }
 #'
 #' The entropy terms use the standard mathematical convention
 #' \eqn{0 \log 0 = 0}, matching SPSS / PSPP `CROSSTABS` and the
@@ -974,7 +1041,7 @@ uncertainty_coef <- function(
 }
 
 
-# ── Ordinal measures ─────────────────────────────────────────────────────────
+# -- Ordinal measures ---------------------------------------------------------
 
 #' Goodman-Kruskal Gamma
 #'
@@ -1161,9 +1228,9 @@ kendall_tau_b <- function(
 #' @details
 #' Stuart's Tau-c is computed as
 #' \eqn{\tau_c = 2m(C - D) / (n^2(m - 1))}, where
-#' \eqn{m = \min(r, c)}. It is appropriate for rectangular
-#' tables and is not restricted to the range \eqn{[-1, 1]} only for
-#' square tables.
+#' \eqn{m = \min(r, c)}. It is designed for rectangular tables;
+#' the estimate is bounded by \eqn{[-1, 1]} only when the table is
+#' square, and may fall outside that range otherwise.
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
 #'
@@ -1237,11 +1304,17 @@ kendall_tau_c <- function(
 #' @details
 #' Somers' D is an asymmetric ordinal measure defined as
 #' \eqn{d = (C - D) / (C + D + T)}, where \eqn{T} is the
-#' number of pairs tied on the independent variable.
-#' The symmetric version is the harmonic mean of the two
-#' asymmetric values.
-#' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024); see [cramer_v()] for full references.
+#' number of pairs tied on the independent variable. The
+#' symmetric version (`direction = "symmetric"`) is the
+#' *harmonic* mean of the two asymmetric values, matching the
+#' SPSS / PSPP convention; this is **not** identical to
+#' Kendall's Tau-b (which is the *geometric* mean of the same
+#' two quantities), although the two often agree to two
+#' decimals. No analytic SE / CI is reported for the symmetric
+#' form (DescTools follows the same convention).
+#' Standard error formulas for the asymmetric directions follow
+#' the DescTools implementations (Signorell et al., 2024); see
+#' [cramer_v()] for full references.
 #'
 #' @examples
 #' tab <- table(sochealth$education, sochealth$self_rated_health)
@@ -1352,7 +1425,7 @@ somers_d <- function(
 }
 
 
-# ── Summary table ────────────────────────────────────────────────────────────
+# -- Summary table ------------------------------------------------------------
 
 #' Association measures summary table
 #'
@@ -1369,10 +1442,23 @@ somers_d <- function(
 #'   result (default `3`).
 #'
 #' @return A data frame with columns `measure`, `estimate`, `se`,
-#'   `ci_lower`, `ci_upper`, and `p_value`. For nominal measures
-#'   (Cramer's V, Phi, Contingency Coef.), the p-value comes from
-#'   the Pearson chi-squared test of independence. For all other
-#'   measures, it is a Wald z-test of H0: measure = 0.
+#'   `ci_lower`, `ci_upper`, and `p_value`. The `p_value` comes
+#'   from two test families:
+#'   \itemize{
+#'     \item **Pearson chi-squared test of independence** for
+#'       Cramer's V, Phi, and the Contingency Coefficient (the
+#'       three chi-squared-derived nominal measures). All three
+#'       carry the same chi-squared *p*-value on a given table.
+#'     \item **Wald z-test of H0: measure = 0** for every other
+#'       measure: Yule's Q, Lambda, Goodman-Kruskal's Tau, the
+#'       Uncertainty Coefficient, and all ordinal measures
+#'       (Gamma, Tau-b, Tau-c, Somers' D).
+#'   }
+#'   Direction-dependent measures (`lambda_gk()`,
+#'   `goodman_kruskal_tau()`, `uncertainty_coef()`, `somers_d()`)
+#'   contribute one row per direction (`symmetric` / `R|C` / `C|R`
+#'   where applicable), so the output has more rows than the
+#'   number of helper functions.
 #'
 #' @details
 #' `type = "all"` (the default) returns all nominal and ordinal

@@ -2,27 +2,26 @@
 #'
 #' @description
 #' Computes a two-way cross-tabulation with optional weights, grouping
-#' (including combinations of multiple variables), percentage displays,
-#' and inferential statistics.
+#' (including combinations of multiple variables via `interaction()`),
+#' row / column percentages, and inferential statistics (Chi-squared
+#' test with an APA-style association measure).
 #'
-#' `cross_tab()` produces weighted or unweighted contingency tables with
-#' row or column percentages, optional grouping via `by`, and associated
-#' Chi-squared tests with an association measure and diagnostic information.
-#'
-#' Both `x` and `y` variables are required. For one-way frequency tables,
-#' use [freq()] instead.
+#' Both `x` and `y` are required; for one-way frequency tables, use
+#' [freq()].
 #'
 #' @param data A data frame. Alternatively, a vector when using the
 #'   vector-based interface.
 #' @param x Row variable (unquoted).
-#' @param y Column variable (unquoted). Mandatory; for one-way tables, use [freq()].
+#' @param y Column variable (unquoted). Required; the `NULL` default
+#'   in the signature is a placeholder and triggers an error if left
+#'   unset (use [freq()] for one-way tables).
 #' @param by Optional grouping variable or expression. Can be a single variable
 #'   or a combination of multiple variables (e.g. `interaction(vs, am)`).
 #' @param weights Optional numeric weights.
 #' @param rescale Logical. If `FALSE` (the default), weights are used as-is.
 #'   If `TRUE`, rescales weights so total weighted N matches raw N.
-#' @param percent One of `"none"` (the default), `"row"`, `"column"`.
-#'   Unique abbreviations are accepted (e.g. `"n"`, `"r"`, `"c"`).
+#' @param percent One of `"none"` (the default), `"column"`, or `"row"`.
+#'   Unique abbreviations are accepted (e.g. `"n"`, `"c"`, `"r"`).
 #' @param include_stats Logical. If `TRUE` (the default), computes Chi-squared
 #'   and an association measure (see `assoc_measure`).
 #' @param assoc_measure Character. Which association measure to report.
@@ -38,8 +37,9 @@
 #'   If `TRUE`, uses Monte Carlo simulation.
 #' @param simulate_B Integer. Number of replicates for Monte Carlo simulation.
 #'   Defaults to `2000`.
-#' @param digits Number of decimals for cell values. Defaults to `1` for
-#'   percentages, `0` for counts.
+#' @param digits Number of decimals for cell values. Defaults to
+#'   `NULL`, which is resolved to `1` when `percent != "none"` and
+#'   `0` when `percent = "none"` (counts are always integers).
 #' @param styled Logical. If `TRUE` (the default), returns a `spicy_cross_table` object
 #'   (for formatted printing). If `FALSE`, returns a plain `data.frame`.
 #' @param show_n Logical. If `TRUE` (the default), adds marginal N totals when
@@ -55,8 +55,29 @@
 #'   matches the `p_digits` argument of the `table_*()` family.
 #'
 #' @return
-#' A `data.frame`, list of data.frames, or `spicy_cross_table` object.
-#' When `by` is used, returns a `spicy_cross_table_list`.
+#' Depends on `styled` and `by`:
+#' \itemize{
+#'   \item `styled = TRUE`, no `by`: a `spicy_cross_table` object
+#'     (a `data.frame` carrying rendering metadata as attributes:
+#'     `title`, `digits`, `decimal_mark`, `n_row_idx`, `n_col_name`,
+#'     and the inferential block when `include_stats = TRUE`).
+#'     Printing dispatches to [print.spicy_cross_table()].
+#'   \item `styled = TRUE`, `by` supplied: a `spicy_cross_table_list`,
+#'     i.e. a named list of `spicy_cross_table` objects (one element
+#'     per group level, named by that level). Printing dispatches to
+#'     [print.spicy_cross_table_list()] which renders each table in
+#'     turn separated by a blank line.
+#'   \item `styled = FALSE`: the same payload returned as a plain
+#'     `data.frame` (or named list of `data.frame`s with `by`),
+#'     stripped of the `spicy_*` classes for downstream programmatic
+#'     use.
+#' }
+#'
+#' Cell columns are the levels of `y`; rows are the levels of `x`.
+#' When `percent != "none"`, the `N` column (or `N` row) is added
+#' according to `show_n`. When `include_stats = TRUE`, the result
+#' carries a Chi-squared row (statistic, df, *p*) and an
+#' association-measure row (estimate, optional CI via `assoc_ci`).
 #'
 #' @section Global Options:
 #'
@@ -281,14 +302,34 @@ cross_tab <- function(
 
   make_levels <- function(v) {
     vals <- unique(v[!is.na(v)])
-    # `length(vals) > 1L` guards against an R 4.6.0 sort() segfault on
-    # zero-length Date / POSIXct / character vectors, and is
-    # mathematically equivalent to a length-0 / length-1 short-circuit
-    # (both are already sorted).
+    # Short-circuit when there are fewer than two distinct values:
+    # the result is already in sorted order and `sort()` would be a
+    # no-op.
     if (length(vals) <= 1L) {
       return(vals)
     }
     tryCatch(sort(vals, method = "radix"), error = function(e) vals)
+  }
+
+  # Return `base` if it is not in `taken`; otherwise the first
+  # `paste0(base, "_", i)` (i = 1, 2, ...) that is unused. Used to
+  # pick a non-conflicting name for the internal "Total" / "N"
+  # margin columns when the user's y-variable has a level whose
+  # name happens to match one of those defaults.
+  make_unique_col_name <- function(base, taken) {
+    if (!base %in% taken) {
+      return(base)
+    }
+    for (i in seq_len(99L)) {
+      candidate <- paste0(base, "_", i)
+      if (!candidate %in% taken) {
+        return(candidate)
+      }
+    }
+    # Defensive fallback: with 99 numbered suffixes already taken,
+    # something pathological is going on; produce a guaranteed-unique
+    # name from the system clock and move on.
+    paste0(base, "_", as.integer(Sys.time())) # nocov
   }
 
   # Call mode detection
@@ -498,20 +539,90 @@ cross_tab <- function(
       round(tab_perc, digits),
       stringsAsFactors = FALSE
     )
+
+    # Resolve unique internal column names BEFORE prepending the
+    # row-identifier or appending margin columns. Three names are
+    # spicy-internal: "Values" (the row-identifier column, always
+    # added), "Total" (the margin column, added when styled and
+    # percent != "none"), and "N" (the sample-size column, added
+    # only when styled, percent = "row" and show_n = TRUE). When a
+    # y-variable level already occupies one of those names (e.g.
+    # "N" from a Y/N answer coding, "Total" from a literal "Total"
+    # category, "Values" from an unusual but possible y-level), the
+    # default name would silently overwrite the user's column or
+    # the row-identifier label. spicy auto-picks the first
+    # non-colliding alternative (`"Values_1"`, `"Total_1"`,
+    # `"N_1"`, then `_2`, `_3`, ...) so the user's data column is
+    # preserved intact and the function still produces a usable
+    # table. A single `spicy_renamed_column` warning at the end
+    # lists every rename that happened so the user can revert by
+    # renaming the conflicting level upstream.
+    y_level_cols <- names(df_out)
+    identifier_col <- make_unique_col_name("Values", y_level_cols)
+    total_col <- make_unique_col_name(
+      "Total",
+      c(y_level_cols, identifier_col)
+    )
+    n_col <- if (styled && percent == "row" && show_n) {
+      make_unique_col_name(
+        "N",
+        c(y_level_cols, identifier_col, total_col)
+      )
+    } else {
+      "N"
+    }
+
     df_out <- data.frame(
-      Values = rownames(df_out),
+      stats::setNames(list(rownames(df_out)), identifier_col),
       df_out,
       row.names = NULL,
       check.names = FALSE,
       stringsAsFactors = FALSE
     )
 
+    renamed <- character()
+    if (identifier_col != "Values") {
+      renamed <- c(
+        renamed,
+        sprintf("\"Values\" (row identifier) -> \"%s\"", identifier_col)
+      )
+    }
+    if (styled && total_col != "Total") {
+      renamed <- c(
+        renamed,
+        sprintf("\"Total\" (margin) -> \"%s\"", total_col)
+      )
+    }
+    if (
+      styled &&
+        percent == "row" &&
+        show_n &&
+        n_col != "N"
+    ) {
+      renamed <- c(
+        renamed,
+        sprintf("\"N\" (sample size) -> \"%s\"", n_col)
+      )
+    }
+    if (length(renamed) > 0L) {
+      spicy_warn(
+        c(
+          sprintf(
+            "y-variable level(s) collide with cross_tab() reserved column name(s); auto-renamed: %s.",
+            paste(renamed, collapse = "; ")
+          ),
+          "i" = "Rename the conflicting y-level(s) (e.g. `factor(y, levels = c(\"Yes\", \"No\"))` instead of `c(\"Y\", \"N\")`) to restore the default labels."
+        ),
+        class = "spicy_renamed_column"
+      )
+    }
+
     if (styled) {
       if (percent == "column") {
         total_values <- colSums(tab_perc, na.rm = TRUE)
         n_values <- colSums(tab_full, na.rm = TRUE)
 
-        df_out$Total <- round(
+        df_out[[total_col]] <- round(
           rowSums(tab_full, na.rm = TRUE) / sum(tab_full) * 100,
           digits
         )
@@ -519,18 +630,18 @@ cross_tab <- function(
         total_row <- make_named_row(
           df_out,
           c(
-            list(Values = "Total"),
+            stats::setNames(list("Total"), identifier_col),
             as.list(round(total_values, digits)),
-            list(Total = 100)
+            stats::setNames(list(100), total_col)
           )
         )
         n_row <- if (show_n) {
           make_named_row(
             df_out,
             c(
-              list(Values = "N"),
+              stats::setNames(list("N"), identifier_col),
               as.list(round(n_values, 0)),
-              list(Total = sum(tab_full))
+              stats::setNames(list(sum(tab_full)), total_col)
             )
           )
         } else {
@@ -539,9 +650,9 @@ cross_tab <- function(
 
         df_out <- append_rows(df_out, list(total_row, n_row))
       } else if (percent == "row") {
-        df_out$Total <- round(rowSums(tab_perc, na.rm = TRUE), digits)
+        df_out[[total_col]] <- round(rowSums(tab_perc, na.rm = TRUE), digits)
         if (show_n) {
-          df_out$N <- as.numeric(rowSums(tab_full, na.rm = TRUE))
+          df_out[[n_col]] <- as.numeric(rowSums(tab_full, na.rm = TRUE))
         }
 
         col_tot <- colSums(tab_full, na.rm = TRUE)
@@ -549,22 +660,25 @@ cross_tab <- function(
         names(col_perc) <- names(col_tot)
 
         total_values <- c(
-          list(Values = "Total"),
+          stats::setNames(list("Total"), identifier_col),
           as.list(col_perc),
-          list(Total = 100)
+          stats::setNames(list(100), total_col)
         )
         if (show_n) {
-          total_values <- c(total_values, list(N = sum(tab_full)))
+          total_values <- c(
+            total_values,
+            stats::setNames(list(sum(tab_full)), n_col)
+          )
         }
         total_row <- make_named_row(df_out, total_values)
 
         df_out <- append_rows(df_out, total_row)
       } else {
-        df_out$Total <- as.numeric(rowSums(tab_full, na.rm = TRUE))
+        df_out[[total_col]] <- as.numeric(rowSums(tab_full, na.rm = TRUE))
         grand_total <- make_named_row(
           df_out,
           c(
-            list(Values = "Total"),
+            stats::setNames(list("Total"), identifier_col),
             as.list(colSums(df_out[, -1, drop = FALSE], na.rm = TRUE))
           )
         )
@@ -803,7 +917,7 @@ cross_tab <- function(
       NA_integer_
     }
     attr(df_out, "n_col_name") <- if (styled && percent == "row" && show_n) {
-      "N"
+      n_col
     } else {
       NA_character_
     }

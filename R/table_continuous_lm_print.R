@@ -30,6 +30,8 @@ print.spicy_continuous_lm_table <- function(x, ...) {
   r2_type <- attr(x, "r2_type") %||% "r2"
   show_ci <- attr(x, "show_ci") %||% TRUE
   align <- attr(x, "align") %||% "decimal"
+  covariates <- attr(x, "covariates") %||% character()
+  adjustment <- attr(x, "adjustment") %||% NA_character_
 
   display_df <- build_wide_display_df_continuous_lm(
     x,
@@ -94,10 +96,27 @@ print.spicy_continuous_lm_table <- function(x, ...) {
     padding <- 0L
   }
 
+  # APA-style footer when the model is covariate-adjusted. Names the
+  # covariate(s) and the adjustment estimand explicitly because the
+  # interpretation of the displayed `emmean` column changes with the
+  # method: "proportional" = G-computation over the observed
+  # covariate distribution; "balanced" = synthetic-grid equal-weight
+  # marginal means. Without the method tag the user cannot tell
+  # which estimand they are reading.
+  note <- if (length(covariates) > 0L && !is.na(adjustment)) {
+    paste0(
+      "Note. Adjusted for ",
+      paste(covariates, collapse = ", "),
+      " (", adjustment, ")."
+    )
+  } else {
+    NULL
+  }
+
   spicy_print_table(
     display_df,
     title = paste0("Continuous outcomes by ", by_label),
-    note = NULL,
+    note = note,
     padding = padding,
     first_column_line = TRUE,
     row_total_line = FALSE,
@@ -177,7 +196,7 @@ as.data.frame.spicy_continuous_lm_table <- function(
 #' @exportS3Method tibble::as_tibble
 as_tibble.spicy_continuous_lm_table <- function(x, ...) {
   if (!requireNamespace("tibble", quietly = TRUE)) {
-    spicy_abort("Install package 'tibble'.", class = "spicy_invalid_input")
+    spicy_abort("Install package 'tibble'.", class = "spicy_missing_pkg")
   }
   tibble::as_tibble(unclass_spicy_continuous_lm_table(x), ...)
 }
@@ -189,8 +208,8 @@ as_tibble.spicy_continuous_lm_table <- function(x, ...) {
 #' Standard [broom::tidy()] and [broom::glance()] interfaces for an
 #' object returned by [table_continuous_lm()]. They re-shape the
 #' underlying long-format data into the two canonical broom views so
-#' the table can be consumed by `gtsummary`, `modelsummary`,
-#' `parameters`, and any other tidyverse-stats pipeline.
+#' the table can be consumed by any downstream tidyverse-stats
+#' pipeline.
 #'
 #' `tidy()` returns one row per **estimated parameter** across all
 #' outcomes:
@@ -209,11 +228,12 @@ as_tibble.spicy_continuous_lm_table <- function(x, ...) {
 #' variable name; `label` carries the human-readable label.
 #'
 #' `glance()` returns one row per outcome with model-level
-#' statistics: `r.squared`, `adj.r.squared`, `statistic`, `df`,
-#' `df.residual`, `p.value`, `nobs`, `weighted_n`, plus the
-#' effect-size summary `es_type`, `es_value`, `es_ci_lower`,
-#' `es_ci_upper`, and the test type used for `statistic`
-#' (`"F"` for categorical predictors, `"t"` for numeric ones).
+#' statistics. Columns: `outcome`, `label`, `predictor_type`
+#' (`"categorical"` or `"continuous"`), `test_type` (`"F"` for
+#' categorical predictors, `"t"` for continuous ones),
+#' `statistic`, `df`, `df.residual`, `p.value`, `r.squared`,
+#' `adj.r.squared`, `es_type`, `es_value`, `es_ci_lower`,
+#' `es_ci_upper`, `nobs`, `weighted_n`.
 #'
 #' @param x A `spicy_continuous_lm_table` returned by
 #'   [table_continuous_lm()].
@@ -315,7 +335,15 @@ glance.spicy_continuous_lm_table <- function(x, ...) {
     test_type = per_outcome$test_type,
     statistic = per_outcome$statistic,
     df = as.integer(per_outcome$df1),
-    df.residual = as.integer(per_outcome$df2),
+    # `df2` is the denominator df. For classical / HC* it is an
+    # integer (`df.residual(fit)`); for CR* it is the Satterthwaite df,
+    # which is genuinely fractional (e.g. 38.7) and may also arrive as
+    # integer-but-with-FP-noise (e.g. 47.999999... very close to 48).
+    # Coercing to integer truncates both genuinely-fractional values
+    # and FP-noisy near-integers (47.999... -> 47), so keep it
+    # numeric. Mirrors the broom convention for Satterthwaite-corrected
+    # models (e.g. lmerTest::glance, afex output).
+    df.residual = as.numeric(per_outcome$df2),
     p.value = per_outcome$p.value,
     r.squared = per_outcome$r2,
     adj.r.squared = per_outcome$adj_r2,

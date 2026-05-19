@@ -10,39 +10,24 @@
 #' returns a `data.frame` containing frequencies and proportions.
 #'
 #' @details
-#' This function is designed to mimic common frequency procedures from
-#' statistical software such as SPSS or Stata, while integrating the
-#' flexibility of R's data structures.
+#' Designed to mimic common frequency procedures from SPSS or Stata
+#' while integrating the flexibility of R's data structures. The
+#' input type (`vector`, `factor`, `labelled`) is auto-detected; see
+#' `@param labelled_levels` and `@param factor_levels` for the
+#' schema-vs-observed level controls, and `@param na_val` for
+#' optional sentinel-value recoding.
 #'
-#' It automatically detects the type of input (`vector`, `factor`, or
-#' `labelled`) and applies appropriate transformations, including:
+#' Weighting (`weights`): frequencies and percentages are computed
+#' proportionally to the weights. Missing values in `weights` cause
+#' those observations to be dropped from the table entirely (with a
+#' warning), matching the behaviour of [cross_tab()] in spicy
+#' 0.11.0+. With `rescale = TRUE`, the remaining (non-`NA`-weighted)
+#' weights are normalised so the total weighted N equals the count
+#' of non-`NA`-weighted rows. With `rescale = FALSE`, the total
+#' weighted N is the actual sum of non-`NA` weights.
 #'
-#' * Handling of labelled variables via **labelled** or **haven**
-#' * Optional recoding of specific values as missing (`na_val`)
-#' * Optional weighting with a rescaling mechanism
-#' * Support for cumulative percentages (`cum = TRUE`)
-#' * Multiple display modes for labels via `labelled_levels`
-#' * Schema-vs-observed level display via `factor_levels`
-#'
-#' For factor and labelled inputs, the `factor_levels` argument
-#' controls whether declared-but-unobserved levels appear in the
-#' output. The default `"observed"` drops them (Stata `tab` behavior);
-#' `"all"` keeps them with `n = 0`, matching SPSS `FREQUENCIES` and
-#' [code_book()]'s default. For schema-level inspection without
-#' computing frequencies, use [varlist()] or [code_book()] with
-#' `factor_levels = "all"`.
-#'
-#' When weighting is applied (`weights`), the frequencies and percentages are
-#' computed proportionally to the weights. The argument `rescale = TRUE`
-#' normalizes weights so their sum equals the unweighted sample size
-#' (`length(weights)`).
-#'
-#' Missing values in `weights` cause those observations to be dropped
-#' from the table entirely (with a warning), matching the behaviour of
-#' [cross_tab()] in spicy 0.11.0+. With `rescale = TRUE`, the remaining
-#' (non-`NA`-weighted) weights are normalized so the total weighted N
-#' equals the count of non-`NA`-weighted rows. With `rescale = FALSE`,
-#' the total weighted N is the actual sum of non-`NA` weights.
+#' For schema-level inspection without computing frequencies, use
+#' [varlist()] or [code_book()].
 #'
 #' @param data A `data.frame`, vector, or factor. If a data frame is provided,
 #'   specify the target variable `x`. If both `data` and `x` are supplied as
@@ -178,7 +163,10 @@
 #' head(f)
 #'
 #' @seealso
-#' [print.spicy_freq_table()] for formatted printing.
+#' [cross_tab()] for two-way cross-tabulations;
+#' [table_categorical()] for multi-variable categorical summary
+#' tables; [varlist()] / [code_book()] for variable inspection;
+#' [print.spicy_freq_table()] for formatted printing;
 #' [spicy_print_table()] for the underlying ASCII rendering engine.
 #'
 #' @export
@@ -266,7 +254,7 @@ freq <- function(
   } else {
     spicy_warn(
       "Both `data` and `x` are vectors; `data` is ignored.", class = "spicy_ignored_arg")
-    # `x` is what gets analyzed here — mirror the `!is_df && missing(x)`
+    # `x` is what gets analyzed here -- mirror the `!is_df && missing(x)`
     # branch above so the printed footer (`Data: ...`) does not surface
     # the name of the vector that was just declared "ignored".
     var_name <- deparse(substitute(x))
@@ -284,7 +272,7 @@ freq <- function(
     # "no weighting": literal `weights = NULL`, parameterized patterns
     # like `weights = if (use_w) w else NULL`, or a variable holding
     # NULL. Only an expression that *fails to resolve* (e.g., the
-    # typo `weights = nonexistent_var`) is rejected — caught via
+    # typo `weights = nonexistent_var`) is rejected -- caught via
     # the sentinel below to distinguish it from a legitimate NULL.
     if (!is.null(weight_expr)) {
       weight_name <- deparse(weight_expr, backtick = FALSE)
@@ -317,7 +305,7 @@ freq <- function(
         )
       }
 
-      # Resolved to NULL — drop the name so the printed footer does
+      # Resolved to NULL -- drop the name so the printed footer does
       # not claim a weighting that was never applied.
       if (is.null(weights)) {
         weight_name <- NULL
@@ -330,7 +318,7 @@ freq <- function(
     # passes the comparisons via lexicographic coercion and only
     # crashes later at the `is.finite` check, with a misleading
     # "finite numeric" message. Logical is accepted because
-    # TRUE/FALSE coerce naturally to 1/0 — a common shorthand for
+    # TRUE/FALSE coerce naturally to 1/0 -- a common shorthand for
     # "include / exclude" weighting.
     if (!is.numeric(weights) && !is.logical(weights)) {
       spicy_abort(
@@ -453,9 +441,9 @@ freq <- function(
   }
 
   # --- Sort
-  # `nrow(df) > 1L` guards against an R 4.6.0 `order()` segfault on a
-  # zero-length vector for some classes; sorting a length-0 / 1 frame
-  # is a no-op anyway.
+  # `nrow(df) > 1L` short-circuits the `order()` step when the frame
+  # has zero or one row -- sorting it would be a no-op anyway and the
+  # guard keeps the call site small.
   if (sort != "" && nrow(df) > 1L) {
     decreasing <- sort %in% c("-", "name-")
     sort_col <- if (sort %in% c("+", "-")) "n" else "value"

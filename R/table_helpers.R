@@ -2,7 +2,7 @@
 # helpers (`table_continuous()`, `table_continuous_lm()`,
 # `table_categorical()`) and their print methods. Kept purely
 # string-based so they round-trip arbitrary formatted values
-# (`"<.001"`, `"f² = 0.18 [0.07, 0.30]"`, integers vs. decimals
+# (`"<.001"`, `"f^2 = 0.18 [0.07, 0.30]"`, integers vs. decimals
 # mixed in the same column, etc.) without ever converting to numeric.
 #
 # Naming convention:
@@ -20,6 +20,19 @@
 # the configured decimal mark. NA -> "" so blank cells render
 # cleanly. Vectorised by recursion -- the per-element branch is the
 # common case in the print methods.
+#
+# Auto-switch to scientific notation when the magnitude is too
+# extreme for a fixed-decimal display to be readable:
+#   * |x| >= 1e+7         : scientific (e.g., exp(intercept) for a
+#                           sparse logistic regression can hit 1e+11+;
+#                           even moderate log-odds like 12 gives ~1.6e+5
+#                           which fits, but exp(20) = 4.85e+8 needs sci)
+#   * |x| <  1e-4 (and !=0): scientific (e.g., very small probabilities
+#                           or near-zero ORs after exp())
+# Below those thresholds the conventional fixed-decimal rendering
+# preserves table readability and decimal alignment. Matches the
+# convention used by parameters / modelsummary / Stata, which all
+# auto-switch around the same magnitudes.
 format_number <- function(x, digits = 2L, decimal_mark = ".") {
   if (length(x) > 1L) {
     return(vapply(
@@ -33,7 +46,23 @@ format_number <- function(x, digits = 2L, decimal_mark = ".") {
   if (is.na(x)) {
     return("")
   }
-  out <- formatC(x, digits = digits, format = "f")
+  abs_x <- abs(x)
+  # Switch to scientific notation only for HUGE values (>= 1e+7) where
+  # fixed-decimal would produce unreadable 10+ digit integers. For
+  # small values, the requested `digits` is the user's precision
+  # contract: if a value rounds to "0.00" at digits = 2, it should
+  # display as "0.00" (not "1.63e-03") -- this matches Stata's
+  # behaviour and is the only way to keep decimal-alignment stable
+  # in standard cases. Users who want sub-precision values visible
+  # can request more `digits`.
+  use_scientific <- is.finite(x) && x != 0 && abs_x >= 1e+7
+  if (use_scientific) {
+    # `formatC(format = "e")` gives "1.75e+11" with `digits` mantissa
+    # decimals. Honour the user's `digits` (2 by default).
+    out <- formatC(x, digits = digits, format = "e")
+  } else {
+    out <- formatC(x, digits = digits, format = "f")
+  }
   if (!identical(decimal_mark, ".")) {
     out <- chartr(".", decimal_mark, out)
   }
@@ -83,8 +112,33 @@ format_p_value <- function(p, decimal_mark = ".", digits = 3L) {
 #     same total width, so the column stays clean when rendered.
 #
 # The function is purely string-based and never converts to numeric,
-# so it is robust to formats like "<.001", "f² = 0.18 [0.07, 0.30]",
+# Internal: safe display-width measurement for table padding.
+# `nchar(x, type = "width")` returns NA on locales without
+# `EastAsianWidth.txt` resolution (e.g., raw POSIX or some
+# Windows non-UTF-8 setups); we fall back to `nchar(x)` (byte/
+# character count) so downstream `strrep()` never receives a
+# non-finite repeat count.
+safe_glyph_width <- function(x) {
+  w <- nchar(x, type = "width")
+  if (any(is.na(w)) || any(w < 1L)) {
+    bad <- is.na(w) | w < 1L
+    w[bad] <- nchar(x[bad])
+  }
+  w
+}
+
+
+# so it is robust to formats like "<.001", "f^2 = 0.18 [0.07, 0.30]",
 # and any decimal_mark.
+#
+# Non-decimal cells (em-dash, "NA", "N/A", etc.) are positioned so
+# the glyph centres on the decimal-mark column. For a single-char
+# glyph this lines the em-dash up exactly with the `.` of the other
+# rows -- the convention recommended by APA Manual 7 Section 7.13
+# ("use a dash in the cell position where a number would otherwise
+# appear"), Stata `esttab`, `modelsummary`, and Hochuli typography
+# guidelines. Multi-char placeholders are centred around the
+# decimal-mark position with bias-left for even widths.
 decimal_align_strings <- function(values, decimal_mark = ".") {
   if (length(values) == 0L) {
     return(character(0))
@@ -122,15 +176,36 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
         return(strrep(" ", total_width))
       }
       v <- values[i]
-      pad_l <- strrep(" ", max_before - before[i])
-      pad_r <- if (has_dot[i]) {
-        strrep(" ", max_after - after[i])
-      } else if (max_after > 0L) {
-        strrep(" ", 1L + max_after)
-      } else {
-        ""
+      if (has_dot[i]) {
+        pad_l <- strrep(" ", max_before - before[i])
+        pad_r <- strrep(" ", max_after - after[i])
+        return(paste0(pad_l, v, pad_r))
       }
-      paste0(pad_l, v, pad_r)
+      if (max_after == 0L) {
+        # Pure integer column (no decimals anywhere) -- left-pad to
+        # right-align the value, no decimal mark to align against.
+        return(paste0(strrep(" ", max_before - before[i]), v))
+      }
+      # Non-decimal cell in a column that has decimals elsewhere.
+      # Two sub-cases:
+      #   (a) Integer-like value (e.g., "32" for sample size, "-5"
+      #       for a negative count) -- right-align with the
+      #       integer parts of the decimal rows so its rightmost
+      #       digit lines up with their last integer digit.
+      #   (b) Non-numeric placeholder (em-dash, "NA", "N/A") --
+      #       centre the glyph on the decimal-mark column
+      #       position so it visually replaces the `.` of the
+      #       absent value. APA Manual 7 Section 7.13 / Stata
+      #       esttab / modelsummary convention.
+      if (grepl("^-?[0-9]+$", v)) {
+        pad_l <- strrep(" ", max_before - before[i])
+        pad_r <- strrep(" ", 1L + max_after)
+        return(paste0(pad_l, v, pad_r))
+      }
+      g <- safe_glyph_width(v)
+      pad_l <- max(0L, max_before - (g - 1L) %/% 2L)
+      pad_r <- max(0L, max_after - (g %/% 2L))
+      paste0(strrep(" ", pad_l), v, strrep(" ", pad_r))
     },
     character(1)
   )
@@ -144,4 +219,73 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
 # (`"0,18 [0,07; 0,30]"`).
 ci_bracket_separator <- function(decimal_mark) {
   if (identical(decimal_mark, ",")) "; " else ", "
+}
+
+# Internal: decimal-align the LL and UL inside a column of
+# bracketed CI strings (`"[LL, UL]"`). The default
+# `decimal_align_strings()` aligns on the FIRST decimal point it
+# finds, which puts the `[` and `]` at different horizontal
+# positions across rows -- visually messy. This helper aligns the
+# brackets at fixed positions AND decimal-aligns LL across rows
+# AND decimal-aligns UL across rows, yielding tables where the
+# left bracket, the LL decimal point, the comma separator, the UL
+# decimal point, and the right bracket all sit in fixed columns.
+#
+# Inputs are the formatted cell strings (already a vector of
+# `"[LL, UL]"` or blank / em-dash strings). NA / blank / em-dash
+# cells pass through and are padded to the same total width as
+# the aligned CI cells so the column stays rectangular.
+align_ci_strings <- function(values, decimal_mark = ".") {
+  if (length(values) == 0L) {
+    return(character(0))
+  }
+  values <- as.character(values)
+  values[is.na(values)] <- ""
+  is_ci <- grepl("^\\[", values) & grepl("\\]\\s*$", values)
+  sep <- ci_bracket_separator(decimal_mark)
+  # Build a regex that escapes regex metacharacters in `sep`. The
+  # only non-trivial cases here are "," and "; " (literal text);
+  # escape defensively in case `sep` is ever extended.
+  sep_re <- gsub("([.|()\\^{}+$*?])", "\\\\\\1", sep, perl = TRUE)
+  pattern <- paste0("^\\[\\s*(.*?)\\s*", sep_re,
+                    "\\s*(.*?)\\s*\\]\\s*$")
+  parts <- regmatches(values, regexec(pattern, values))
+
+  lls <- rep(NA_character_, length(values))
+  uls <- rep(NA_character_, length(values))
+  for (i in seq_along(values)) {
+    if (is_ci[i] && length(parts[[i]]) == 3L) {
+      lls[i] <- parts[[i]][2L]
+      uls[i] <- parts[[i]][3L]
+    }
+  }
+
+  aligned_lls <- decimal_align_strings(lls, decimal_mark)
+  aligned_uls <- decimal_align_strings(uls, decimal_mark)
+
+  ci_cells <- paste0("[", aligned_lls, sep, aligned_uls, "]")
+  ci_width <- if (length(ci_cells)) max(nchar(ci_cells)) else 0L
+
+  out <- character(length(values))
+  for (i in seq_along(values)) {
+    if (is_ci[i] && length(parts[[i]]) == 3L) {
+      out[i] <- ci_cells[i]
+    } else {
+      raw <- trimws(values[i])
+      if (!nzchar(raw)) {
+        out[i] <- strrep(" ", ci_width)
+      } else {
+        # Center single-glyph fallback (e.g., em-dash "--") within
+        # the CI column width so reference / blank rows stay
+        # rectangular and visually anchored. `safe_glyph_width()`
+        # falls back to byte length when the locale cannot resolve
+        # display width.
+        glyph_w <- safe_glyph_width(raw)
+        side <- max(0L, (ci_width - glyph_w) %/% 2L)
+        right <- max(0L, ci_width - glyph_w - side)
+        out[i] <- paste0(strrep(" ", side), raw, strrep(" ", right))
+      }
+    }
+  }
+  out
 }

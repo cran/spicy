@@ -28,29 +28,36 @@ through unchanged with no label attached.
 Splits each column name at the \strong{first} occurrence of \code{sep},
 renames the column to the part before \code{sep} (the \emph{name}, trimmed
 of surrounding whitespace), and assigns the part after \code{sep} as a
-\code{"label"} attribute on the column. The label attribute follows the
-\href{https://haven.tidyverse.org/}{haven} convention also used by
-\code{\link[labelled:var_label]{labelled::var_label()}}, so labelled-aware tooling
+\code{"label"} attribute on the column. The label attribute follows
+the \href{https://haven.tidyverse.org/}{haven} convention also used
+by \code{\link[labelled:var_label]{labelled::var_label()}}, so labelled-aware tooling
 (\code{labelled}, \code{haven}, \code{varlist()}, \code{code_book()}, ...) reads it
-transparently. Splitting at the first \code{sep} means the label itself
-may contain the separator.
+transparently. Splitting at the \emph{first} \code{sep} means the label
+itself may contain the separator.
 }
 \details{
-This is especially useful for \strong{LimeSurvey CSV exports} when
-using \emph{Export results -> Export format: CSV -> Headings: Question
-code & question text}, where column names look like
-\code{"code. question text"}. The default separator is \code{". "} to match
+Designed primarily for \strong{LimeSurvey CSV exports} with \emph{Headings:
+Question code & question text}, which produce column names like
+\code{"code. question text"}. The default separator \code{". "} matches
 that export.
 
-LimeSurvey question codes (the part \emph{before} \code{sep}) are restricted
-to alphanumeric characters, must start with a letter, and cannot
-contain spaces or special characters. The column name therefore
-needs to encode both the code \emph{and} the question text, separated
-by a literal string -- there is no way to recover a label from a
-code alone. If your export uses \emph{Headings: Question code} (codes
-only), re-export with \emph{Headings: Question code & question text}
-(which inserts the default \code{". "} separator) before calling this
-function.
+LimeSurvey question codes (the part \emph{before} \code{sep}) are
+restricted to alphanumerics, must start with a letter, and
+contain no spaces -- so the column name has to carry both the
+code and the question text. If your export uses \emph{Headings:
+Question code} (codes only), re-export with \emph{Question code &
+question text} before calling this function; there is no way to
+recover a label from a code alone.
+
+Whitespace handling: the \strong{name} (left of \code{sep}) is trimmed
+of surrounding whitespace, because R column names are intended
+to be referenced bare (without backticks) and leading / trailing
+whitespace would force quoting throughout the user's downstream
+code. The \strong{label} (right of \code{sep}) is preserved verbatim,
+following the Stata / SPSS convention that variable labels are
+faithful user content -- spicy does not silently mutate label
+strings. To trim labels yourself, post-process with
+\code{labelled::var_label(df) <- lapply(labelled::var_label(df), trimws)}.
 }
 \section{Errors}{
 

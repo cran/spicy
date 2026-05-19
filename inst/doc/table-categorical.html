@@ -590,7 +590,8 @@ named vector to mix measures per row:</p>
 <span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
 <span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a>)</span></code></pre></div>
 <p>Add confidence intervals with <code>assoc_ci = TRUE</code>. In
-rendered formats (gt, tinytable, flextable), the CI is shown inline:</p>
+rendered formats (<code>gt</code>, <code>tinytable</code>,
+<code>flextable</code>, <code>word</code>), the CI is shown inline:</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a><span class="fu">pkgdown_dark_gt</span>(</span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a>  <span class="fu">table_categorical</span>(</span>
 <span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a>    sochealth,</span>
@@ -738,9 +739,8 @@ alignment.</p>
 <p><code>table_categorical()</code> returns an object that can be
 coerced to a plain <code>data.frame</code> / <code>tbl_df</code>
 (stripping the spicy formatting attributes) or piped into
-<code>broom::tidy()</code> / <code>broom::glance()</code> for use with
-<code>gtsummary</code>, <code>modelsummary</code>,
-<code>parameters</code>, or any other tidyverse-stats workflow:</p>
+<code>broom::tidy()</code> / <code>broom::glance()</code> for any
+downstream tidyverse-stats workflow:</p>
 <div class="sourceCode" id="cb17"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb17-1"><a href="#cb17-1" tabindex="-1"></a>out <span class="ot">&lt;-</span> <span class="fu">table_categorical</span>(</span>
 <span id="cb17-2"><a href="#cb17-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb17-3"><a href="#cb17-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity),</span>

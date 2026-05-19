@@ -802,17 +802,20 @@ test_that("table_continuous_lm internal covariance helper covers fallback branch
   expect_false(anyNA(vc))
 })
 
-test_that("table_continuous_lm export helper validates output-specific paths", {
-  display_df <- data.frame(
+.export_lm_display_df <- function() {
+  data.frame(
     Variable = "x",
     `M (A)` = "1.00",
     p = ".050",
     check.names = FALSE
   )
+}
 
+test_that("table_continuous_lm export helper validates excel_path", {
+  skip_if_not_installed("openxlsx2")
   expect_error(
     spicy:::export_continuous_lm_table(
-      display_df,
+      .export_lm_display_df(),
       output = "excel",
       ci_level = 0.95,
       excel_path = NULL,
@@ -822,9 +825,14 @@ test_that("table_continuous_lm export helper validates output-specific paths", {
     ),
     "excel_path"
   )
+})
+
+test_that("table_continuous_lm export helper validates word_path", {
+  skip_if_not_installed("officer")
+  skip_if_not_installed("flextable")
   expect_error(
     spicy:::export_continuous_lm_table(
-      display_df,
+      .export_lm_display_df(),
       output = "word",
       ci_level = 0.95,
       excel_path = NULL,
@@ -834,9 +842,12 @@ test_that("table_continuous_lm export helper validates output-specific paths", {
     ),
     "word_path"
   )
+})
+
+test_that("table_continuous_lm export helper rejects unknown output format", {
   expect_error(
     spicy:::export_continuous_lm_table(
-      display_df,
+      .export_lm_display_df(),
       output = "bogus",
       ci_level = 0.95,
       excel_path = NULL,
@@ -2225,6 +2236,39 @@ test_that("effect sizes are invariant to vcov = 'CR2'", {
     fit_classical$es_ci_lower[!is.na(fit_classical$es_ci_lower)],
     fit_cr2$es_ci_lower[!is.na(fit_cr2$es_ci_lower)]
   )
+})
+
+test_that("glance() preserves df.residual without integer truncation", {
+  # Regression: glance() previously coerced df2 -> integer, which
+  # truncated both genuinely-fractional Satterthwaite df (e.g. 45.32)
+  # and FP-noisy near-integer values (47.999999... -> 47). The
+  # broom convention for Satterthwaite-corrected models keeps df as
+  # numeric, so spicy now mirrors that.
+  skip_if_not_installed("clubSandwich")
+  set.seed(1)
+  n <- 200
+  d <- data.frame(
+    outcome = rnorm(n),
+    predictor = factor(rep(c("A", "B"), n / 2)),
+    cluster_id = rep(1:50, 4)
+  )
+  res <- table_continuous_lm(
+    d, outcome, by = predictor,
+    vcov = "CR2", cluster = cluster_id
+  )
+  long <- as.data.frame(res)
+  raw_df2 <- long$df2[1]
+  g <- broom::glance(res)
+  expect_type(g$df.residual, "double")
+  expect_equal(g$df.residual, raw_df2)
+  # Also verify a synthetic genuinely-fractional value is preserved.
+  res2 <- res
+  ld <- as.data.frame(res2)
+  ld$df2 <- 45.32
+  attributes(res2) <- attributes(res)
+  res2[] <- ld
+  g2 <- broom::glance(res2)
+  expect_equal(g2$df.residual, 45.32)
 })
 
 test_that("CR2 df2 differs from classical df.residual (cluster-aware df)", {
