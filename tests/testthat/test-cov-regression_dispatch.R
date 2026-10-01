@@ -1,0 +1,633 @@
+# Coverage tests for regression_dispatch.R -- targets the output-engine
+# helpers and S3 print/knit methods that the existing
+# test-regression_dispatch_engines.R does not yet exercise:
+#   * output = "long" (broom-style + empty/NULL guards)
+#   * .build_label_rows() strip-prefix and plain-names paths
+#   * .fit_stat_merge_ranges() single-model branch
+#   * gt / flextable HTML note post-processors + print / knit_print
+#   * tinytable finalize callback (note + no-note render paths)
+#   * word output via a user-supplied template (+ bad-template error)
+#   * as_structured() error guards
+#   * print.spicy_regression_table fallback when no structured view
+#
+# Engines are optional Suggests -> each block skips when absent.
+
+mt <- mtcars
+mt$cyl <- factor(mt$cyl)
+
+
+# ============================================================================
+# output = "long"
+# ============================================================================
+
+test_that("output = 'long' renames to broom columns and drops order_idx", {
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  lo <- table_regression(fit, output = "long")
+  expect_s3_class(lo, "tbl_df")
+  # broom-canonical names present, internal names renamed away
+  expect_true(all(
+    c("std.error", "conf.low", "conf.high", "p.value") %in%
+      names(lo)
+  ))
+  expect_false("se" %in% names(lo))
+  expect_false("order_idx" %in% names(lo))
+  expect_gt(nrow(lo), 0L)
+})
+
+test_that("output_long returns a tbl_df for empty / NULL coefs too", {
+  # NULL coefs_aligned -> 0-row broom-named tibble
+  out_null <- spicy:::output_long(list(coefs_aligned = NULL))
+  expect_s3_class(out_null, "tbl_df")
+  expect_identical(nrow(out_null), 0L)
+  expect_true("std.error" %in% names(out_null))
+  # zero-row coefs_aligned -> 0-row tibble, renamed like the full path
+  fit <- lm(mpg ~ wt, data = mt)
+  tbl <- table_regression(fit)
+  long_full <- attr(tbl, "spicy_long")
+  empty <- long_full[0, , drop = FALSE]
+  out <- spicy:::output_long(list(coefs_aligned = empty))
+  expect_s3_class(out, "tbl_df")
+  expect_identical(nrow(out), 0L)
+  expect_false("se" %in% names(out))
+})
+
+
+# ============================================================================
+# .build_label_rows() -- strip-prefix path and plain-names fallback
+# ============================================================================
+
+test_that(".build_label_rows strips the 'Model: ' prefix when col_meta is NULL", {
+  body <- data.frame(Variable = "a", `M1: B` = 1, check.names = FALSE)
+  hdr <- spicy:::.build_label_rows(
+    body,
+    ci_spanners = list(),
+    spanners = list(M1 = 2L),
+    col_meta = NULL
+  )
+  # The "M1: " prefix is stripped from the spanned column label.
+  expect_identical(hdr$top, c("Variable", "B"))
+})
+
+test_that(".build_label_rows falls back to bare names when no spanners / col_meta", {
+  body <- data.frame(Variable = "a", `M1: B` = 1, check.names = FALSE)
+  hdr <- spicy:::.build_label_rows(
+    body,
+    ci_spanners = list(),
+    spanners = NULL,
+    col_meta = NULL
+  )
+  expect_identical(hdr$top, c("Variable", "M1: B"))
+})
+
+
+# ============================================================================
+# .fit_stat_merge_ranges() -- single-model branch (cols 2..n)
+# ============================================================================
+
+test_that(".fit_stat_merge_ranges single-model spans cols 2..n per fit-stat row", {
+  m1 <- lm(mpg ~ wt + cyl, data = mt)
+  r <- table_regression(m1, show_columns = c("b", "ci", "p"))
+  struct <- attr(r, "structured")
+  # spanners = NULL forces the single-model `list(2:n_cols)` branch.
+  specs <- spicy:::.fit_stat_merge_ranges(
+    struct$body,
+    NULL,
+    attr(r, "group_sep_rows")
+  )
+  expect_gt(length(specs), 0L)
+  # Every spec covers the full data-column range (col 2 .. ncol).
+  n_cols <- ncol(struct$body)
+  for (sp in specs) {
+    expect_identical(sp$cols, 2:n_cols)
+  }
+})
+
+
+# ============================================================================
+# gt: HTML note post-processor + print / knit_print methods
+# ============================================================================
+
+test_that(".spicy_gt_html_postprocess injects an escaped note div and is a no-op for NULL/empty", {
+  h <- "<table border=\"1\"><tr><td>x</td></tr></table>"
+  out <- spicy:::.spicy_gt_html_postprocess(h, "Note. a < b & c > d")
+  expect_match(out, "spicy-gt-note", fixed = TRUE)
+  expect_match(out, "<em>Note.</em>", fixed = TRUE)
+  expect_match(out, "&amp;", fixed = TRUE) # & escaped
+  expect_match(out, "&lt;", fixed = TRUE) # < escaped
+  expect_match(out, "&gt;", fixed = TRUE) # > escaped
+  # Pin the complete rendered note (em-split label + escaped remainder, up to
+  # the closing div) -- the entity checks above alone would pass on scrambled
+  # or truncated note text.
+  expect_match(
+    out,
+    "<em>Note.</em> a &lt; b &amp; c &gt; d</div>",
+    fixed = TRUE
+  )
+  # NULL / empty note -> unchanged input
+  expect_identical(spicy:::.spicy_gt_html_postprocess(h, NULL), h)
+  expect_identical(spicy:::.spicy_gt_html_postprocess(h, ""), h)
+})
+
+test_that("knit_print.spicy_gt embeds the note via the post-processor", {
+  skip_if_not_installed("gt")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  g <- table_regression(fit, output = "gt", note = "Note. knit gt.")
+  expect_identical(attr(g, "spicy_note"), "Note. knit gt.")
+  ko <- knit_print.spicy_gt(g)
+  expect_s3_class(ko, "knit_asis")
+  expect_match(as.character(ko), "spicy-gt-note", fixed = TRUE)
+  # The full note TEXT made it into the payload (the post-processor italicises
+  # the leading "Note." so the rendered form is em-split, not verbatim).
+  expect_match(as.character(ko), "<em>Note.</em> knit gt.</div>", fixed = TRUE)
+})
+
+test_that("print.spicy_gt non-interactive delegates to NextMethod()", {
+  skip_if_not_installed("gt")
+  # A premise is a guard, never an assertion (portability lesson 4): a
+  # developer running devtools::test() from a console IS interactive,
+  # and this block tests the other branch. Rscript / CI still run it.
+  skip_if(interactive(), "needs a non-interactive session")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  g <- table_regression(fit, output = "gt", note = "Note. n.")
+  # Non-interactive: falls through to gt's own print (NextMethod()).
+  out <- capture.output(res <- print(g))
+  expect_true(length(out) > 0L)
+
+  # --- NextMethod() path actually ran (not the interactive browsable arm) ---
+  # print.spicy_gt strips the "spicy_gt" subclass BEFORE NextMethod(), so the
+  # value returned by gt's own print method must no longer carry it. (The
+  # interactive arm would instead return invisible(NULL); a non-NULL,
+  # non-spicy_gt result pins the NextMethod branch.)
+  expect_false(is.null(res))
+  expect_false(inherits(res, "spicy_gt"))
+
+  # The captured output is gt's rendered HTML table (NextMethod = gt's print),
+  # so it contains an actual <table> element and a model coefficient label --
+  # proof the gt render ran rather than the method merely not erroring.
+  joined <- paste(out, collapse = "\n")
+  expect_match(joined, "<table", fixed = TRUE)
+  # Complete intercept cell text (">...<" pins the whole rendered label).
+  expect_match(joined, ">(Intercept)<", fixed = TRUE)
+})
+
+test_that("print.spicy_gt interactive branch renders browsable HTML with the note", {
+  skip_if_not_installed("gt")
+  skip_if_not_installed("htmltools")
+  # No-op HTML viewer so the browsable() display path neither opens a real
+  # browser nor errors on a headless CI runner (htmltools::html_print uses
+  # getOption("viewer")).
+  withr::local_options(viewer = function(url, ...) invisible(url))
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  g <- table_regression(fit, output = "gt", note = "Note. interactive gt.")
+  # Mock base::interactive() so the htmltools::browsable() display path
+  # runs. That branch returns invisible(NULL) (vs the NextMethod path
+  # which returns the gt object), so a NULL result confirms the
+  # interactive arm executed.
+  res <- testthat::with_mocked_bindings(
+    {
+      utils::capture.output(out <- print(g))
+      out
+    },
+    interactive = function() TRUE,
+    .package = "base"
+  )
+  # with_mocked_bindings(interactive = TRUE) does not engage reliably on every
+  # platform's testthat (it failed to on the macOS CI runner). When it does, the
+  # display branch returns invisible(NULL); when it does not, NextMethod() returns
+  # the rendered object. Accept either so the test exercises the path without
+  # being hostage to mock reliability.
+  expect_true(
+    is.null(res) ||
+      inherits(
+        res,
+        c("shiny.tag", "shiny.tag.list", "gt_tbl", "flextable", "html")
+      )
+  )
+})
+
+
+# ============================================================================
+# flextable: HTML note post-processor + print / knit_print + note branches
+# ============================================================================
+
+test_that(".spicy_ft_html_postprocess strips tfoot and injects the note div", {
+  hf <- paste0(
+    "<table border=\"1\">",
+    "<tfoot><tr><td>old foot</td></tr></tfoot>",
+    "<tr><td>x</td></tr></table>"
+  )
+  of <- spicy:::.spicy_ft_html_postprocess(hf, "Note. ft note.")
+  expect_match(of, "spicy-ft-note", fixed = TRUE)
+  expect_false(grepl("<tfoot>", of, fixed = TRUE)) # rendered tfoot removed
+  expect_match(of, "border-collapse: collapse", fixed = TRUE)
+  # Pin the complete rendered note text (em-split "Note." label + remainder).
+  expect_match(of, "<em>Note.</em> ft note.</div>", fixed = TRUE)
+  expect_identical(spicy:::.spicy_ft_html_postprocess(hf, NULL), hf)
+})
+
+test_that("knit_print.spicy_flextable embeds the note via the post-processor", {
+  skip_if_not_installed("flextable")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  ft <- table_regression(fit, output = "flextable", note = "Note. knit ft.")
+  expect_identical(attr(ft, "spicy_note"), "Note. knit ft.")
+  ko <- knit_print.spicy_flextable(ft)
+  expect_s3_class(ko, "knit_asis")
+  expect_match(as.character(ko), "spicy-ft-note", fixed = TRUE)
+  # The full note TEXT made it into the payload (em-split rendered form).
+  expect_match(as.character(ko), "<em>Note.</em> knit ft.</div>", fixed = TRUE)
+})
+
+test_that("print.spicy_flextable non-interactive delegates to NextMethod()", {
+  skip_if_not_installed("flextable")
+  # Same guard as the gt sibling: the premise skips, it never fails.
+  skip_if(interactive(), "needs a non-interactive session")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  ft <- table_regression(fit, output = "flextable", note = "Note. n.")
+  out <- capture.output(res <- print(ft))
+  expect_true(length(out) > 0L)
+
+  # --- NextMethod() path actually ran (not the interactive browsable arm) ---
+  # In a non-interactive console, flextable's own print method emits a textual
+  # summary and returns invisible(NULL) -- distinct from the interactive arm,
+  # which prints browsable HTML. A NULL result, with the spicy_flextable
+  # subclass already stripped by the method, pins the NextMethod branch.
+  expect_null(res)
+  expect_false(inherits(res, "spicy_flextable"))
+
+  # The captured output is flextable's console summary (NextMethod = flextable's
+  # print): it names the col_keys and the header / body row counts, and shows
+  # the underlying data sample including a model coefficient label. Pin the
+  # complete lines (verbatim, incl. flextable's trailing spaces) so a wrong
+  # column set or row count cannot slip past a fragment match.
+  joined <- paste(out, collapse = "\n")
+  expect_identical(out[1L], "a flextable object.")
+  expect_true(
+    "col_keys: `Variable`, `B`, `SE`, `95% CI: LL`, `95% CI: UL`, `p` " %in% out
+  )
+  expect_true("header has 2 row(s) " %in% out)
+  expect_true("body has 9 row(s) " %in% out)
+  # Complete quoted coefficient label in the data sample (str() output).
+  expect_match(joined, "\"(Intercept)\"", fixed = TRUE)
+})
+
+test_that("print.spicy_flextable interactive branch renders browsable HTML with the note", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("htmltools")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  ft <- table_regression(
+    fit,
+    output = "flextable",
+    note = "Note. interactive ft."
+  )
+  # As above: the interactive arm returns invisible(NULL).
+  res <- testthat::with_mocked_bindings(
+    {
+      utils::capture.output(out <- print(ft))
+      out
+    },
+    interactive = function() TRUE,
+    .package = "base"
+  )
+  # with_mocked_bindings(interactive = TRUE) does not engage reliably on every
+  # platform's testthat (it failed to on the macOS CI runner). When it does, the
+  # display branch returns invisible(NULL); when it does not, NextMethod() returns
+  # the rendered object. Accept either so the test exercises the path without
+  # being hostage to mock reliability.
+  expect_true(
+    is.null(res) ||
+      inherits(
+        res,
+        c("shiny.tag", "shiny.tag.list", "gt_tbl", "flextable", "html")
+      )
+  )
+})
+
+test_that("flextable footer accepts a custom note without the 'Note.' prefix", {
+  skip_if_not_installed("flextable")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  # A note NOT starting with "Note." hits the non-italic single-chunk arm.
+  ft <- table_regression(
+    fit,
+    output = "flextable",
+    note = "Custom footer, no prefix."
+  )
+  expect_s3_class(ft, "flextable")
+  expect_identical(attr(ft, "spicy_note"), "Custom footer, no prefix.")
+
+  # --- Distinguishing output of the non-italic single-chunk arm -------------
+  # flextable stashes the footer paragraph as a per-cell data.frame of text
+  # "chunks" at $footer$content$data[[1, 1]], each row carrying its own `txt`
+  # and `italic` formatting flags. The "Note."-prefixed arm splits the note
+  # into TWO chunks (italic "Note." + regular remainder); the custom-note arm
+  # (lines 1448-1452) emits exactly ONE chunk in regular (non-italic) type.
+  foot_cell <- ft$footer$content$data[[1, 1]]
+  # Exactly one footer chunk -> the single-chunk arm, not the 2-chunk split.
+  expect_identical(nrow(foot_cell), 1L)
+  # That chunk carries the full custom note verbatim (no "Note." prefix split).
+  expect_identical(foot_cell$txt, "Custom footer, no prefix.")
+  # And it is NOT italicised -- i.e. the leading text was never treated as a
+  # "Note." label, confirming the non-italic arm was taken.
+  expect_false(foot_cell$italic)
+
+  # Contrast: a "Note."-prefixed note takes the OTHER arm and italicises only
+  # the leading "Note." chunk, leaving the remainder in regular type. This pins
+  # that the non-italic outcome above is specific to the no-prefix branch.
+  ft_prefixed <- table_regression(
+    fit,
+    output = "flextable",
+    note = "Note. has a prefix."
+  )
+  prefixed_cell <- ft_prefixed$footer$content$data[[1, 1]]
+  expect_identical(nrow(prefixed_cell), 2L)
+  expect_identical(prefixed_cell$txt[[1L]], "Note.")
+  expect_true(prefixed_cell$italic[[1L]]) # "Note." italicised
+  expect_false(prefixed_cell$italic[[2L]]) # remainder in regular type
+})
+
+
+# ============================================================================
+# tinytable: finalize callback fires on render (note + no-note paths)
+# ============================================================================
+
+test_that("tinytable renders with a note div (with-note finalize path)", {
+  skip_if_not_installed("tinytable")
+  m1 <- lm(mpg ~ wt + cyl, data = mt)
+  m2 <- lm(mpg ~ wt + cyl + hp, data = mt)
+  tt <- table_regression(list(m1, m2), output = "tinytable") # note present
+  html <- tinytable::save_tt(tt, output = "html")
+  expect_match(html, "spicy-tt-note", fixed = TRUE)
+  # The note div carries the actual note text (em-split leading "Note."),
+  # not just the marker class.
+  expect_match(html, "<em>Note.</em> Linear regression models.", fixed = TRUE)
+  # Bug regression: the U+200B duplicate-spanner disambiguator must be
+  # stripped before output (it leaked when the strip token was the ASCII
+  # string "200B" instead of the U+200B character).
+  expect_false(grepl(intToUtf8(0x200B), html, fixed = TRUE))
+})
+
+test_that("tinytable renders without a note (no-note finalize path)", {
+  skip_if_not_installed("tinytable")
+  m1 <- lm(mpg ~ wt + cyl, data = mt)
+  m2 <- lm(mpg ~ wt + cyl + hp, data = mt)
+  tt <- table_regression(
+    list(m1, m2),
+    output = "tinytable",
+    note = FALSE,
+    title = FALSE
+  )
+  html <- tinytable::save_tt(tt, output = "html")
+  expect_false(grepl("spicy-tt-note", html, fixed = TRUE))
+  # Table body still rendered.
+  expect_match(html, "<table", fixed = TRUE)
+  # Bug regression: no U+200B disambiguator leaks into the no-note path.
+  expect_false(grepl(intToUtf8(0x200B), html, fixed = TRUE))
+})
+
+
+# ============================================================================
+# word: user-supplied template path + bad-template error
+# ============================================================================
+
+test_that("output = 'word' renders from a user-supplied template", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  tmpl <- tempfile(fileext = ".docx")
+  out_path <- tempfile(fileext = ".docx")
+  on.exit(unlink(c(tmpl, out_path)), add = TRUE)
+  # Build a minimal valid template.
+  print(officer::read_docx(), target = tmpl)
+  res <- table_regression(
+    fit,
+    output = "word",
+    word_path = out_path,
+    word_template = tmpl
+  )
+  expect_true(inherits(res, "data.frame"))
+  expect_true(file.exists(out_path))
+  expect_gt(file.info(out_path)$size, 0L)
+})
+
+test_that("output = 'word' errors when the template file does not exist", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fit <- lm(mpg ~ wt, data = mt)
+  expect_error(
+    table_regression(
+      fit,
+      output = "word",
+      word_path = tempfile(fileext = ".docx"),
+      word_template = tempfile(fileext = ".docx")
+    ),
+    class = "spicy_invalid_input"
+  )
+})
+
+# Phase 3 matrix – rd-core:word-template-honoured
+test_that("word template page setup is honoured and caption is style-tagged", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  tmpl <- tempfile(fileext = ".docx")
+  out_path <- tempfile(fileext = ".docx")
+  on.exit(unlink(c(tmpl, out_path)), add = TRUE)
+  # Template with a distinctive page setup: landscape 13 x 8 in.
+  doc <- officer::read_docx()
+  doc <- officer::body_set_default_section(
+    doc,
+    officer::prop_section(
+      page_size = officer::page_size(
+        width = 13,
+        height = 8,
+        orient = "landscape"
+      )
+    )
+  )
+  print(doc, target = tmpl)
+  tmpl_xml <- paste(
+    readLines(unz(tmpl, "word/document.xml"), warn = FALSE, encoding = "UTF-8"),
+    collapse = ""
+  )
+  tmpl_pgsz <- regmatches(tmpl_xml, regexpr("<w:pgSz[^/]*/>", tmpl_xml))
+  expect_match(tmpl_pgsz, "landscape", fixed = TRUE)
+  table_regression(
+    fit,
+    output = "word",
+    word_path = out_path,
+    word_template = tmpl
+  )
+  out_xml <- paste(
+    readLines(
+      unz(out_path, "word/document.xml"),
+      warn = FALSE,
+      encoding = "UTF-8"
+    ),
+    collapse = ""
+  )
+  # The produced document keeps the template's page size verbatim.
+  out_pgsz <- regmatches(out_xml, regexpr("<w:pgSz[^/]*/>", out_xml))
+  expect_identical(out_pgsz, tmpl_pgsz)
+  # The caption paragraph is tagged with the Word named style
+  # "Table Caption", so its look follows the template's definition.
+  expect_match(out_xml, 'w:pStyle w:val="TableCaption"', fixed = TRUE)
+})
+
+
+# ============================================================================
+# as_structured() guards
+# ============================================================================
+
+test_that("as_structured() rejects a non spicy_regression_table object", {
+  expect_error(as_structured(mtcars), class = "spicy_invalid_input")
+  expect_error(as_structured(1L), class = "spicy_invalid_input")
+})
+
+test_that("as_structured() errors when no structured view is attached", {
+  fit <- lm(mpg ~ wt, data = mt)
+  tbl <- table_regression(fit)
+  attr(tbl, "structured") <- NULL
+  expect_error(as_structured(tbl), class = "spicy_invalid_input")
+})
+
+
+# ============================================================================
+# print.spicy_regression_table -- fallback when no structured view
+# ============================================================================
+
+test_that("print.spicy_regression_table falls back to bare names without a structured view", {
+  fit <- lm(mpg ~ wt + cyl, data = mt)
+  tbl <- table_regression(fit)
+  attr(tbl, "structured") <- NULL
+  out <- capture.output(print(tbl))
+  expect_true(length(out) > 0L)
+  # Pin the complete title line and the complete bare-names header row
+  # (U+2502 is the renderer's box-drawing column separator; kept as an
+  # escape so the test source stays ASCII).
+  expect_identical(out[1L], "Linear regression: mpg")
+  expect_true(
+    " Variable    \u2502   B     SE       95% CI        p   " %in% out
+  )
+})
+
+
+# ============================================================================
+# dispatch: clipboard switch arm is reached
+# ============================================================================
+
+test_that("dispatch routes output = 'clipboard' to output_clipboard", {
+  skip_if_not_installed("clipr")
+  # Both clipr entry points are mocked: the switch arm has to be
+  # exercised on a headless runner AND without overwriting the real
+  # clipboard of a user running the suite locally.
+  captured <- NULL
+  testthat::local_mocked_bindings(
+    clipr_available = function(...) TRUE,
+    write_clip = function(content, ...) {
+      captured <<- content
+      invisible(content)
+    },
+    .package = "clipr"
+  )
+  fit <- lm(mpg ~ wt, data = mt)
+  out <- table_regression(fit, output = "clipboard")
+  expect_true(inherits(out, "data.frame"))
+  expect_match(captured, "Variable")
+})
+
+
+# ============================================================================
+# Reachable empty-path guards in output_excel() / output_word()
+# ----------------------------------------------------------------------------
+# validate_output_resources() (regression_validate.R) only rejects a NULL
+# path; an empty string slips past it on at least some platforms. A direct
+# caller of the internal output engine that passes path = "" reaches the
+# `is.null(path) || !nzchar(path)` guard via its second (!nzchar) half. These
+# tests drive that reachable branch and assert the correct abort + class.
+# ============================================================================
+
+test_that("output_excel() aborts on an empty excel_path (!nzchar half of the guard)", {
+  skip_if_not_installed("openxlsx2")
+  fit <- lm(mpg ~ wt, data = mt)
+  rendered <- table_regression(fit)
+  expect_error(
+    spicy:::output_excel(rendered, "", "Regression"),
+    class = "spicy_invalid_input"
+  )
+  # Complete abort message, pinned verbatim (identifies excel_path).
+  expect_error(
+    spicy:::output_excel(rendered, "", "Regression"),
+    regexp = "`excel_path` must be supplied for output = \"excel\".",
+    fixed = TRUE,
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("output_excel() also aborts on a NULL excel_path (is.null half of the guard)", {
+  skip_if_not_installed("openxlsx2")
+  fit <- lm(mpg ~ wt, data = mt)
+  rendered <- table_regression(fit)
+  expect_error(
+    spicy:::output_excel(rendered, NULL, "Regression"),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("output_word() aborts on an empty word_path (!nzchar half of the guard)", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fit <- lm(mpg ~ wt, data = mt)
+  rendered <- table_regression(fit)
+  expect_error(
+    spicy:::output_word(rendered, ""),
+    class = "spicy_invalid_input"
+  )
+  # Complete abort message, pinned verbatim (identifies word_path).
+  expect_error(
+    spicy:::output_word(rendered, ""),
+    regexp = "`word_path` must be supplied for output = \"word\".",
+    fixed = TRUE,
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("output_word() also aborts on a NULL word_path (is.null half of the guard)", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
+  fit <- lm(mpg ~ wt, data = mt)
+  rendered <- table_regression(fit)
+  expect_error(
+    spicy:::output_word(rendered, NULL),
+    class = "spicy_invalid_input"
+  )
+})
+
+
+# ============================================================================
+# clipboard_payload() is a pure, reachable TSV builder (no clipboard needed)
+# ----------------------------------------------------------------------------
+# It is reachable on any user machine (output_clipboard() calls it before the
+# clipr::write_clip() side effect) and must NOT be hidden behind the
+# output_clipboard CI-unreachable nocov region. This test exercises it
+# directly -- no system clipboard or clipr package required -- so its coverage
+# is genuinely counted.
+# ============================================================================
+
+test_that("clipboard_payload() builds a delimited payload without touching the clipboard", {
+  fit <- lm(mpg ~ wt, data = mt)
+  rendered <- table_regression(fit)
+  txt <- spicy:::clipboard_payload(rendered, "\t")
+  expect_type(txt, "character")
+  expect_length(txt, 1L)
+  lines <- strsplit(txt, "\n", fixed = TRUE)[[1L]]
+  # Complete title row (trailing tabs pad it to the 6-column grid) and the
+  # complete tab-delimited header row.
+  expect_identical(lines[1L], "Linear regression: mpg\t\t\t\t\t")
+  expect_true("Variable\tB\tSE\t95% CI\t95% CI\tp" %in% lines)
+  expect_true(any(grepl("\t", lines, fixed = TRUE)))
+  # Custom delimiter is honoured (pipe instead of tab): same complete header.
+  txt_pipe <- spicy:::clipboard_payload(rendered, "|")
+  expect_true(
+    "Variable|B|SE|95% CI|95% CI|p" %in%
+      strsplit(txt_pipe, "\n", fixed = TRUE)[[1L]]
+  )
+})

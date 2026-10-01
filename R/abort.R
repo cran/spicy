@@ -4,13 +4,9 @@
 # `spicy_error` is always present so consumers can catch any spicy
 # error with `tryCatch(spicy_error = ...)`.
 #
-# Class hierarchy:
-#   spicy_error            (root -- catch-all)
-#   |- spicy_invalid_input (bad argument value/type)
-#   |- spicy_invalid_data  (bad data shape: not df, NA cells, length mismatch)
-#   |- spicy_missing_pkg   (Suggests dependency not installed)
-#   |- spicy_missing_column(column name not found)
-#   |- spicy_unsupported   (op not applicable to this input)
+# The complete, maintained class taxonomy lives in the roxygen of
+# R/spicy-package.R (rendered on ?spicy) -- keep THAT list exhaustive;
+# this header deliberately carries no copy to drift.
 #
 # `call` defaults to the immediate caller of `spicy_abort()`, which
 # is typically the validator. Passing `call = rlang::caller_env(2)`
@@ -31,6 +27,16 @@ spicy_abort <- function(
 }
 
 
+# Quote a value for message text. `shQuote()` is SHELL quoting: it
+# renders '...' on Unix and "..." on Windows, so the same error would
+# read differently depending on where it was raised -- and a test that
+# pins the quotes can only be green on one platform. `encodeString()`
+# gives double quotes everywhere, and escapes an embedded quote or
+# backslash instead of pasting it raw. Every message in the package
+# that quotes a value goes through here.
+.quote_val <- function(x) encodeString(as.character(x), quote = "\"")
+
+
 # Symmetric helper for non-fatal conditions. Wraps `rlang::warn()`
 # to attach the package-wide `spicy_warning` parent class. Callers
 # pass the leaf class (e.g., `"spicy_ignored_arg"`); this helper
@@ -43,6 +49,10 @@ spicy_abort <- function(
 #   |- spicy_undefined_stat    (statistic is undefined for this input,
 #                               returning NA -- e.g., Tau-b on a table
 #                               with all-zero marginals)
+#      |- spicy_negative_weights_no_test (a design table withheld its
+#                               group comparison because the analytic
+#                               sample carries negatively weighted
+#                               rows; decision 36 / ARB-2)
 #   |- spicy_dropped_na        (NA observations silently excluded from
 #                               the computation, e.g., NA weights)
 #   |- spicy_ignored_arg       (an argument is ignored due to context,
@@ -60,12 +70,36 @@ spicy_abort <- function(
 #                               equivalent to lm, Menard pseudo-
 #                               standardisation requested on a non-
 #                               binomial family)
+#      |- spicy_bayes_diagnostics (a Bayesian fit's sampler or
+#                               predictive-accuracy diagnostics missed
+#                               their targets: R-hat / ESS / divergences /
+#                               E-BFMI guard, PSIS-LOO Pareto k, WAIC
+#                               p_waic. Nested under spicy_caveat so
+#                               generic caveat handlers still catch it,
+#                               while withCallingHandlers(
+#                               spicy_bayes_diagnostics = ...) can mute
+#                               this guard selectively)
+#      |- spicy_nonconvergence  (the fitting engine reports that its
+#                               optimizer did not converge: the table
+#                               still shows the numbers the object
+#                               holds, and a footer note says what they
+#                               are worth. Nested under spicy_caveat so
+#                               generic caveat handlers still catch it,
+#                               while withCallingHandlers(
+#                               spicy_nonconvergence = ...) can mute
+#                               this guard selectively)
 #   |- spicy_summary_failed    (varlist() could not summarize one
 #                               column; the rest of the table is fine)
 #   |- spicy_renamed_column    (a user data column or factor level
 #                               collided with a spicy-internal name
 #                               and was auto-renamed to preserve the
 #                               data; emitted by cross_tab())
+#   |- spicy_internal_invariant (an internal consistency check on a
+#                               spicy-built object failed; the result
+#                               still renders so the user can see both
+#                               the output and the diagnostic --
+#                               emitted by the structured-body
+#                               validator of table_regression())
 spicy_warn <- function(message, class = NULL, ...) {
   rlang::warn(
     message = message,
@@ -88,6 +122,169 @@ spicy_inform <- function(message, class = NULL, ...) {
     class = c(class, "spicy_info"),
     ...
   )
+}
+
+
+# Classed drop-in replacement for `match.arg()` on USER-FACING enum
+# arguments. Same matching semantics -- returns the first choice when
+# the argument is still the full default vector, partial-matches a
+# single string otherwise -- but an invalid value raises a classed
+# `spicy_invalid_input` error naming the argument and listing the
+# valid values, instead of the locale-dependent base "'arg' should be
+# one of ..." error (which escapes the documented
+# `tryCatch(spicy_error = ...)` catch-all).
+#
+# Like `match.arg()`, `choices = NULL` reads the choices from the
+# calling function's formal default for `arg`, so call sites stay
+# single-source: `output <- spicy_match_arg(output)`.
+#
+# Internal helpers with controlled inputs keep plain `match.arg()`;
+# this wrapper is for arguments a user can reach directly.
+spicy_match_arg <- function(arg, choices = NULL, arg_name = NULL) {
+  if (is.null(arg_name)) {
+    arg_name <- deparse1(substitute(arg))
+  }
+  if (is.null(choices)) {
+    fn <- sys.function(sys.parent())
+    choices <- eval(formals(fn)[[arg_name]], envir = environment(fn))
+  }
+  if (identical(arg, choices)) {
+    return(choices[[1L]])
+  }
+  matched <- NULL
+  is_string <- is.character(arg) && length(arg) == 1L && !is.na(arg)
+  if (is_string) {
+    matched <- tryCatch(
+      match.arg(arg, choices = choices),
+      error = function(e) NULL
+    )
+  }
+  if (is.null(matched)) {
+    spicy_abort(
+      sprintf(
+        "`%s` must be one of %s%s.",
+        arg_name,
+        paste0('"', choices, '"', collapse = ", "),
+        if (is_string) sprintf(', not "%s"', arg) else ""
+      ),
+      class = "spicy_invalid_input",
+      call = rlang::caller_env()
+    )
+  }
+  matched
+}
+
+
+# Internal: reject bit64::integer64 input before any numeric
+# computation. integer64 stores 64-bit integers in the bit pattern of
+# a double, so `is.numeric()` returns TRUE while `sum()`, `tapply()`,
+# `xtabs()`, `rowSums()` and friends silently read the raw bit
+# patterns as doubles and return garbage on the order of 1e-323.
+# spicy cannot convert safely itself (bit64 is not a dependency), so
+# the only safe response is a loud classed error naming the
+# conversion. `what` is the user-facing label of the offending input
+# (e.g. "`weights`", "`x`", "Column `id`").
+.check_integer64 <- function(x, what) {
+  if (inherits(x, "integer64")) {
+    spicy_abort(
+      c(
+        sprintf(
+          "%s is a bit64::integer64 vector, which base R numeric code silently misreads as garbage values near 1e-323.",
+          what
+        ),
+        "i" = "Convert it first with `as.numeric()` (or `bit64::as.double()`)."
+      ),
+      class = "spicy_invalid_data",
+      call = rlang::caller_env()
+    )
+  }
+  invisible(x)
+}
+
+
+# Internal: the `data` gate of the summary-table family.
+#
+# The four builders (`table_categorical()`, `table_continuous()`,
+# `table_continuous_lm()`, `table_outcome()`) all opened on the same
+# copied-and-pasted two lines. One helper on the
+# `.check_integer64_columns(data, cols, fn)` pattern -- it takes the
+# calling function's name too -- so the family's first refusal is
+# written once and every later branch enters it once as well.
+#
+# `fn` is the caller's name, for the messages the branches below add;
+# the plain non-data.frame message is deliberately unchanged and
+# unparameterised (`expect_error(..., "data. must be a data.frame")`
+# pins it as a literal in two test files).
+.check_data_frame <- function(data, fn) {
+  if (.is_survey_design(data)) {
+    # A survey design reaching a plain builder is not a type error, it
+    # is the wrong REGIME: the weights alone cannot reproduce the
+    # design-based standard errors, degrees of freedom and tests, so
+    # the answer is a different function rather than a coercion.
+    spicy_abort(
+      c(
+        sprintf(
+          "`%s()` expects a data.frame; it received a survey design object (`%s`).",
+          fn,
+          class(data)[1L]
+        ),
+        "i" = .DESIGN_REGIME_HINT[[fn]],
+        "i" = "Design-based standard errors, degrees of freedom and tests cannot be recovered from the weights alone."
+      ),
+      class = "spicy_wrong_regime"
+    )
+  }
+  if (!is.data.frame(data)) {
+    spicy_abort("`data` must be a data.frame.", class = "spicy_invalid_data")
+  }
+  invisible(data)
+}
+
+# Where each plain builder sends a caller who handed it a design. Two
+# of the four have a twin; the other two name the function that does
+# carry the design-based version of what they compute.
+.DESIGN_REGIME_HINT <- c(
+  table_continuous = "Use `table_continuous_svy(design, ...)`: it delegates every statistic to survey (Lumley) and documents the design in the table note.",
+  table_categorical = "Use `table_categorical_svy(design, ...)`: it delegates every statistic to survey (Lumley) and documents the design in the table note.",
+  table_continuous_lm = "There is no design twin of this table: fit the model on the design and tabulate it with `table_regression(survey::svyglm(y ~ group, design = ))`.",
+  table_outcome = "There is no design twin of this layout: use `table_continuous_svy(design, select = <outcome>, by = <variable>)` one grouping at a time."
+)
+
+
+# Internal: column-selection sibling of `.check_integer64()` for the
+# summary-table family (table_categorical / table_continuous /
+# table_continuous_lm). Checks the named columns of `data` and
+# refuses when any is bit64::integer64, listing every offender at
+# once. Even the paths that LOOK right with the bit64 namespace
+# loaded (categorical levels, group labels via as.character dispatch)
+# print raw denormal doubles ("9.88e-324") as soon as it is not, and
+# every numeric statistic reads the int64 bit patterns as garbage
+# near 1e-323 -- so the whole family shares one loud contract, the
+# same as freq() / cross_tab() / mean_n(). The hint names both
+# conversions because the right one depends on use and magnitude.
+# `cols` may contain names not in `data` (they are ignored) and
+# NULLs are dropped by c(), so callers can pass optional arguments
+# unconditionally.
+.check_integer64_columns <- function(data, cols, fn) {
+  cols <- intersect(cols, names(data))
+  bad <- cols[vapply(data[cols], inherits, logical(1), "integer64")]
+  if (length(bad) > 0L) {
+    spicy_abort(
+      c(
+        sprintf(
+          "%s(): column%s %s %s bit64::integer64, which base R code silently misreads as garbage values near 1e-323.",
+          fn,
+          if (length(bad) > 1L) "s" else "",
+          paste0("`", bad, "`", collapse = ", "),
+          if (length(bad) > 1L) "are" else "is"
+        ),
+        "i" = "Convert explicitly first: `as.integer()` / `as.numeric()` for values in numeric range, or `as.character()` for codes wider than 2^53."
+      ),
+      class = "spicy_invalid_data",
+      call = rlang::caller_env()
+    )
+  }
+  invisible(data)
 }
 
 
@@ -120,20 +317,28 @@ spicy_pkg_available <- function(pkg) {
 # Lives next to `spicy_pkg_available()` because it is a small,
 # horizontally-shared utility used across the regression layer.
 extract_arg_column_name <- function(arg_expr) {
-  if (is.null(arg_expr)) return(NA_character_)
+  if (is.null(arg_expr)) {
+    return(NA_character_)
+  }
   if (is.symbol(arg_expr)) {
     nm <- as.character(arg_expr)
-    if (identical(nm, "NULL") || !nzchar(nm)) return(NA_character_)
+    if (identical(nm, "NULL") || !nzchar(nm)) {
+      return(NA_character_)
+    }
     return(nm)
   }
   if (is.call(arg_expr)) {
     op <- tryCatch(as.character(arg_expr[[1]]), error = function(e) "")
-    if (identical(op, "$") && length(arg_expr) == 3L &&
-          is.symbol(arg_expr[[3]])) {
+    if (
+      identical(op, "$") && length(arg_expr) == 3L && is.symbol(arg_expr[[3]])
+    ) {
       return(as.character(arg_expr[[3]]))
     }
-    if (identical(op, "[[") && length(arg_expr) == 3L &&
-          is.character(arg_expr[[3]])) {
+    if (
+      identical(op, "[[") &&
+        length(arg_expr) == 3L &&
+        is.character(arg_expr[[3]])
+    ) {
       return(arg_expr[[3]])
     }
     # `~region` -> "region";  `~region:year` -> "region:year"
@@ -160,49 +365,80 @@ extract_arg_column_name <- function(arg_expr) {
 #   * NULL                -> returned as-is.
 # Returns a vector, NULL, or raises `spicy_invalid_input` when the
 # requested column is missing from `model.frame(fit)`.
+#
+# Sibling, NOT duplicate: resolve_cluster_argument() (R/lm_helpers.R)
+# serves the descriptive-table functions by tidy-evaluating a quosure
+# against their raw `data`; this one resolves against a fitted
+# model's model.frame. See the twin comment there for why they stay
+# separate.
 resolve_cluster <- function(cluster, fit, arg_label = "cluster") {
-  if (is.null(cluster)) return(NULL)
+  if (is.null(cluster)) {
+    return(NULL)
+  }
   if (inherits(cluster, "formula")) {
     vars <- all.vars(cluster)
     if (length(vars) == 0L) {
       spicy_abort(
-        c(sprintf("`%s` formula must reference at least one variable.",
-                  arg_label),
-          "i" = "Example: `cluster = ~region`."),
+        c(
+          sprintf(
+            "`%s` formula must reference at least one variable.",
+            arg_label
+          ),
+          "i" = "Example: `cluster = ~region`."
+        ),
         class = "spicy_invalid_input"
       )
     }
     src <- cluster_lookup_data(fit, vars)
     if (length(src$missing)) {
       spicy_abort(
-        c(sprintf("`%s` formula references unknown variable(s): %s.",
-                  arg_label,
-                  paste(shQuote(src$missing), collapse = ", ")),
-          "i" = paste0("Looked in: model.frame(fit)",
-                        if (src$tried_original) " + the model's `data`" else "",
-                        if (length(src$available)) {
-                          paste0(". Available there: ",
-                                  paste(shQuote(src$available),
-                                        collapse = ", "))
-                        } else ".")),
+        c(
+          sprintf(
+            "`%s` formula references unknown variable(s): %s.",
+            arg_label,
+            paste(.quote_val(src$missing), collapse = ", ")
+          ),
+          "i" = paste0(
+            "Looked in: model.frame(fit)",
+            if (src$tried_original) " + the model's `data`" else "",
+            if (length(src$available)) {
+              paste0(
+                ". Available there: ",
+                paste(.quote_val(src$available), collapse = ", ")
+              )
+            } else {
+              "."
+            }
+          )
+        ),
         class = "spicy_invalid_input"
       )
     }
-    if (length(vars) == 1L) return(src$df[[vars]])
+    if (length(vars) == 1L) {
+      return(src$df[[vars]])
+    }
     return(interaction(src$df[, vars, drop = FALSE], drop = TRUE))
   }
   if (is.character(cluster) && length(cluster) == 1L) {
     src <- cluster_lookup_data(fit, cluster)
     if (length(src$missing)) {
       avail <- if (length(src$available)) {
-        paste(shQuote(src$available), collapse = ", ")
-      } else "<no data attached to the fit>"
+        paste(.quote_val(src$available), collapse = ", ")
+      } else {
+        "<no data attached to the fit>"
+      }
       spicy_abort(
-        c(sprintf("`%s = \"%s\"`: column not found.", arg_label, cluster),
-          "i" = paste0("Looked in: model.frame(fit)",
-                        if (src$tried_original) " + the model's `data`" else "",
-                        ". Available: ", avail, "."),
-          "i" = "Or pass a formula (`cluster = ~region`) or a vector."),
+        c(
+          sprintf("`%s = \"%s\"`: column not found.", arg_label, cluster),
+          "i" = paste0(
+            "Looked in: model.frame(fit)",
+            if (src$tried_original) " + the model's `data`" else "",
+            ". Available: ",
+            avail,
+            "."
+          ),
+          "i" = "Or pass a formula (`cluster = ~region`) or a vector."
+        ),
         class = "spicy_invalid_input"
       )
     }
@@ -227,44 +463,72 @@ resolve_cluster <- function(cluster, fit, arg_label = "cluster") {
 cluster_lookup_data <- function(fit, vars) {
   mf <- tryCatch(stats::model.frame(fit), error = function(e) NULL)
   if (!is.null(mf) && all(vars %in% names(mf))) {
-    return(list(df = mf, missing = character(0),
-                available = names(mf), tried_original = FALSE))
+    return(list(
+      df = mf,
+      missing = character(0),
+      available = names(mf),
+      tried_original = FALSE
+    ))
   }
   # Fall back to the original `data` argument (full dataset).
-  orig <- tryCatch({
-    cl <- fit$call
-    if (is.null(cl) || is.null(cl$data)) NULL
-    else eval(cl$data, environment(stats::formula(fit)))
-  }, error = function(e) NULL)
+  orig <- tryCatch(
+    {
+      cl <- fit$call
+      if (is.null(cl) || is.null(cl$data)) {
+        NULL
+      } else {
+        eval(cl$data, environment(stats::formula(fit)))
+      }
+    },
+    error = function(e) NULL
+  )
   if (!is.null(orig) && is.data.frame(orig)) {
-    n_fit <- tryCatch(stats::nobs(fit), error = function(e) NA_integer_)
+    # .spicy_nobs, not stats::nobs: classes without a registered nobs
+    # method (rq, multinom) would return NA here and silently skip the
+    # na.action subsetting below -- the cluster vector then keeps the
+    # original row count and the length gate rejects the model's own
+    # blessed cluster route (caught for rq by the 2026-07 review).
+    n_fit <- tryCatch(.spicy_nobs(fit), error = function(e) NA_integer_)
     # Many fits drop rows via NA-handling; sandwich / clubSandwich
     # require the cluster vector to have length nobs(fit). When the
     # original data has more rows, subset using the model frame's
     # `na.action` attribute (the standard R idiom for "rows the
     # model actually used").
-    if (nrow(orig) != n_fit && !is.null(mf)) {
+    # n_fit is NA when the class registers no nobs method (e.g.
+    # nnet::multinom, pscl zeroinfl/hurdle): skip the subsetting --
+    # downstream length validation / capability gates handle the rest.
+    if (!is.na(n_fit) && nrow(orig) != n_fit && !is.null(mf)) {
       na_action <- attr(mf, "na.action")
-      if (!is.null(na_action) &&
-            nrow(orig) - length(na_action) == n_fit) {
+      if (
+        !is.null(na_action) &&
+          nrow(orig) - length(na_action) == n_fit
+      ) {
         orig <- orig[-na_action, , drop = FALSE]
       }
     }
     have <- intersect(vars, names(orig))
     if (length(have) == length(vars)) {
-      return(list(df = orig, missing = character(0),
-                  available = names(orig), tried_original = TRUE))
+      return(list(
+        df = orig,
+        missing = character(0),
+        available = names(orig),
+        tried_original = TRUE
+      ))
     }
-    return(list(df = orig,
-                missing = setdiff(vars, names(orig)),
-                available = names(orig),
-                tried_original = TRUE))
+    return(list(
+      df = orig,
+      missing = setdiff(vars, names(orig)),
+      available = names(orig),
+      tried_original = TRUE
+    ))
   }
   # Last resort: report what model.frame had.
-  list(df = mf %||% data.frame(),
-       missing = setdiff(vars, names(mf %||% data.frame())),
-       available = names(mf %||% data.frame()),
-       tried_original = FALSE)
+  list(
+    df = mf %||% data.frame(),
+    missing = setdiff(vars, names(mf %||% data.frame())),
+    available = names(mf %||% data.frame()),
+    tried_original = FALSE
+  )
 }
 
 
@@ -280,7 +544,9 @@ cluster_lookup_data <- function(fit, vars) {
 # vector cluster) and a single formula (formulas are lists under
 # the hood but inherit "formula").
 resolve_cluster_arg <- function(cluster, models) {
-  if (is.null(cluster)) return(NULL)
+  if (is.null(cluster)) {
+    return(NULL)
+  }
   if (inherits(cluster, "formula")) {
     # Single formula -> recycle to all models.
     return(lapply(models, function(m) resolve_cluster(cluster, m)))
@@ -289,15 +555,21 @@ resolve_cluster_arg <- function(cluster, models) {
     return(lapply(models, function(m) resolve_cluster(cluster, m)))
   }
   # A plain list (not an atomic vector) treated as per-model.
-  if (is.list(cluster) && !is.atomic(cluster) &&
-        identical(class(cluster), "list")) {
+  if (
+    is.list(cluster) && !is.atomic(cluster) && identical(class(cluster), "list")
+  ) {
     if (length(cluster) != length(models)) {
       spicy_abort(
         c(
-          sprintf("`cluster` is a list of length %d but `models` has length %d.",
-                  length(cluster), length(models)),
-          "i" = paste0("Pass one cluster (recycled to all models) or a ",
-                        "list of length(models).")
+          sprintf(
+            "`cluster` is a list of length %d but `models` has length %d.",
+            length(cluster),
+            length(models)
+          ),
+          "i" = paste0(
+            "Pass one cluster (recycled to all models) or a ",
+            "list of length(models)."
+          )
         ),
         class = "spicy_invalid_input"
       )

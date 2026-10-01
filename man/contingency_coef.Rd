@@ -4,13 +4,7 @@
 \alias{contingency_coef}
 \title{Pearson's contingency coefficient}
 \usage{
-contingency_coef(
-  x,
-  detail = FALSE,
-  conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
-)
+contingency_coef(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -19,14 +13,14 @@ contingency_coef(
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -50,6 +44,9 @@ so the confidence interval is not computed.
 tab <- table(sochealth$smoking, sochealth$education)
 contingency_coef(tab)
 
+}
+\references{
+Liebetrau, A. M. (1983). \emph{Measures of Association}. Sage.
 }
 \seealso{
 \code{\link[=cramer_v]{cramer_v()}}, \code{\link[=assoc_measures]{assoc_measures()}}

@@ -47,6 +47,48 @@
 }
 
 
+# Shared `conf_level` gate for the association family (the 11
+# measures + `assoc_measures()`). `NULL` is the documented opt-out
+# (omit the CI); anything else must be a single number strictly
+# inside (0, 1). Out-of-range values used to flow silently into
+# `qnorm()`, yielding `Inf` / `NaN` confidence bounds (printed as the
+# undefined-cell en dash, indistinguishable from a legitimately
+# unavailable CI); the
+# common percent-scale mistake (`conf_level = 95`) gets an
+# actionable hint. Same contract as `validate_ci_level()` on the
+# regression side.
+.validate_conf_level <- function(conf_level) {
+  if (is.null(conf_level)) {
+    return(invisible(NULL))
+  }
+  is_scalar_num <- is.numeric(conf_level) &&
+    length(conf_level) == 1L &&
+    !is.na(conf_level) &&
+    is.finite(conf_level)
+  if (is_scalar_num && conf_level > 0 && conf_level < 1) {
+    return(invisible(NULL))
+  }
+  hint <- if (is_scalar_num && conf_level > 1 && conf_level <= 100) {
+    c(
+      "i" = sprintf(
+        "`conf_level` is a proportion, not a percentage: did you mean `conf_level = %s`?",
+        format(conf_level / 100)
+      )
+    )
+  } else {
+    NULL
+  }
+  spicy_abort(
+    c(
+      "`conf_level` must be a single number strictly between 0 and 1, or NULL to omit the confidence interval.",
+      hint
+    ),
+    class = "spicy_invalid_input",
+    call = rlang::caller_env()
+  )
+}
+
+
 .assoc_result <- function(
   estimate,
   se = NA_real_,
@@ -56,15 +98,10 @@
   upper_bound = Inf,
   ci_lower = NULL,
   ci_upper = NULL,
-  .include_se = FALSE,
   digits = 3L
 ) {
   if (is.null(conf_level) || is.na(conf_level)) {
-    out <- if (.include_se) {
-      c(estimate = estimate, se = se, p_value = p_value)
-    } else {
-      c(estimate = estimate, p_value = p_value)
-    }
+    out <- c(estimate = estimate, se = se, p_value = p_value)
     class(out) <- "spicy_assoc_detail"
     attr(out, "digits") <- digits
     return(out)
@@ -74,22 +111,13 @@
     ci_lower <- max(lower_bound, estimate - z * se)
     ci_upper <- min(upper_bound, estimate + z * se)
   }
-  out <- if (.include_se) {
-    c(
-      estimate = estimate,
-      se = se,
-      ci_lower = ci_lower,
-      ci_upper = ci_upper,
-      p_value = p_value
-    )
-  } else {
-    c(
-      estimate = estimate,
-      ci_lower = ci_lower,
-      ci_upper = ci_upper,
-      p_value = p_value
-    )
-  }
+  out <- c(
+    estimate = estimate,
+    se = se,
+    ci_lower = ci_lower,
+    ci_upper = ci_upper,
+    p_value = p_value
+  )
   class(out) <- "spicy_assoc_detail"
   attr(out, "digits") <- digits
   out
@@ -135,14 +163,14 @@ print.spicy_assoc_detail <- function(
     function(nm) {
       v <- x[[nm]]
       if (is.na(v)) {
-        return("--")
+        return(spicy_str("cell_undefined"))
       }
       if (nm == "p_value") {
         # APA-style: `<.001` / `.045`, no leading zero. Same helper
         # as `cross_tab()` and the `table_*()` family.
         format_p_value(v, decimal_mark = ".", digits = 3L)
       } else {
-        formatC(v, format = "f", digits = digits)
+        formatC(v, format = "f", digits = digits, decimal.mark = ".")
       }
     },
     character(1)
@@ -162,11 +190,12 @@ print.spicy_assoc_detail <- function(
 
 
 # Internal: assemble the documented NA return shape, respecting `detail`,
-# `conf_level` and `.include_se`. Used by the degenerate-table branches
-# of `cramer_v()`, `yule_q()`, `gamma_gk()`, `kendall_tau_b()` and
+# `conf_level`. Used by the degenerate-table branches
+# of `yule_q()`, `lambda_gk()`, `goodman_kruskal_tau()`,
+# `uncertainty_coef()`, `gamma_gk()`, `kendall_tau_b()` and
 # `somers_d()` so they keep returning the same shape as the happy path
 # instead of a bare length-1 named vector.
-.na_assoc_result <- function(detail, conf_level, .include_se, digits) {
+.na_assoc_result <- function(detail, conf_level, digits) {
   if (!detail) {
     return(NA_real_)
   }
@@ -177,7 +206,6 @@ print.spicy_assoc_detail <- function(
     p_value = NA_real_,
     ci_lower = NA_real_,
     ci_upper = NA_real_,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -237,19 +265,20 @@ print.spicy_assoc_detail <- function(
 #' @param detail Logical. If `FALSE` (default), return the estimate
 #'   as a numeric scalar. If `TRUE`, return a named numeric vector
 #'   including confidence interval and p-value.
-#' @param conf_level A number between 0 and 1 giving the confidence
-#'   level (default `0.95`). Only used when `detail = TRUE`. Set
-#'   to `NULL` to omit the confidence interval.
+#' @param conf_level A single number strictly between 0 and 1 giving
+#'   the confidence level (default `0.95`). Only used when
+#'   `detail = TRUE`. Set to `NULL` to omit the confidence interval.
+#'   Any other value -- including percentages such as `95` -- raises
+#'   a classed error (`spicy_invalid_input`).
 #' @param digits Number of decimal places used when printing the
 #'   result (default `3`). Only affects the `detail = TRUE` output.
-#' @param .include_se Internal parameter; do not use.
 #'
 #' @return When `detail = FALSE`: a single numeric value (the
 #'   estimate).
 #'   When `detail = TRUE` and `conf_level` is non-`NULL`:
-#'   `c(estimate, ci_lower, ci_upper, p_value)`.
+#'   `c(estimate, se, ci_lower, ci_upper, p_value)`.
 #'   When `detail = TRUE` and `conf_level = NULL`:
-#'   `c(estimate, p_value)`.
+#'   `c(estimate, se, p_value)`.
 #'   The p-value tests the null hypothesis of no association
 #'   (Pearson chi-squared test).
 #'
@@ -266,6 +295,11 @@ print.spicy_assoc_detail <- function(
 #'
 #' @references
 #' Agresti, A. (2002). *Categorical Data Analysis* (2nd ed.). Wiley.
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' Liebetrau, A. M. (1983). *Measures of Association*. Sage.
 #'
@@ -285,14 +319,28 @@ cramer_v <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
+  .validate_conf_level(conf_level)
   n <- sum(x)
   k <- min(nrow(x), ncol(x)) - 1L
   chi <- suppressWarnings(stats::chisq.test(x, correct = FALSE))
   chi2 <- as.numeric(chi$statistic)
+  # A zero row / column margin gives zero expected counts, so the
+  # chi-squared statistic is NaN (0/0). Without this guard the
+  # no-detail branch returns a silent NaN and the detail branch
+  # crashes at the `V > 0` CI condition. Same warn-and-NA policy as
+  # the degenerate branches of `lambda_gk()` and the ordinal
+  # measures; the message is shared by all three chi-squared-derived
+  # measures so `assoc_measures()` re-emits it once.
+  if (!is.finite(chi2)) {
+    spicy_warn(
+      "The chi-squared statistic is NaN on this table (zero row or column margin); returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
+  }
   V <- sqrt(chi2 / (n * k))
 
   if (!detail) {
@@ -315,7 +363,6 @@ cramer_v <- function(
     p_value = p_value,
     ci_lower = ci_lower,
     ci_upper = ci_upper,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -338,12 +385,18 @@ cramer_v <- function(
 #' value of the Pearson correlation between the two binary
 #' variables -- spicy returns only the magnitude (always
 #' non-negative), matching the DescTools (Signorell et al., 2024)
-#' and SPSS conventions. To recover the signed direction of the
+#' and PSPP conventions. SPSS itself SIGNS phi on 2x2 tables (its
+#' CROSSTABS algorithm sets the sign to that of the Pearson
+#' correlation), so SPSS output can show a negative value of the
+#' same magnitude. To recover the signed direction of the
 #' 2x2 association, compute the Pearson correlation directly
 #' (e.g. `cor(x, y)` after coding both variables 0/1).
 #'
 #' The confidence interval uses the Fisher z-transformation on
 #' \eqn{\phi}; see [cramer_v()] for the formula and full references.
+#'
+#' @references
+#' Liebetrau, A. M. (1983). *Measures of Association*. Sage.
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$sex)
@@ -357,10 +410,10 @@ phi <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x, min_dim = c(2L, 2L))
+  .validate_conf_level(conf_level)
   if (nrow(x) != 2L || ncol(x) != 2L) {
     spicy_abort(
       "`x` must be a 2x2 table for the phi coefficient.",
@@ -370,6 +423,14 @@ phi <- function(
   n <- sum(x)
   chi <- suppressWarnings(stats::chisq.test(x, correct = FALSE))
   chi2 <- as.numeric(chi$statistic)
+  # Zero-margin guard; see the twin comment in `cramer_v()`.
+  if (!is.finite(chi2)) {
+    spicy_warn(
+      "The chi-squared statistic is NaN on this table (zero row or column margin); returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
+  }
   ph <- sqrt(chi2 / n)
 
   if (!detail) {
@@ -392,7 +453,6 @@ phi <- function(
     p_value = p_value,
     ci_lower = ci_lower,
     ci_upper = ci_upper,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -418,6 +478,9 @@ phi <- function(
 #' the table dimensions. No standard asymptotic standard error exists,
 #' so the confidence interval is not computed.
 #'
+#' @references
+#' Liebetrau, A. M. (1983). *Measures of Association*. Sage.
+#'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
 #' contingency_coef(tab)
@@ -429,13 +492,21 @@ contingency_coef <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
+  .validate_conf_level(conf_level)
   n <- sum(x)
   chi <- suppressWarnings(stats::chisq.test(x, correct = FALSE))
   chi2 <- as.numeric(chi$statistic)
+  # Zero-margin guard; see the twin comment in `cramer_v()`.
+  if (!is.finite(chi2)) {
+    spicy_warn(
+      "The chi-squared statistic is NaN on this table (zero row or column margin); returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
+  }
   C_val <- sqrt(chi2 / (chi2 + n))
 
   if (!detail) {
@@ -450,7 +521,6 @@ contingency_coef <- function(
     p_value = p_value,
     ci_lower = NA_real_,
     ci_upper = NA_real_,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -484,6 +554,11 @@ contingency_coef <- function(
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
 #'
+#' @references
+#' Yule, G. U. (1900). On the association of attributes in
+#' statistics. *Philosophical Transactions of the Royal Society of
+#' London, Series A*, 194, 257-319. \doi{10.1098/rsta.1900.0019}
+#'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$sex)
 #' yule_q(tab)
@@ -495,10 +570,10 @@ yule_q <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x, min_dim = c(2L, 2L))
+  .validate_conf_level(conf_level)
   if (nrow(x) != 2L || ncol(x) != 2L) {
     spicy_abort(
       "`x` must be a 2x2 table for Yule's Q.",
@@ -514,8 +589,10 @@ yule_q <- function(
 
   if (ad + bc == 0) {
     spicy_warn(
-      "Yule's Q is undefined when ad + bc = 0; returning NA.", class = "spicy_undefined_stat")
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+      "Yule's Q is undefined when ad + bc = 0; returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
   }
 
   Q <- (ad - bc) / (ad + bc)
@@ -539,7 +616,6 @@ yule_q <- function(
     p_value = p_value,
     lower_bound = -1,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -566,8 +642,21 @@ yule_q <- function(
 #' prediction). Lambda can equal zero even when variables
 #' are associated if the modal category dominates in every
 #' column (or row).
+#'
+#' The default `direction = "symmetric"` follows the SPSS and
+#' DescTools convention: symmetric lambda is a standard,
+#' well-defined variant with its own asymptotic standard error.
+#' [somers_d()] deliberately differs (its default is `"row"`)
+#' because its symmetric form is a derived quantity without an
+#' analytic SE; see its documentation.
+#'
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
+#'
+#' @references
+#' Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+#' for cross classifications. *Journal of the American Statistical
+#' Association*, 49(268), 732-764. \doi{10.2307/2281536}
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
@@ -584,11 +673,11 @@ lambda_gk <- function(
   direction = c("symmetric", "row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
-  direction <- match.arg(direction)
+  .validate_conf_level(conf_level)
+  direction <- spicy_match_arg(direction)
   n <- sum(x)
 
   nr <- nrow(x)
@@ -624,7 +713,7 @@ lambda_gk <- function(
       ),
       class = "spicy_undefined_stat"
     )
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+    return(.na_assoc_result(detail, conf_level, digits))
   }
 
   est <- switch(
@@ -708,7 +797,6 @@ lambda_gk <- function(
     p_value = p_value,
     lower_bound = 0,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -741,6 +829,11 @@ lambda_gk <- function(
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
 #'
+#' @references
+#' Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+#' for cross classifications. *Journal of the American Statistical
+#' Association*, 49(268), 732-764. \doi{10.2307/2281536}
+#'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
 #' goodman_kruskal_tau(tab)
@@ -754,11 +847,11 @@ goodman_kruskal_tau <- function(
   direction = c("row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
-  direction <- match.arg(direction)
+  .validate_conf_level(conf_level)
+  direction <- spicy_match_arg(direction)
   n <- sum(x)
   rsum <- rowSums(x)
   csum <- colSums(x)
@@ -781,7 +874,7 @@ goodman_kruskal_tau <- function(
       ),
       class = "spicy_undefined_stat"
     )
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+    return(.na_assoc_result(detail, conf_level, digits))
   }
 
   if (direction == "row") {
@@ -823,7 +916,6 @@ goodman_kruskal_tau <- function(
     p_value = unname(p_value),
     lower_bound = 0,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -922,6 +1014,22 @@ goodman_kruskal_tau <- function(
 #'     \eqn{U = 2 (H_X + H_Y - H_{XY}) / (H_X + H_Y)}.
 #' }
 #'
+#' The default `direction = "symmetric"` follows the SPSS and
+#' DescTools convention: the symmetric coefficient is a standard,
+#' well-defined variant with its own asymptotic standard error.
+#' [somers_d()] deliberately differs (its default is `"row"`)
+#' because its symmetric form is a derived quantity without an
+#' analytic SE; see its documentation.
+#'
+#' When the marginal entropy in the denominator is zero (the
+#' predicted variable is constant, e.g. an unused factor level),
+#' the coefficient is the undefined form \eqn{0/0}: the function
+#' returns `NA` with a `spicy_undefined_stat` warning, like the
+#' other measures in the family. For `direction = "symmetric"`
+#' this happens only when both variables are constant; with a
+#' single constant variable the symmetric coefficient is a
+#' well-defined 0.
+#'
 #' The entropy terms use the standard mathematical convention
 #' \eqn{0 \log 0 = 0}, matching SPSS / PSPP `CROSSTABS` and the
 #' definition in Cover & Thomas (2006). Note that
@@ -932,6 +1040,11 @@ goodman_kruskal_tau <- function(
 #' uncommon in the information-theory literature and is not used
 #' here. The asymptotic standard errors follow the DescTools delta
 #' method; see [cramer_v()] for full references.
+#'
+#' @references
+#' Theil, H. (1970). On the estimation of relationships involving
+#' qualitative variables. *American Journal of Sociology*, 76(1),
+#' 103-154. \doi{10.1086/224909}
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
@@ -946,11 +1059,11 @@ uncertainty_coef <- function(
   direction = c("symmetric", "row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
-  direction <- match.arg(direction)
+  .validate_conf_level(conf_level)
+  direction <- spicy_match_arg(direction)
   n <- sum(x)
 
   rsum <- rowSums(x)
@@ -966,11 +1079,40 @@ uncertainty_coef <- function(
 
   mi <- H_x + H_y - H_xy # mutual information
 
+  # Defend the degenerate zero-entropy denominator (a constant
+  # variable has H = 0, making U the undefined form 0 / 0). Mirrors
+  # the warn-and-NA pattern of `lambda_gk()` and
+  # `goodman_kruskal_tau()`. When only ONE variable is constant, the
+  # symmetric form is a genuine 0 (`2 * 0 / (0 + H)`), so the
+  # symmetric guard triggers only when both variables are constant
+  # (every observation in a single cell).
+  h_denom <- switch(
+    direction,
+    row = H_x,
+    column = H_y,
+    symmetric = H_x + H_y
+  )
+  if (h_denom == 0) {
+    spicy_warn(
+      sprintf(
+        "The uncertainty coefficient is undefined for direction = \"%s\" on this table (%s); returning NA.",
+        direction,
+        if (direction == "symmetric") {
+          "both variables are constant"
+        } else {
+          "the predicted variable is constant"
+        }
+      ),
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
+  }
+
   U <- switch(
     direction,
-    row = if (H_x > 0) mi / H_x else 0,
-    column = if (H_y > 0) mi / H_y else 0,
-    symmetric = if (H_x + H_y > 0) 2 * mi / (H_x + H_y) else 0
+    row = mi / H_x,
+    column = mi / H_y,
+    symmetric = 2 * mi / (H_x + H_y)
   )
 
   if (!detail) {
@@ -992,7 +1134,6 @@ uncertainty_coef <- function(
     p_value = p_value,
     lower_bound = 0,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -1059,8 +1200,21 @@ uncertainty_coef <- function(
 #' \eqn{C} and \eqn{D} are the numbers of concordant and
 #' discordant pairs. It ignores tied pairs, making it appropriate
 #' for ordinal variables with many ties.
+#' When the asymptotic standard error is zero (e.g. a perfect
+#' association), the Wald z-test is undefined and the p-value is
+#' `NA`, matching the other measures in the family.
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
+#'
+#' @references
+#' Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+#' for cross classifications. *Journal of the American Statistical
+#' Association*, 49(268), 732-764. \doi{10.2307/2281536}
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' @examples
 #' tab <- table(sochealth$education, sochealth$self_rated_health)
@@ -1075,17 +1229,20 @@ gamma_gk <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
+  .validate_conf_level(conf_level)
   cd <- .concordance_counts(x)
   C <- cd$C
   D <- cd$D
 
   if (C + D == 0) {
-    spicy_warn("No concordant or discordant pairs; returning NA.", class = "spicy_undefined_stat")
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+    spicy_warn(
+      "No concordant or discordant pairs; returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
   }
 
   G <- (C - D) / (C + D)
@@ -1098,7 +1255,14 @@ gamma_gk <- function(
   psi <- 2 * (D * cd$pi_c - C * cd$pi_d) / (C + D)^2
   se <- sqrt(sum(x * psi^2) - (sum(x * psi))^2)
 
-  p_value <- 2 * stats::pnorm(-abs(G / se))
+  # A zero SE makes the Wald z-test undefined -- report NA rather
+  # than 0 / NaN. Same gate as `lambda_gk()`, `goodman_kruskal_tau()`,
+  # `uncertainty_coef()` and `somers_d()`.
+  p_value <- if (!is.na(se) && se > 0) {
+    2 * stats::pnorm(-abs(G / se))
+  } else {
+    NA_real_
+  }
 
   .assoc_result(
     G,
@@ -1107,7 +1271,6 @@ gamma_gk <- function(
     p_value = p_value,
     lower_bound = -1,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -1131,8 +1294,24 @@ gamma_gk <- function(
 #' pairs tied on the row variable, and \eqn{n_2} is the number
 #' tied on the column variable. Tau-b corrects for ties and is
 #' appropriate for square tables.
-#' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024); see [cramer_v()] for full references.
+#' When the asymptotic standard error is zero (e.g. a perfect
+#' association), the Wald z-test is undefined and the p-value is
+#' `NA`, matching the other measures in the family.
+#'
+#' The asymptotic standard error is the Brown and Benedetti (1977)
+#' ASE1, as printed by SPSS / PSPP `CROSSTABS`. It deliberately
+#' diverges from `DescTools::KendallTauB()`, whose implementation
+#' mis-scales one margin term of the gradient; see [cramer_v()]
+#' for full references.
+#'
+#' @references
+#' Kendall, M. G. (1938). A new measure of rank correlation.
+#' *Biometrika*, 30(1-2), 81-93. \doi{10.2307/2332226}
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' @examples
 #' tab <- table(sochealth$education, sochealth$self_rated_health)
@@ -1146,10 +1325,10 @@ kendall_tau_b <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
+  .validate_conf_level(conf_level)
   n <- sum(x)
   cd <- .concordance_counts(x)
   C <- cd$C
@@ -1164,8 +1343,11 @@ kendall_tau_b <- function(
 
   denom <- sqrt((n0 - n1) * (n0 - n2))
   if (denom == 0) {
-    spicy_warn("Tau-b is undefined for this table; returning NA.", class = "spicy_undefined_stat")
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+    spicy_warn(
+      "Tau-b is undefined for this table; returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
   }
 
   tau_b <- (C - D) / denom
@@ -1174,7 +1356,17 @@ kendall_tau_b <- function(
     return(tau_b)
   }
 
-  # ASE (Brown & Benedetti, via DescTools)
+  # ASE1 (Brown & Benedetti, 1977; SPSS Statistics Algorithms).
+  # `tauphi` is (delta1 * delta2)^2 times the gradient of
+  # tau_b = Pdiff / (delta1 * delta2) with respect to the cell
+  # probabilities: the row-margin term carries delta2 / delta1 and
+  # the column-margin term delta1 / delta2. This deliberately
+  # diverges from `DescTools::KendallTauB()`, which multiplies the
+  # column-margin term by delta1 * delta2 instead of dividing (a
+  # transcription error in its gradient); the form below matches
+  # PSPP 2.0 CROSSTABS ASE1, the SPSS Statistics Algorithms closed
+  # form, and an independent numeric delta-method oracle to 7
+  # decimals on every table validated (see tests).
   pi <- x / n
   rowsum <- rowSums(pi)
   colsum <- colSums(pi)
@@ -1185,10 +1377,11 @@ kendall_tau_b <- function(
   delta1 <- sqrt(1 - sum(rowsum^2))
   delta2 <- sqrt(1 - sum(colsum^2))
 
-  tauphi <- (2 * pdiff + Pdiff * colmat) *
-    delta2 *
-    delta1 +
-    (Pdiff * rowmat * delta2) / delta1
+  tauphi <- 2 *
+    pdiff *
+    delta1 *
+    delta2 +
+    Pdiff * (rowmat * delta2 / delta1 + colmat * delta1 / delta2)
 
   se_sq <- (sum(pi * tauphi^2) - sum(pi * tauphi)^2) /
     (delta1 * delta2)^4 /
@@ -1198,7 +1391,12 @@ kendall_tau_b <- function(
   }
   se <- sqrt(se_sq)
 
-  p_value <- 2 * stats::pnorm(-abs(tau_b / se))
+  # Zero-SE gate: see the comment in `gamma_gk()`.
+  p_value <- if (!is.na(se) && se > 0) {
+    2 * stats::pnorm(-abs(tau_b / se))
+  } else {
+    NA_real_
+  }
 
   .assoc_result(
     tau_b,
@@ -1207,7 +1405,6 @@ kendall_tau_b <- function(
     p_value = p_value,
     lower_bound = -1,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -1231,8 +1428,26 @@ kendall_tau_b <- function(
 #' \eqn{m = \min(r, c)}. It is designed for rectangular tables;
 #' the estimate is bounded by \eqn{[-1, 1]} only when the table is
 #' square, and may fall outside that range otherwise.
+#' When the asymptotic standard error is zero (e.g. a perfect
+#' association), the Wald z-test is undefined and the p-value is
+#' `NA`, matching the other measures in the family.
+#' When one variable is constant (all observations in a single row
+#' or column), there are no untied pairs and the statistic
+#' degenerates to a meaningless 0: the function returns `NA` with a
+#' `spicy_undefined_stat` warning, like its siblings, matching the
+#' SPSS / PSPP behavior of reporting no value.
 #' Standard error formulas follow the DescTools implementations
 #' (Signorell et al., 2024); see [cramer_v()] for full references.
+#'
+#' @references
+#' Stuart, A. (1953). The estimation and comparison of strengths of
+#' association in contingency tables. *Biometrika*, 40(1-2),
+#' 105-110. \doi{10.2307/2333101}
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' @examples
 #' tab <- table(sochealth$education, sochealth$self_rated_health)
@@ -1246,10 +1461,10 @@ kendall_tau_c <- function(
   x,
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
+  .validate_conf_level(conf_level)
   n <- sum(x)
   # `.validate_table()` enforces nrow >= 2 and ncol >= 2, so `m >= 2`
   # and the `(m - 1)` denominator below is always positive.
@@ -1257,6 +1472,25 @@ kendall_tau_c <- function(
   cd <- .concordance_counts(x)
   C <- cd$C
   D <- cd$D
+
+  # A constant variable (all observations in a single row or column)
+  # leaves no untied pairs: C = D = 0 and the formula collapses to a
+  # mechanical 0 with SE 0 and a zero-width CI, while SPSS / PSPP
+  # report the statistic as missing. Warn-and-NA like the rest of
+  # the ordinal family -- `kendall_tau_b()`'s denominator guard
+  # fires on exactly these tables.
+  rsum <- rowSums(x)
+  csum <- colSums(x)
+  n0 <- n * (n - 1) / 2
+  n1 <- sum(rsum * (rsum - 1)) / 2 # row ties
+  n2 <- sum(csum * (csum - 1)) / 2 # column ties
+  if (n0 - n1 == 0 || n0 - n2 == 0) {
+    spicy_warn(
+      "Tau-c is undefined for this table (a constant variable); returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
+  }
 
   tau_c <- 2 * m * (C - D) / (n^2 * (m - 1))
 
@@ -1271,7 +1505,12 @@ kendall_tau_c <- function(
     (sum(x * (cd$pi_c - cd$pi_d)^2) - 4 * (C - D)^2 / n)
   se <- sqrt(max(0, sigma2))
 
-  p_value <- 2 * stats::pnorm(-abs(tau_c / se))
+  # Zero-SE gate: see the comment in `gamma_gk()`.
+  p_value <- if (!is.na(se) && se > 0) {
+    2 * stats::pnorm(-abs(tau_c / se))
+  } else {
+    NA_real_
+  }
 
   .assoc_result(
     tau_c,
@@ -1280,7 +1519,6 @@ kendall_tau_c <- function(
     p_value = p_value,
     lower_bound = -1,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -1295,7 +1533,7 @@ kendall_tau_c <- function(
 #' @param direction Direction of prediction:
 #'   `"row"` (default, column predicts row),
 #'   `"column"` (row predicts column),
-#'   or `"symmetric"` (average of both directions).
+#'   or `"symmetric"` (harmonic mean of both directions).
 #'
 #' @return Same structure as [cramer_v()]: a scalar when
 #'   `detail = FALSE`, a named vector when `detail = TRUE`.
@@ -1310,11 +1548,39 @@ kendall_tau_c <- function(
 #' SPSS / PSPP convention; this is **not** identical to
 #' Kendall's Tau-b (which is the *geometric* mean of the same
 #' two quantities), although the two often agree to two
-#' decimals. No analytic SE / CI is reported for the symmetric
-#' form (DescTools follows the same convention).
+#' decimals. It is computed via the equivalent closed form
+#' \eqn{2(C - D)} divided by the sum of the two asymmetric
+#' denominators, so a table with exactly as many concordant as
+#' discordant pairs (e.g. an independence pattern) yields the
+#' well-defined value 0 -- the harmonic-mean form is 0/0 there --
+#' as printed by SPSS / PSPP. The symmetric estimate
+#' is `NA` only when one of the asymmetric directions is itself
+#' undefined (with the same `spicy_undefined_stat` warning). No
+#' analytic SE / CI is reported for the symmetric form: its `se`
+#' is always `NA`, matching PSPP, which prints no ASE for it
+#' (DescTools offers no symmetric form at all).
+#'
+#' The default `direction = "row"` differs deliberately from
+#' [lambda_gk()] and [uncertainty_coef()] (which default to
+#' `"symmetric"`): Somers' D is intrinsically asymmetric, its
+#' symmetric form is a derived convention without inference, and
+#' the reference implementation (`DescTools::SomersDelta()`)
+#' offers only the two asymmetric directions, defaulting to
+#' `"row"`.
+#'
 #' Standard error formulas for the asymmetric directions follow
 #' the DescTools implementations (Signorell et al., 2024); see
 #' [cramer_v()] for full references.
+#'
+#' @references
+#' Somers, R. H. (1962). A new asymmetric measure of association
+#' for ordinal variables. *American Sociological Review*, 27(6),
+#' 799-811. \doi{10.2307/2090408}
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' @examples
 #' tab <- table(sochealth$education, sochealth$self_rated_health)
@@ -1329,11 +1595,11 @@ somers_d <- function(
   direction = c("row", "column", "symmetric"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 ) {
   .validate_table(x)
-  direction <- match.arg(direction)
+  .validate_conf_level(conf_level)
+  direction <- spicy_match_arg(direction)
   n <- sum(x)
   cd <- .concordance_counts(x)
   C <- cd$C
@@ -1356,10 +1622,19 @@ somers_d <- function(
     # quantities), although they often agree to two decimals.
     d_r <- somers_d(x, "row", detail = FALSE)
     d_c <- somers_d(x, "column", detail = FALSE)
-    if (is.na(d_r) || is.na(d_c) || (d_r + d_c) == 0) {
+    if (is.na(d_r) || is.na(d_c)) {
+      # A degenerate direction already raised its classed
+      # `spicy_undefined_stat` warning through the recursive call.
       d_sym <- NA_real_
     } else {
-      d_sym <- 2 * d_r * d_c / (d_r + d_c)
+      # Algebraically identical to the harmonic mean
+      # 2 * d_r * d_c / (d_r + d_c) whenever C != D, but stays
+      # defined -- a plain 0 -- when C == D (both asymmetric d are
+      # 0 and the harmonic-mean form is the 0/0 trap). This is the
+      # SAS / SPSS closed form 2(P - Q) / (Dr + Dc); PSPP prints
+      # .000 on such independence-pattern tables. Both denominators
+      # are positive here (a zero one returns NA above).
+      d_sym <- 2 * (C - D) / ((n0 - n1) + (n0 - n2))
     }
     if (!detail) {
       return(d_sym)
@@ -1373,7 +1648,6 @@ somers_d <- function(
       p_value = NA_real_,
       ci_lower = NA_real_,
       ci_upper = NA_real_,
-      .include_se = .include_se,
       digits = digits
     ))
   }
@@ -1381,8 +1655,10 @@ somers_d <- function(
   denom <- n0 - switch(direction, row = n2, column = n1)
   if (denom == 0) {
     spicy_warn(
-      "Somers' d is undefined for this table; returning NA.", class = "spicy_undefined_stat")
-    return(.na_assoc_result(detail, conf_level, .include_se, digits))
+      "Somers' d is undefined for this table; returning NA.",
+      class = "spicy_undefined_stat"
+    )
+    return(.na_assoc_result(detail, conf_level, digits))
   }
   d_val <- (C - D) / denom
 
@@ -1419,7 +1695,6 @@ somers_d <- function(
     p_value = p_value,
     lower_bound = -1,
     upper_bound = 1,
-    .include_se = .include_se,
     digits = digits
   )
 }
@@ -1435,9 +1710,11 @@ somers_d <- function(
 #' @param x A contingency table (of class `table`).
 #' @param type Which family of measures to compute:
 #'   `"all"` (default), `"nominal"`, or `"ordinal"`.
-#' @param conf_level A number between 0 and 1 giving the confidence
-#'   level (default `0.95`). Set to `NULL` to omit the confidence
-#'   interval.
+#' @param conf_level A single number strictly between 0 and 1 giving
+#'   the confidence level (default `0.95`). Set to `NULL` to omit
+#'   the confidence interval. Any other value -- including
+#'   percentages such as `95` -- raises a classed error
+#'   (`spicy_invalid_input`).
 #' @param digits Number of decimal places used when printing the
 #'   result (default `3`).
 #'
@@ -1472,8 +1749,17 @@ somers_d <- function(
 #' The ordinal family includes [gamma_gk()], [kendall_tau_b()],
 #' [kendall_tau_c()], and [somers_d()].
 #'
+#' Measures that are undefined on the given table appear as `NA`
+#' rows (printed as an en dash). The classed warnings the individual
+#' functions raise (e.g. `spicy_undefined_stat`) are re-emitted
+#' once per distinct message after the table is assembled, so
+#' condition handlers and `suppressWarnings()` behave as they do
+#' for the individual functions.
+#'
 #' Standard error formulas follow the DescTools implementations
-#' (Signorell et al., 2024).
+#' (Signorell et al., 2024), except for Kendall's Tau-b, whose
+#' ASE follows Brown and Benedetti (1977) as printed by SPSS /
+#' PSPP `CROSSTABS`; see [kendall_tau_b()].
 #'
 #' @examples
 #' tab <- table(sochealth$smoking, sochealth$education)
@@ -1483,6 +1769,11 @@ somers_d <- function(
 #'
 #' @references
 #' Agresti, A. (2002). *Categorical Data Analysis* (2nd ed.). Wiley.
+#'
+#' Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+#' tests for correlation in two-way contingency tables. *Journal of
+#' the American Statistical Association*, 72(358), 309-315.
+#' \doi{10.1080/01621459.1977.10480995}
 #'
 #' Liebetrau, A. M. (1983). *Measures of Association*. Sage.
 #'
@@ -1499,27 +1790,27 @@ assoc_measures <- function(
   digits = 3L
 ) {
   .validate_table(x)
-  type <- match.arg(type)
+  .validate_conf_level(conf_level)
+  type <- spicy_match_arg(type)
   is_2x2 <- nrow(x) == 2L && ncol(x) == 2L
 
   nominal_fns <- list()
   if (is_2x2) {
     nominal_fns[["Phi"]] <- \(t) {
-      phi(t, detail = TRUE, conf_level = conf_level, .include_se = TRUE)
+      phi(t, detail = TRUE, conf_level = conf_level)
     }
     nominal_fns[["Yule's Q"]] <- \(t) {
-      yule_q(t, detail = TRUE, conf_level = conf_level, .include_se = TRUE)
+      yule_q(t, detail = TRUE, conf_level = conf_level)
     }
   }
   nominal_fns[["Cramer's V"]] <- \(t) {
-    cramer_v(t, detail = TRUE, conf_level = conf_level, .include_se = TRUE)
+    cramer_v(t, detail = TRUE, conf_level = conf_level)
   }
   nominal_fns[["Contingency Coefficient"]] <- \(t) {
     contingency_coef(
       t,
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Lambda symmetric"]] <- \(t) {
@@ -1527,8 +1818,7 @@ assoc_measures <- function(
       t,
       "symmetric",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Lambda R|C"]] <- \(t) {
@@ -1536,8 +1826,7 @@ assoc_measures <- function(
       t,
       "row",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Lambda C|R"]] <- \(t) {
@@ -1545,8 +1834,7 @@ assoc_measures <- function(
       t,
       "column",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Goodman-Kruskal's Tau R|C"]] <- \(t) {
@@ -1554,8 +1842,7 @@ assoc_measures <- function(
       t,
       "row",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Goodman-Kruskal's Tau C|R"]] <- \(t) {
@@ -1563,8 +1850,7 @@ assoc_measures <- function(
       t,
       "column",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Uncertainty Coefficient symmetric"]] <- \(t) {
@@ -1572,8 +1858,7 @@ assoc_measures <- function(
       t,
       "symmetric",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Uncertainty Coefficient R|C"]] <- \(t) {
@@ -1581,8 +1866,7 @@ assoc_measures <- function(
       t,
       "row",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
   nominal_fns[["Uncertainty Coefficient C|R"]] <- \(t) {
@@ -1590,29 +1874,30 @@ assoc_measures <- function(
       t,
       "column",
       detail = TRUE,
-      conf_level = conf_level,
-      .include_se = TRUE
+      conf_level = conf_level
     )
   }
 
   ordinal_fns <- list(
     "Goodman-Kruskal Gamma" = \(t) {
-      gamma_gk(t, detail = TRUE, conf_level = conf_level, .include_se = TRUE)
+      gamma_gk(t, detail = TRUE, conf_level = conf_level)
     },
     "Kendall's Tau-b" = \(t) {
       kendall_tau_b(
         t,
         detail = TRUE,
-        conf_level = conf_level,
-        .include_se = TRUE
+        conf_level = conf_level
       )
     },
-    "Kendall's Tau-c" = \(t) {
+    # "Stuart's Tau-c" is the SAS PROC FREQ label (honouring Stuart,
+    # 1953); SPSS and PSPP print "Kendall's tau-c" for the same
+    # statistic. Shared with the cross_tab() note and the
+    # table_categorical() column header.
+    "Stuart's Tau-c" = \(t) {
       kendall_tau_c(
         t,
         detail = TRUE,
-        conf_level = conf_level,
-        .include_se = TRUE
+        conf_level = conf_level
       )
     },
     "Somers' D R|C" = \(t) {
@@ -1620,8 +1905,7 @@ assoc_measures <- function(
         t,
         "row",
         detail = TRUE,
-        conf_level = conf_level,
-        .include_se = TRUE
+        conf_level = conf_level
       )
     },
     "Somers' D C|R" = \(t) {
@@ -1629,8 +1913,7 @@ assoc_measures <- function(
         t,
         "column",
         detail = TRUE,
-        conf_level = conf_level,
-        .include_se = TRUE
+        conf_level = conf_level
       )
     }
   )
@@ -1646,9 +1929,26 @@ assoc_measures <- function(
     if (field %in% names(res)) unname(res[[field]]) else NA_real_
   }
 
+  # Muffle warnings during computation (so a degenerate table does not
+  # spray one warning per direction), collect them, and re-emit each
+  # distinct message ONCE after the loop -- as the ORIGINAL condition
+  # object, so classed warnings (`spicy_undefined_stat`, ...) keep
+  # their classes and callers / tests can still catch or suppress
+  # them. Deduplication is by message: e.g. both Somers' D directions
+  # raise the same condition on an all-in-one-cell table.
+  collected <- list()
   rows <- lapply(names(fns), \(nm) {
     res <- tryCatch(
-      suppressWarnings(fns[[nm]](x)),
+      withCallingHandlers(
+        fns[[nm]](x),
+        warning = function(w) {
+          msg <- conditionMessage(w)
+          if (is.null(collected[[msg]])) {
+            collected[[msg]] <<- w
+          }
+          invokeRestart("muffleWarning")
+        }
+      ),
       error = \(e) c(estimate = NA_real_, p_value = NA_real_)
     )
     data.frame(
@@ -1664,6 +1964,9 @@ assoc_measures <- function(
   out <- do.call(rbind, rows)
   class(out) <- c("spicy_assoc_table", "data.frame")
   attr(out, "digits") <- digits
+  for (w in collected) {
+    rlang::cnd_signal(w)
+  }
   out
 }
 
@@ -1695,7 +1998,11 @@ print.spicy_assoc_table <- function(
   ...
 ) {
   fmt_num <- function(v) {
-    ifelse(is.na(v), "--", formatC(v, format = "f", digits = digits))
+    ifelse(
+      is.na(v),
+      spicy_str("cell_undefined"),
+      formatC(v, format = "f", digits = digits, decimal.mark = ".")
+    )
   }
   # APA-style p-value via the shared `format_p_value()` helper:
   # `<.001` / `.045`, no leading zero. `vapply` rather than `ifelse`
@@ -1704,7 +2011,11 @@ print.spicy_assoc_table <- function(
     vapply(
       v,
       function(p) {
-        if (is.na(p)) "--" else format_p_value(p, decimal_mark = ".", digits = 3L)
+        if (is.na(p)) {
+          spicy_str("cell_undefined")
+        } else {
+          format_p_value(p, decimal_mark = ".", digits = 3L)
+        }
       },
       character(1)
     )

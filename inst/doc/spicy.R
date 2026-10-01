@@ -4,8 +4,6 @@ knitr::opts_chunk$set(
   comment = "#>"
 )
 
-build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
-
 ## ----setup--------------------------------------------------------------------
 library(spicy)
 
@@ -25,7 +23,7 @@ freq(sochealth, education, weights = weight, rescale = TRUE)
 cross_tab(sochealth, smoking, education)
 
 ## ----crosstab-pct-------------------------------------------------------------
-cross_tab(sochealth, smoking, education, percent = "col")
+cross_tab(sochealth, smoking, education, percent = "column")
 
 ## ----crosstab-by--------------------------------------------------------------
 cross_tab(sochealth, smoking, education, by = sex)
@@ -40,13 +38,12 @@ assoc_measures(tbl)
 ## ----cramer-detail------------------------------------------------------------
 cramer_v(tbl, detail = TRUE)
 
-## ----table-categorical-tt, eval = build_rich_tables---------------------------
-# table_categorical(
-#   sochealth,
-#   select = c(smoking, physical_activity, dentist_12m),
-#   by = education,
-#   output = "tinytable"
-# )
+## ----table-categorical--------------------------------------------------------
+table_categorical(
+  sochealth,
+  select = c(smoking, physical_activity, dentist_12m),
+  by = education
+)
 
 ## ----table-continuous---------------------------------------------------------
 table_continuous(
@@ -63,14 +60,18 @@ table_continuous_lm(
   vcov = "HC3"
 )
 
+## ----table-regression---------------------------------------------------------
+fit <- lm(wellbeing_score ~ age + sex + smoking, data = sochealth)
+table_regression(fit)
+
 ## ----mean-n-------------------------------------------------------------------
 sochealth |>
   dplyr::mutate(
     mean_sat  = mean_n(select = starts_with("life_sat")),
-    sum_sat   = sum_n(select = starts_with("life_sat"), min_valid = 2),
+    sum_sat   = sum_n(select = starts_with("life_sat"), min_valid = 3),
     n_missing = count_n(select = starts_with("life_sat"), special = "NA")
   ) |>
   dplyr::select(starts_with("life_sat"), mean_sat, sum_sat, n_missing) |>
-  head() |>
+  dplyr::slice(c(1, 2, 43, 82, 455)) |>
   as.data.frame()
 

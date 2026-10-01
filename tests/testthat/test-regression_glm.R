@@ -1,4 +1,4 @@
-# Tests for `glm` support in table_regression() — Phase 3.
+# Tests for `glm` support in table_regression() – Phase 3.
 # Sections:
 #   * Step 1: foundation (z-asymptotic Wald, family-aware title,
 #             pseudo-R² family, gaussian glm caveat, class-aware
@@ -25,44 +25,105 @@ test_that("glm: binomial logit fits with z-asymptotic Wald inference", {
   out <- table_regression(fit)
   expect_s3_class(out, "spicy_regression_table")
   td <- broom::tidy(out)
-  # All test_type = "z", df = Inf — matches summary.glm / Stata
+  # All test_type = "z", df = Inf – matches summary.glm / Stata
   expect_true(all(td$test_type == "z"))
   expect_true(all(is.infinite(td$df)))
+  # Pin the full inference set to the summary.glm oracle: estimate /
+  # SE / z / p from summary()$coefficients, CI from confint.default()
+  # (Wald: estimate +/- qnorm(.975) x SE -- the same z-asymptotic path
+  # spicy uses for glm).
+  sm <- summary(fit)$coefficients
+  ci <- confint.default(fit)
+  for (term_nm in rownames(sm)) {
+    row <- td[td$estimate_type == "B" & td$term == term_nm, ]
+    expect_equal(
+      row$estimate,
+      unname(sm[term_nm, "Estimate"]),
+      tolerance = 1e-10,
+      info = paste("term =", term_nm)
+    )
+    expect_equal(
+      row$std.error,
+      unname(sm[term_nm, "Std. Error"]),
+      tolerance = 1e-10
+    )
+    expect_equal(
+      row$statistic,
+      unname(sm[term_nm, "z value"]),
+      tolerance = 1e-10
+    )
+    expect_equal(
+      row$p.value,
+      unname(sm[term_nm, "Pr(>|z|)"]),
+      tolerance = 1e-10
+    )
+    expect_equal(row$conf.low, unname(ci[term_nm, 1L]), tolerance = 1e-10)
+    expect_equal(row$conf.high, unname(ci[term_nm, 2L]), tolerance = 1e-10)
+  }
 })
 
-test_that("glm: family-aware title — logit / probit / poisson / Gamma", {
+test_that("glm: family-aware title – logit / probit / poisson / Gamma", {
   fit_logit <- glm(am ~ mpg, data = mt, family = binomial)
-  expect_match(attr(table_regression(fit_logit), "title"),
-               "^Logistic regression: am$")
+  expect_match(
+    attr(table_regression(fit_logit), "title"),
+    "^Logistic regression: am$"
+  )
   fit_probit <- glm(am ~ mpg, data = mt, family = binomial(link = "probit"))
-  expect_match(attr(table_regression(fit_probit), "title"),
-               "^Probit regression: am$")
+  expect_match(
+    attr(table_regression(fit_probit), "title"),
+    "^Probit regression: am$"
+  )
   fit_pois <- glm(I(round(mpg)) ~ wt, data = mt, family = poisson)
-  expect_match(attr(table_regression(fit_pois), "title"),
-               "^Poisson regression:")
+  expect_identical(
+    attr(table_regression(fit_pois), "title"),
+    "Poisson regression: I(round(mpg))"
+  )
   fit_gamma <- glm(mpg ~ wt, data = mt, family = Gamma(link = "log"))
-  expect_match(attr(table_regression(fit_gamma), "title"),
-               "^Gamma regression: mpg$")
+  expect_match(
+    attr(table_regression(fit_gamma), "title"),
+    "^Gamma regression: mpg$"
+  )
 })
 
 test_that("glm: hierarchical title is grammatically lower-cased", {
-  # Direct unit-test of the title formatter — full nested computation
+  # Direct unit-test of the title formatter – full nested computation
   # for glm (LRT-based comparison) is part of Step 6.
-  ext <- list(
-    list(outcome = "am", title_prefix = "Logistic regression"),
-    list(outcome = "am", title_prefix = "Logistic regression")
+  # Build minimal frame-shaped objects (only the fields the title
+  # function reads). Phase 0c sub-step C5: migrated from
+  # build_regression_title() to build_regression_title_from_frames().
+  fr <- list(
+    list(
+      info = list(
+        dv = "am",
+        extras = list(title_prefix = "Logistic regression")
+      )
+    ),
+    list(
+      info = list(
+        dv = "am",
+        extras = list(title_prefix = "Logistic regression")
+      )
+    )
   )
   expect_equal(
-    spicy:::build_regression_title(ext, nested = TRUE),
+    spicy:::build_regression_title_from_frames(fr, nested = TRUE),
     "Hierarchical logistic regression: am"
   )
 })
 
-test_that("glm: classical-vcov footer label says 'MLE inverse Hessian'", {
+test_that("glm: classical-vcov footer label says 'Fisher information'", {
+  # Phase 7c24 (item c): renamed from "MLE inverse Hessian" to the
+  # standard publication name "Fisher information" -- parallels
+  # "classical (OLS)" for lm by naming the mechanism that produces
+  # the SE (Wooldridge / Greene; Stata's "OIM" / SAS's
+  # "Standard Error" are the other common conventions).
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   out <- table_regression(fit)
-  expect_match(attr(out, "note"),
-               "Std\\. errors: classical \\(MLE inverse Hessian\\)")
+  expect_match(
+    attr(out, "note"),
+    "Std. errors: classical (Fisher information).",
+    fixed = TRUE
+  )
 })
 
 
@@ -75,12 +136,37 @@ test_that("glm: default show_fit_stats = NULL resolves to pseudo_r2 family", {
   out <- table_regression(fit)
   # Default for glm-only models: nobs, McFadden, Nagelkerke, AIC
   expect_true("n" %in% out$Variable)
-  expect_true(any(grepl("McFadden", out$Variable, fixed = TRUE)))
-  expect_true(any(grepl("Nagelkerke", out$Variable, fixed = TRUE)))
-  expect_true(any(grepl("AIC", out$Variable, fixed = TRUE)))
-  # And NOT plain R² / Adj.R² (those are lm tokens)
+  expect_true("R² (McFadden)" %in% out$Variable)
+  expect_true("R² (Nagelkerke)" %in% out$Variable)
+  expect_true("AIC" %in% out$Variable)
+  # And NOT plain R² / Adj. R² (those are lm tokens). Positive control:
+  # the same two strings ARE the lm footer rows, so this pair of
+  # negative memberships cannot silently stop matching the day either
+  # label is renamed.
+  lm_out <- table_regression(lm(mpg ~ wt, data = mt))
+  expect_true(all(c("R²", "Adj. R²") %in% lm_out$Variable))
   expect_false(any(out$Variable == "R²"))
-  expect_false(any(out$Variable == "Adj.R²"))
+  expect_false(any(out$Variable == "Adj. R²"))
+  # Pin the rendered fit-stat cells to runtime oracles (single-model
+  # table: fit-stat values render in the "B" column; pseudo-R2 rows
+  # use 2 decimals, AIC uses 1 decimal per the renderer contract).
+  body <- as.data.frame(out, stringsAsFactors = FALSE, check.names = FALSE)
+  cell <- function(pat) {
+    trimws(body[grep(pat, body$Variable, fixed = TRUE), "B"])
+  }
+  expect_identical(
+    trimws(body[body$Variable == "n", "B"]),
+    as.character(nobs(fit))
+  )
+  expect_identical(
+    cell("McFadden"),
+    sprintf("%.2f", spicy:::compute_pseudo_r2_mcfadden(fit))
+  )
+  expect_identical(
+    cell("Nagelkerke"),
+    sprintf("%.2f", spicy:::compute_pseudo_r2_nagelkerke(fit))
+  )
+  expect_identical(cell("AIC"), sprintf("%.1f", AIC(fit)))
 })
 
 test_that("glm: explicit r2 in show_fit_stats errors with hint to pseudo_r2", {
@@ -118,11 +204,11 @@ test_that("lm-only: partial_chi2 errors with hint to variance-explained partials
   )
 })
 
-test_that("Mixed lm + glm: variance-explained tokens DO NOT error (per-row em-dash)", {
+test_that("Mixed lm + glm: variance-explained tokens DO NOT error (per-row en-dash)", {
   m_lm <- lm(mpg ~ wt, data = mt)
   m_glm <- glm(am ~ mpg, data = mt, family = binomial)
   # show_fit_stats with r2 + pseudo_r2_mcfadden should accept under
-  # mixed; renderer em-dashes the inappropriate cell per-model.
+  # mixed; renderer en-dashes the inappropriate cell per-model.
   expect_no_error(
     out <- table_regression(
       list(m_lm, m_glm),
@@ -154,33 +240,47 @@ test_that("glm: non-gaussian does NOT emit the gaussian caveat", {
 
 
 # ============================================================================
-# Step 1: pseudo-R² helpers — direct unit tests
+# Step 1: pseudo-R² helpers – direct unit tests
 # ============================================================================
 
-test_that("compute_pseudo_r2_mcfadden — known-value cross-check", {
+test_that("compute_pseudo_r2_mcfadden – known-value cross-check", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   ll_full <- as.numeric(logLik(fit))
   null_fit <- update(fit, . ~ 1)
   ll_null <- as.numeric(logLik(null_fit))
   expected <- 1 - ll_full / ll_null
-  expect_equal(spicy:::compute_pseudo_r2_mcfadden(fit), expected,
-               tolerance = 1e-12)
+  expect_equal(
+    spicy:::compute_pseudo_r2_mcfadden(fit),
+    expected,
+    tolerance = 1e-12
+  )
 })
 
-test_that("compute_pseudo_r2_nagelkerke — known-value cross-check", {
+test_that("compute_pseudo_r2_nagelkerke – known-value cross-check", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   n <- nobs(fit)
   ll_full <- as.numeric(logLik(fit))
   ll_null <- as.numeric(logLik(update(fit, . ~ 1)))
   expected <- (1 - exp((ll_null - ll_full) * 2 / n)) /
-                (1 - exp(ll_null * 2 / n))
-  expect_equal(spicy:::compute_pseudo_r2_nagelkerke(fit), expected,
-               tolerance = 1e-12)
+    (1 - exp(ll_null * 2 / n))
+  expect_equal(
+    spicy:::compute_pseudo_r2_nagelkerke(fit),
+    expected,
+    tolerance = 1e-12
+  )
 })
 
-test_that("compute_pseudo_r2_tjur — only defined for binomial", {
+test_that("compute_pseudo_r2_tjur – only defined for binomial", {
   fit_bin <- glm(am ~ mpg, data = mt, family = binomial)
-  expect_true(is.finite(spicy:::compute_pseudo_r2_tjur(fit_bin)))
+  # Tjur (2009) coefficient of discrimination:
+  #   D = mean(p_hat | y = 1) - mean(p_hat | y = 0)
+  p_hat <- fitted(fit_bin)
+  tjur_oracle <- mean(p_hat[mt$am == 1]) - mean(p_hat[mt$am == 0])
+  expect_equal(
+    spicy:::compute_pseudo_r2_tjur(fit_bin),
+    tjur_oracle,
+    tolerance = 1e-12
+  )
   fit_pois <- glm(I(round(mpg)) ~ wt, data = mt, family = poisson)
   expect_true(is.na(spicy:::compute_pseudo_r2_tjur(fit_pois)))
   fit_lm <- lm(mpg ~ wt, data = mt)
@@ -195,7 +295,7 @@ test_that("compute_pseudo_r2_*: quasi families return NA (no log-likelihood)", {
 
 
 # ============================================================================
-# Step 2: exponentiate — column header rebrand + delta-method SE
+# Step 2: exponentiate – column header rebrand + delta-method SE
 # ============================================================================
 
 test_that("exponentiate: logit ⇒ OR header + numeric identity", {
@@ -223,12 +323,16 @@ test_that("exponentiate: CI bounds also exponentiated", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   td_raw <- broom::tidy(table_regression(fit))
   td_exp <- broom::tidy(table_regression(fit, exponentiate = TRUE))
-  expect_equal(td_exp$conf.low [td_exp$estimate_type == "B"],
-               exp(td_raw$conf.low [td_raw$estimate_type == "B"]),
-               tolerance = 1e-12)
-  expect_equal(td_exp$conf.high[td_exp$estimate_type == "B"],
-               exp(td_raw$conf.high[td_raw$estimate_type == "B"]),
-               tolerance = 1e-12)
+  expect_equal(
+    td_exp$conf.low[td_exp$estimate_type == "B"],
+    exp(td_raw$conf.low[td_raw$estimate_type == "B"]),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    td_exp$conf.high[td_exp$estimate_type == "B"],
+    exp(td_raw$conf.high[td_raw$estimate_type == "B"]),
+    tolerance = 1e-12
+  )
 })
 
 test_that("exponentiate: z-statistic and p-value are invariant (link scale)", {
@@ -238,7 +342,7 @@ test_that("exponentiate: z-statistic and p-value are invariant (link scale)", {
   b_raw <- td_raw[td_raw$estimate_type == "B", ]
   b_exp <- td_exp[td_exp$estimate_type == "B", ]
   expect_equal(b_exp$statistic, b_raw$statistic, tolerance = 1e-12)
-  expect_equal(b_exp$p.value,   b_raw$p.value,   tolerance = 1e-12)
+  expect_equal(b_exp$p.value, b_raw$p.value, tolerance = 1e-12)
 })
 
 test_that("exponentiate: poisson(log) ⇒ IRR header", {
@@ -253,10 +357,19 @@ test_that("exponentiate: binomial(cloglog) ⇒ HR header", {
   expect_true("HR" %in% names(out))
 })
 
-test_that("exponentiate: probit ⇒ generic exp(B) header", {
+test_that("exponentiate: probit ⇒ hard error (G1 link gate)", {
+  # Was: silent generic exp(B) header. exp() of a probit coefficient has
+  # no ratio estimand -- pre-1.0 policy is hard error over silent wrong
+  # output (Stata's probit ships no or/eform option; SAS EXPB is
+  # documented for the logit model).
   fit <- glm(am ~ mpg, data = mt, family = binomial(link = "probit"))
-  out <- table_regression(fit, exponentiate = TRUE)
-  expect_true("exp(B)" %in% names(out))
+  err <- tryCatch(
+    table_regression(fit, exponentiate = TRUE),
+    spicy_invalid_input = function(e) e
+  )
+  expect_s3_class(err, "spicy_invalid_input")
+  expect_match(conditionMessage(err), "probit", fixed = TRUE)
+  expect_match(conditionMessage(err), "AME", fixed = TRUE)
 })
 
 test_that("exponentiate: lm ⇒ no transform + spicy_ignored_arg warning", {
@@ -267,10 +380,24 @@ test_that("exponentiate: lm ⇒ no transform + spicy_ignored_arg warning", {
   )
   # B column kept its raw value
   expect_true("B" %in% names(out))
+  # Positive control: the absent header has to be a real one, or this
+  # negative membership goes quiet the day the ratio header is renamed.
+  expect_true(
+    "OR" %in%
+      names(
+        table_regression(
+          glm(am ~ mpg, data = mt, family = binomial),
+          exponentiate = TRUE
+        )
+      )
+  )
   expect_false("OR" %in% names(out))
   td <- broom::tidy(out)
-  expect_equal(td$estimate[td$term == "wt"],
-               unname(coef(fit)["wt"]), tolerance = 1e-12)
+  expect_equal(
+    td$estimate[td$term == "wt"],
+    unname(coef(fit)["wt"]),
+    tolerance = 1e-12
+  )
 })
 
 test_that("exponentiate: gaussian glm ⇒ no transform + spicy_ignored_arg warning", {
@@ -280,31 +407,81 @@ test_that("exponentiate: gaussian glm ⇒ no transform + spicy_ignored_arg warni
       table_regression(fit, exponentiate = TRUE),
       class = "spicy_ignored_arg"
     ),
-    class = "spicy_caveat"   # gaussian-glm caveat also fires
+    class = "spicy_caveat" # gaussian-glm caveat also fires
   )
 })
 
 test_that("exponentiate: footer mentions the family-specific label", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   out <- table_regression(fit, exponentiate = TRUE)
-  expect_match(attr(out, "note"),
-               "Coefficients exponentiated and displayed as OR")
-  expect_match(attr(out, "note"), "delta-method")
+  # G4 disclosure: when the SE column is displayed (default view), the
+  # footer states the SE scale (delta method) and warns that the CI is
+  # asymmetric -- OR +/- z x SE does NOT reproduce the shown bounds
+  # (Stata [R] logistic convention). Pin the complete footer line.
+  expect_match(
+    attr(out, "note"),
+    paste0(
+      "Coefficients exponentiated and displayed as OR; ",
+      "SE on the OR scale (delta method); ",
+      "CI bounds exponentiated (asymmetric)."
+    ),
+    fixed = TRUE
+  )
+  expect_match(attr(out, "note"), "OR = odds ratio.", fixed = TRUE)
+})
+
+test_that("exponentiate: SE-scale clause gated on a visible SE column", {
+  fit <- glm(am ~ mpg, data = mt, family = binomial)
+  out <- table_regression(fit, exponentiate = TRUE, show_columns = c("b", "ci"))
+  # No SE column shown -> the footer line drops the delta-method clause.
+  expect_match(
+    attr(out, "note"),
+    "Coefficients exponentiated and displayed as OR; CI bounds exponentiated.",
+    fixed = TRUE
+  )
+  expect_false(grepl("delta method", attr(out, "note"), fixed = TRUE))
+})
+
+test_that("exponentiate: mixed exp/non-exp table scopes the footer per model", {
+  f_lm <- lm(mpg ~ wt, data = mt)
+  f_gl <- glm(am ~ mpg, data = mt, family = binomial)
+  out <- table_regression(list(f_lm, f_gl), exponentiate = TRUE)
+  expect_match(
+    attr(out, "note"),
+    paste0(
+      "Model 2: coefficients exponentiated and displayed as OR; ",
+      "SE on the OR scale (delta method); ",
+      "CI bounds exponentiated (asymmetric)."
+    ),
+    fixed = TRUE
+  )
 })
 
 test_that("exponentiate: multi-model with mixed families ⇒ per-family qualifier", {
   m_logit <- glm(am ~ mpg, data = mt, family = binomial)
-  m_pois  <- glm(I(round(mpg)) ~ wt, data = mt, family = poisson)
+  m_pois <- glm(I(round(mpg)) ~ wt, data = mt, family = poisson)
   out <- table_regression(list(m_logit, m_pois), exponentiate = TRUE)
   note <- attr(out, "note")
-  expect_match(note, "OR")
-  expect_match(note, "IRR")
-  expect_match(note, "per family")
+  expect_match(
+    note,
+    "OR = odds ratio; IRR = incidence rate ratio.",
+    fixed = TRUE
+  )
+  expect_match(
+    note,
+    paste0(
+      "Coefficients exponentiated and displayed as ",
+      "OR / IRR (per family); ",
+      "SE on the displayed ratio scale (delta method); ",
+      "CI bounds exponentiated (asymmetric)."
+    ),
+    fixed = TRUE
+  )
 })
 
 test_that("exponentiate: mixed glm + lm ⇒ per-model header (OR + B)", {
   m_glm <- glm(am ~ mpg, data = mt, family = binomial)
-  m_lm  <- lm(mpg ~ wt, data = mt)
+  m_lm <- lm(mpg ~ wt, data = mt)
   withCallingHandlers(
     out <- table_regression(list(m_glm, m_lm), exponentiate = TRUE),
     spicy_warning = function(c) invokeRestart("muffleWarning")
@@ -312,26 +489,32 @@ test_that("exponentiate: mixed glm + lm ⇒ per-model header (OR + B)", {
   # DVs differ (am, mpg) -> smart default lifts the bare DV names
   # into the spanner; sub-column names are prefixed by the DV name.
   # Model 1 (glm/am) -> OR; Model 2 (lm/mpg) -> B.
-  expect_true(any(grepl("am: OR", names(out), fixed = TRUE)))
-  expect_true(any(grepl("mpg: B$", names(out))))
+  expect_true("am: OR" %in% names(out))
+  expect_true("mpg: B" %in% names(out))
 })
 
 test_that("exponentiate: validation rejects non-logical scalar", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
-  expect_error(table_regression(fit, exponentiate = "yes"),
-               class = "spicy_invalid_input")
-  expect_error(table_regression(fit, exponentiate = c(TRUE, FALSE)),
-               class = "spicy_invalid_input")
-  expect_error(table_regression(fit, exponentiate = NA),
-               class = "spicy_invalid_input")
+  expect_error(
+    table_regression(fit, exponentiate = "yes"),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_regression(fit, exponentiate = c(TRUE, FALSE)),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_regression(fit, exponentiate = NA),
+    class = "spicy_invalid_input"
+  )
 })
 
 
 # ============================================================================
-# Step 2: apply_exponentiate_to_coefs — direct unit tests on the helper
+# Step 2: apply_exponentiate_to_coefs – direct unit tests on the helper
 # ============================================================================
 
-test_that("apply_exponentiate_to_coefs — empty / NULL no-ops", {
+test_that("apply_exponentiate_to_coefs – empty / NULL no-ops", {
   expect_null(spicy:::apply_exponentiate_to_coefs(NULL))
   expect_equal(
     nrow(spicy:::apply_exponentiate_to_coefs(spicy:::empty_coefs_long())),
@@ -339,27 +522,32 @@ test_that("apply_exponentiate_to_coefs — empty / NULL no-ops", {
   )
 })
 
-test_that("apply_exponentiate_to_coefs — only B / beta rows transformed", {
+test_that("apply_exponentiate_to_coefs – only B / beta rows transformed", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   ex <- spicy:::extract_lm_phase1(
-    fit, model_id = "M1",
+    fit,
+    model_id = "M1",
     show_columns = c("b", "ame"),
-    show_fit_stats = c("nobs", "pseudo_r2_mcfadden", "AIC")
+    show_fit_stats = c("nobs", "pseudo_r2_mcfadden", "aic")
   )
   raw <- ex$coefs
   exp_cf <- spicy:::apply_exponentiate_to_coefs(raw)
   # B rows: exponentiated
-  b_idx <- raw$estimate_type == "B" & !raw$is_singular &
-             !raw$is_reference & !is.na(raw$estimate)
-  expect_equal(exp_cf$estimate[b_idx], exp(raw$estimate[b_idx]),
-               tolerance = 1e-12)
+  b_idx <- raw$estimate_type == "B" &
+    !raw$is_singular &
+    !raw$is_reference &
+    !is.na(raw$estimate)
+  expect_equal(
+    exp_cf$estimate[b_idx],
+    exp(raw$estimate[b_idx]),
+    tolerance = 1e-12
+  )
   # AME rows: untouched (response scale already)
-  a_idx <- raw$estimate_type == "AME" & !is.na(raw$estimate)
-  expect_equal(exp_cf$estimate[a_idx], raw$estimate[a_idx],
-               tolerance = 1e-12)
+  a_idx <- raw$estimate_type == "ame" & !is.na(raw$estimate)
+  expect_equal(exp_cf$estimate[a_idx], raw$estimate[a_idx], tolerance = 1e-12)
 })
 
-test_that("apply_exponentiate_to_coefs — singular and reference rows untouched", {
+test_that("apply_exponentiate_to_coefs – singular and reference rows untouched", {
   # Construct a degenerate fit with both a singular coef and a
   # factor-with-reference to exercise both branches.
   mt2 <- mt
@@ -384,7 +572,7 @@ test_that("apply_exponentiate_to_coefs — singular and reference rows untouched
 
 # ============================================================================
 # Step 3: partial_chi2 token via drop1(test = "LRT") - the glm analog
-# of partial F (Long & Freese 2014 §3.5; Allison "TYPE3"; SAS PROC LOGISTIC).
+# of partial F (Long & Freese 2014 §3.2.2; Allison "TYPE3"; SAS PROC LOGISTIC).
 # ============================================================================
 
 test_that("glm: partial_chi2 matches drop1(test = 'LRT') to machine precision", {
@@ -392,22 +580,32 @@ test_that("glm: partial_chi2 matches drop1(test = 'LRT') to machine precision", 
   out <- table_regression(fit, show_columns = c("b", "partial_chi2", "p"))
   td <- broom::tidy(out)
   chi <- td[td$estimate_type == "partial_chi2", ]
-  expect_equal(nrow(chi), 2L)  # mpg + wt, no intercept
+  expect_equal(nrow(chi), 2L) # mpg + wt, no intercept
 
   d1 <- drop1(fit, test = "LRT")
-  expect_equal(chi$estimate[chi$term == "mpg"], d1["mpg", "LRT"],
-               tolerance = 1e-12)
-  expect_equal(chi$estimate[chi$term == "wt"],  d1["wt",  "LRT"],
-               tolerance = 1e-12)
+  expect_equal(
+    chi$estimate[chi$term == "mpg"],
+    d1["mpg", "LRT"],
+    tolerance = 1e-12
+  )
+  expect_equal(
+    chi$estimate[chi$term == "wt"],
+    d1["wt", "LRT"],
+    tolerance = 1e-12
+  )
   expect_equal(chi$df[chi$term == "mpg"], 1)
-  expect_equal(chi$df[chi$term == "wt"],  1)
+  expect_equal(chi$df[chi$term == "wt"], 1)
   # p_value on partial_chi2 row is the LRT p (Pr(>Chi))
-  expect_equal(chi$p.value[chi$term == "mpg"], d1["mpg", "Pr(>Chi)"],
-               tolerance = 1e-12)
+  expect_equal(
+    chi$p.value[chi$term == "mpg"],
+    d1["mpg", "Pr(>Chi)"],
+    tolerance = 1e-12
+  )
 })
 
 test_that("glm: partial_chi2 - factor term shares term-level chi2 across dummies", {
-  mt2 <- mt; mt2$cyl <- factor(mt2$cyl)
+  mt2 <- mt
+  mt2$cyl <- factor(mt2$cyl)
   fit <- glm(am ~ mpg + cyl, data = mt2, family = binomial)
   out <- table_regression(fit, show_columns = c("b", "partial_chi2"))
   td <- broom::tidy(out)
@@ -416,14 +614,74 @@ test_that("glm: partial_chi2 - factor term shares term-level chi2 across dummies
   cyl_rows <- chi[grepl("^cyl", chi$term), ]
   expect_equal(nrow(cyl_rows), 2L)
   expect_equal(cyl_rows$estimate[1], cyl_rows$estimate[2], tolerance = 1e-12)
-  expect_equal(cyl_rows$df[1], 2)  # k-1 = 2 df for 3-level factor
+  expect_equal(cyl_rows$df[1], 2) # k-1 = 2 df for 3-level factor
   expect_equal(cyl_rows$df[2], 2)
   # Joint chi2 from drop1
   d1 <- drop1(fit, test = "LRT")
   expect_equal(cyl_rows$estimate[1], d1["cyl", "LRT"], tolerance = 1e-12)
 })
 
-test_that("glm: partial_chi2 cell renders 'value (df)' format - SAS TYPE3", {
+test_that("glm: partial_chi2 with y = FALSE + matrix response matches y stored", {
+  # Regression (delta review D1): with `glm(..., y = FALSE)` and a
+  # `cbind(successes, failures)` response, the refit fallback fed the
+  # raw matrix to glm.fit() with the POST-initialize prior.weights
+  # (which already carry the row totals), so initialize multiplied the
+  # totals in again (effective weights = tot^2) and inflated every
+  # chi-square.
+  set.seed(42)
+  n <- 60
+  d <- data.frame(
+    A = factor(sample(c("a", "b", "c"), n, TRUE)),
+    B = rnorm(n),
+    tot = sample(3:8, n, TRUE)
+  )
+  eta <- 0.8 * (d$A == "b") - 1.1 * (d$A == "c") + 0.5 * d$B
+  d$succ <- rbinom(n, size = d$tot, prob = plogis(eta))
+  fit_y <- glm(cbind(succ, tot - succ) ~ A + B, family = binomial, data = d)
+  fit_no <- glm(
+    cbind(succ, tot - succ) ~ A + B,
+    family = binomial,
+    data = d,
+    y = FALSE
+  )
+  for (tm in c("A", "B")) {
+    r_y <- spicy:::compute_partial_chi2_for_term(fit_y, tm)
+    r_no <- spicy:::compute_partial_chi2_for_term(fit_no, tm)
+    expect_equal(r_no$chi2, r_y$chi2, tolerance = 1e-10)
+    expect_identical(r_no$df, r_y$df)
+    expect_equal(r_no$p_value, r_y$p_value, tolerance = 1e-10)
+  }
+  # Additive-case oracle: drop1(test = "LRT") on the stored-y fit.
+  d1 <- drop1(fit_y, test = "LRT")
+  expect_equal(
+    spicy:::compute_partial_chi2_for_term(fit_no, "A")$chi2,
+    d1["A", "LRT"],
+    tolerance = 1e-10
+  )
+  expect_equal(
+    spicy:::compute_partial_chi2_for_term(fit_no, "B")$chi2,
+    d1["B", "LRT"],
+    tolerance = 1e-10
+  )
+  # Interaction variant: the Type-II main-effect test agrees too.
+  fit_int_y <- glm(
+    cbind(succ, tot - succ) ~ A * B,
+    family = binomial,
+    data = d
+  )
+  fit_int_no <- glm(
+    cbind(succ, tot - succ) ~ A * B,
+    family = binomial,
+    data = d,
+    y = FALSE
+  )
+  ry <- spicy:::compute_partial_chi2_for_term(fit_int_y, "A")
+  rn <- spicy:::compute_partial_chi2_for_term(fit_int_no, "A")
+  expect_equal(rn$chi2, ry$chi2, tolerance = 1e-10)
+  expect_equal(rn$p_value, ry$p_value, tolerance = 1e-10)
+})
+
+test_that("glm: partial_chi2 cell renders 'value (df)' format", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   out <- table_regression(fit, show_columns = c("b", "partial_chi2"))
   body <- as.data.frame(out, stringsAsFactors = FALSE)
@@ -438,7 +696,7 @@ test_that("glm: partial_chi2 column header is chi-squared (UTF-8 safe)", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   out <- table_regression(fit, show_columns = c("b", "partial_chi2"))
   body <- as.data.frame(out, stringsAsFactors = FALSE)
-  expect_true(any(grepl("χ²", names(body))))
+  expect_true("χ²" %in% names(body))
 })
 
 test_that("lm + partial_chi2 - rejected with hint to partial_f2 / eta2 / omega2", {
@@ -455,34 +713,47 @@ test_that("lm + partial_chi2 - rejected with hint to partial_f2 / eta2 / omega2"
   expect_match(conditionMessage(err), "partial_f2", fixed = TRUE)
 })
 
-test_that("mixed lm + glm with partial_chi2 - validator passes; lm em-dashed", {
-  fit_lm  <- lm(mpg ~ wt, data = mt)
+test_that("mixed lm + glm with partial_chi2 - validator passes; lm en-dashed", {
+  fit_lm <- lm(mpg ~ wt, data = mt)
   fit_glm <- glm(am ~ mpg + wt, data = mt, family = binomial)
   expect_no_error(
-    out <- table_regression(list(fit_lm, fit_glm),
-                            show_columns = c("b", "partial_chi2"))
+    out <- table_regression(
+      list(fit_lm, fit_glm),
+      show_columns = c("b", "partial_chi2")
+    )
   )
   body <- as.data.frame(out, stringsAsFactors = FALSE)
   chi_cols <- grep("χ", names(body), value = TRUE)
-  # Two models -> two chi-squared columns; lm column is all em-dash
+  # Two models -> two chi-squared columns; lm column is all en-dash
   expect_length(chi_cols, 2L)
   lm_chi_col <- chi_cols[1]
   glm_chi_col <- chi_cols[2]
   # lm side of chi2 column is blank (token doesn't apply to this model
   # class); glm side has values. Check that lm column has only blanks
   # for non-Intercept body rows, while glm column has values.
-  body_no_fit <- body[!body$Variable %in% c("n", "R²", "Adj.R²",
-                                              "R² (McFadden)",
-                                              "R² (Nagelkerke)", "AIC",
-                                              "Outcome"), ]
+  fit_rows <- c(
+    "n",
+    "R²",
+    "Adj. R²",
+    "R² (McFadden)",
+    "R² (Nagelkerke)",
+    "AIC",
+    "Outcome"
+  )
+  # An exclusion list of typed-out labels degrades silently: rename one
+  # and it simply stops excluding, letting a fit-stat row into the
+  # comparison below with no test ever saying so. Assert it bites.
+  expect_true(all(c("n", "R²", "Adj. R²") %in% body$Variable))
+  body_no_fit <- body[!body$Variable %in% fit_rows, ]
+  expect_lt(nrow(body_no_fit), nrow(body))
   non_int <- body_no_fit[!grepl("Intercept", body_no_fit$Variable), ]
-  lm_vals  <- gsub("\\s+", "", non_int[[lm_chi_col]])
+  lm_vals <- gsub("\\s+", "", non_int[[lm_chi_col]])
   glm_vals <- gsub("\\s+", "", non_int[[glm_chi_col]])
-  expect_true(all(lm_vals == ""))           # lm side fully blank
-  expect_true(any(nzchar(glm_vals)))         # glm side has values
+  expect_true(all(lm_vals == "")) # lm side fully blank
+  expect_true(any(nzchar(glm_vals))) # glm side has values
 })
 
-test_that("glm + partial_chi2 - quasi family returns NA (drop1 path), em-dashed", {
+test_that("glm + partial_chi2 - quasi family returns NA (drop1 path), en-dashed", {
   set.seed(123)
   d <- data.frame(y = rpois(50, 3), x = rnorm(50))
   fit <- glm(y ~ x, data = d, family = quasipoisson)
@@ -561,17 +832,21 @@ test_that("glm pseudo (Menard 2011): matches manual SD(Y*) calculation", {
 test_that("glm pseudo: probit uses var_link = 1, cloglog uses pi^2/6", {
   fit_pr <- glm(am ~ mpg, data = mt, family = binomial(link = "probit"))
   td_pr <- broom::tidy(table_regression(fit_pr, standardized = "pseudo"))
-  beta_pr <- td_pr$estimate[td_pr$estimate_type == "beta" &
-                              td_pr$term == "mpg"]
+  beta_pr <- td_pr$estimate[
+    td_pr$estimate_type == "beta" &
+      td_pr$term == "mpg"
+  ]
   eta_pr <- predict(fit_pr, type = "link")
-  sd_y_star_pr <- sqrt(var(eta_pr) + 1)        # probit: 1
+  sd_y_star_pr <- sqrt(var(eta_pr) + 1) # probit: 1
   expected_pr <- coef(fit_pr)["mpg"] * sd(mt$mpg) / sd_y_star_pr
   expect_equal(beta_pr, unname(expected_pr), tolerance = 1e-12)
 
   fit_cl <- glm(am ~ mpg, data = mt, family = binomial(link = "cloglog"))
   td_cl <- broom::tidy(table_regression(fit_cl, standardized = "pseudo"))
-  beta_cl <- td_cl$estimate[td_cl$estimate_type == "beta" &
-                              td_cl$term == "mpg"]
+  beta_cl <- td_cl$estimate[
+    td_cl$estimate_type == "beta" &
+      td_cl$term == "mpg"
+  ]
   eta_cl <- predict(fit_cl, type = "link")
   sd_y_star_cl <- sqrt(var(eta_cl) + pi^2 / 6) # cloglog: pi^2/6 (Gumbel)
   expected_cl <- coef(fit_cl)["mpg"] * sd(mt$mpg) / sd_y_star_cl
@@ -597,16 +872,23 @@ test_that("glm pseudo: non-binomial returns NA + spicy_caveat", {
 test_that("glm: all 5 methods preserve p-value (linear rescaling invariance)", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   raw_td <- broom::tidy(table_regression(fit))
-  raw_p <- setNames(raw_td$p.value[raw_td$estimate_type == "B"],
-                    raw_td$term[raw_td$estimate_type == "B"])
+  raw_p <- setNames(
+    raw_td$p.value[raw_td$estimate_type == "B"],
+    raw_td$term[raw_td$estimate_type == "B"]
+  )
   for (m in c("refit", "posthoc", "basic", "smart", "pseudo")) {
     td <- broom::tidy(table_regression(fit, standardized = m))
-    beta_p <- setNames(td$p.value[td$estimate_type == "beta"],
-                       td$term[td$estimate_type == "beta"])
+    beta_p <- setNames(
+      td$p.value[td$estimate_type == "beta"],
+      td$term[td$estimate_type == "beta"]
+    )
     for (term_nm in c("mpg", "wt")) {
-      expect_equal(unname(beta_p[term_nm]), unname(raw_p[term_nm]),
-                   tolerance = 1e-10,
-                   info = paste("method =", m, "term =", term_nm))
+      expect_equal(
+        unname(beta_p[term_nm]),
+        unname(raw_p[term_nm]),
+        tolerance = 1e-10,
+        info = paste("method =", m, "term =", term_nm)
+      )
     }
   }
 })
@@ -626,7 +908,7 @@ test_that("lm + standardized = 'pseudo' - rejected with hint to refit/posthoc", 
 })
 
 test_that("glm refit fallback: factor() in formula triggers spicy_fallback", {
-  # factor() in the formula prevents the refit on z-scored mf — should
+  # factor() in the formula prevents the refit on z-scored mf – should
   # emit spicy_fallback and use posthoc (X-only) algebraic scaling.
   fit <- glm(am ~ mpg + factor(cyl), data = mt, family = binomial)
   fb_seen <- FALSE
@@ -643,20 +925,26 @@ test_that("glm refit fallback: factor() in formula triggers spicy_fallback", {
   expect_true(fb_seen)
 })
 
-test_that("glm pseudo: log-binomial treated as logit-equivalent (var_link = pi^2/3)", {
-  d <- data.frame(y = c(0,1,1,0,1,1,0,0,1,1,0,1,1,0,1,0,1,1,0,1),
-                  x = seq_len(20))
+test_that("glm pseudo: log-binomial standardisation is NA (no latent threshold)", {
+  d <- data.frame(
+    y = c(0, 1, 1, 0, 1, 1, 0, 0, 1, 1, 0, 1, 1, 0, 1, 0, 1, 1, 0, 1),
+    x = seq_len(20)
+  )
   fit <- tryCatch(
     suppressWarnings(glm(y ~ x, data = d, family = binomial(link = "log"))),
-    error = function(e) NULL, warning = function(w) NULL
+    error = function(e) NULL,
+    warning = function(w) NULL
   )
   skip_if(is.null(fit), "log-binomial fit did not converge")
-  td <- broom::tidy(table_regression(fit, standardized = "pseudo"))
+  # The log link (relative-risk model) has no latent-threshold interpretation,
+  # so the Menard / Long & Freese latent-variable SD is undefined: a caveat
+  # fires and the standardised beta is NA (use standardized = "refit").
+  expect_warning(
+    td <- broom::tidy(table_regression(fit, standardized = "pseudo")),
+    class = "spicy_caveat"
+  )
   beta_x <- td$estimate[td$estimate_type == "beta" & td$term == "x"]
-  eta <- predict(fit, type = "link")
-  sd_y_star <- sqrt(var(eta) + pi^2 / 3)  # log-binomial: logit-equivalent
-  expected <- coef(fit)["x"] * sd(d$x) / sd_y_star
-  expect_equal(beta_x, unname(expected), tolerance = 1e-12)
+  expect_true(length(beta_x) == 0L || all(is.na(beta_x)))
 })
 
 
@@ -667,13 +955,14 @@ test_that("glm pseudo: log-binomial treated as logit-equivalent (var_link = pi^2
 test_that("glm AME: matches marginaleffects::avg_slopes() to machine precision", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   td <- broom::tidy(table_regression(fit, show_columns = c("b", "ame")))
-  ame <- td[td$estimate_type == "AME", ]
+  ame <- td[td$estimate_type == "ame", ]
   oracle <- marginaleffects::avg_slopes(fit)
   for (term_nm in c("mpg", "wt")) {
     expect_equal(
       ame$estimate[ame$term == term_nm],
       oracle$estimate[oracle$term == term_nm],
-      tolerance = 1e-12, info = paste("term =", term_nm)
+      tolerance = 1e-12,
+      info = paste("term =", term_nm)
     )
     expect_equal(
       ame$std.error[ame$term == term_nm],
@@ -686,7 +975,7 @@ test_that("glm AME: matches marginaleffects::avg_slopes() to machine precision",
 test_that("glm AME: classical vcov uses z-asymptotic (df = Inf, test_type = 'z')", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   td <- broom::tidy(table_regression(fit, show_columns = c("b", "ame")))
-  ame <- td[td$estimate_type == "AME", ]
+  ame <- td[td$estimate_type == "ame", ]
   expect_true(all(is.infinite(ame$df)))
   expect_true(all(ame$test_type == "z"))
 })
@@ -694,16 +983,28 @@ test_that("glm AME: classical vcov uses z-asymptotic (df = Inf, test_type = 'z')
 test_that("glm AME + CR2: Satterthwaite df from coef_test on dominant coef", {
   set.seed(1)
   n <- 200L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x1 = rnorm(n), x2 = rnorm(n),
-                  clinic = rep(letters[1:20], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x1 = rnorm(n),
+    x2 = rnorm(n),
+    clinic = rep(letters[1:20], each = 10)
+  )
   fit <- glm(y ~ x1 + x2, data = d, family = binomial)
-  td <- broom::tidy(table_regression(fit, vcov = "CR2", cluster = d$clinic,
-                                       show_columns = c("b", "ame")))
-  ame <- td[td$estimate_type == "AME", ]
+  td <- broom::tidy(table_regression(
+    fit,
+    vcov = "CR2",
+    cluster = d$clinic,
+    show_columns = c("b", "ame")
+  ))
+  ame <- td[td$estimate_type == "ame", ]
   expect_true(all(ame$test_type == "t"))
   # Cross-check: AME df_Satt should equal the dominant-coef df_Satt
-  ct <- clubSandwich::coef_test(fit, vcov = "CR2", cluster = d$clinic,
-                                  test = "Satterthwaite")
+  ct <- clubSandwich::coef_test(
+    fit,
+    vcov = "CR2",
+    cluster = d$clinic,
+    test = "Satterthwaite"
+  )
   expect_equal(
     ame$df[ame$term == "x1"],
     unname(ct$df_Satt[rownames(ct) == "x1"]),
@@ -719,27 +1020,67 @@ test_that("glm AME + CR2: Satterthwaite df from coef_test on dominant coef", {
 test_that("glm AME + CR2: footer mentions glm-specific mechanism (coef_test)", {
   set.seed(1)
   n <- 200L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n),
-                  clinic = rep(letters[1:20], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x = rnorm(n),
+    clinic = rep(letters[1:20], each = 10)
+  )
   fit <- glm(y ~ x, data = d, family = binomial)
-  out <- table_regression(fit, vcov = "CR2", cluster = d$clinic,
-                           show_columns = c("b", "ame"))
+  out <- table_regression(
+    fit,
+    vcov = "CR2",
+    cluster = d$clinic,
+    show_columns = c("b", "ame")
+  )
   note <- attr(out, "note")
-  expect_match(note, "Satterthwaite-corrected df", fixed = TRUE)
-  expect_match(note, "coef_test", fixed = TRUE)
-  # Should NOT mention linear_contrast (that's lm-only path)
+  # Phase 7c22 (item e): footer trimmed -- pin the complete line for
+  # the glm path.
+  expect_match(
+    note,
+    "AME inference: t-test with Satterthwaite df (dominant-coefficient approximation).",
+    fixed = TRUE
+  )
+  expect_false(grepl("clubSandwich::", note, fixed = TRUE))
   expect_false(grepl("linear_contrast", note, fixed = TRUE))
 })
 
 test_that("glm AME with factor predictor: each level gets its own AME row", {
-  mt2 <- mt; mt2$cyl <- factor(mt2$cyl)
+  skip_if_not_installed("marginaleffects")
+  mt2 <- mt
+  mt2$cyl <- factor(mt2$cyl)
   fit <- glm(am ~ mpg + cyl, data = mt2, family = binomial)
   td <- broom::tidy(table_regression(fit, show_columns = c("b", "ame")))
-  ame <- td[td$estimate_type == "AME", ]
+  ame <- td[td$estimate_type == "ame", ]
   # mpg + cyl6 + cyl8 = 3 AME rows
   expect_true("mpg" %in% ame$term)
   expect_true("cyl6" %in% ame$term)
   expect_true("cyl8" %in% ame$term)
+  # Pin every AME row to the avg_slopes oracle: spicy's "cyl6" row is
+  # the "6 - 4" contrast (level vs reference), "cyl8" is "8 - 4".
+  oracle <- marginaleffects::avg_slopes(fit)
+  o_val <- function(tm, ct) {
+    idx <- oracle$term == tm & oracle$contrast == ct
+    list(est = oracle$estimate[idx], se = oracle$std.error[idx])
+  }
+  map <- list(
+    mpg = o_val("mpg", "dY/dX"),
+    cyl6 = o_val("cyl", "6 - 4"),
+    cyl8 = o_val("cyl", "8 - 4")
+  )
+  for (term_nm in names(map)) {
+    expect_equal(
+      ame$estimate[ame$term == term_nm],
+      map[[term_nm]]$est,
+      tolerance = 1e-12,
+      info = paste("term =", term_nm)
+    )
+    expect_equal(
+      ame$std.error[ame$term == term_nm],
+      map[[term_nm]]$se,
+      tolerance = 1e-10,
+      info = paste("term =", term_nm)
+    )
+  }
 })
 
 test_that("glm AME: response-scale (NOT link-scale) - AME != B for logit", {
@@ -750,7 +1091,7 @@ test_that("glm AME: response-scale (NOT link-scale) - AME != B for logit", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   td <- broom::tidy(table_regression(fit, show_columns = c("b", "ame")))
   b_mpg <- td$estimate[td$estimate_type == "B" & td$term == "mpg"]
-  ame_mpg <- td$estimate[td$estimate_type == "AME" & td$term == "mpg"]
+  ame_mpg <- td$estimate[td$estimate_type == "ame" & td$term == "mpg"]
   # Response-scale AME for logistic mpg coef is order-of-magnitude
   # smaller (logistic squashes through pi^2/3 + var(eta))
   expect_true(abs(ame_mpg) < abs(b_mpg) / 5)
@@ -758,9 +1099,12 @@ test_that("glm AME: response-scale (NOT link-scale) - AME != B for logit", {
 
 test_that("glm AME: HC* vcov uses z-asymptotic (no Satterthwaite)", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
-  td <- broom::tidy(table_regression(fit, vcov = "HC1",
-                                       show_columns = c("b", "ame")))
-  ame <- td[td$estimate_type == "AME", ]
+  td <- broom::tidy(table_regression(
+    fit,
+    vcov = "HC1",
+    show_columns = c("b", "ame")
+  ))
+  ame <- td[td$estimate_type == "ame", ]
   expect_true(all(is.infinite(ame$df)))
   expect_true(all(ame$test_type == "z"))
 })
@@ -821,30 +1165,37 @@ test_that("ci_method = 'profile' on glm: matches confint() to machine precision"
     expect_equal(
       td$conf.low[td$estimate_type == "B" & td$term == term_nm],
       oracle[term_nm, 1L],
-      tolerance = 1e-10, info = paste("term =", term_nm)
+      tolerance = 1e-10,
+      info = paste("term =", term_nm)
     )
     expect_equal(
       td$conf.high[td$estimate_type == "B" & td$term == term_nm],
       oracle[term_nm, 2L],
-      tolerance = 1e-10, info = paste("term =", term_nm)
+      tolerance = 1e-10,
+      info = paste("term =", term_nm)
     )
   }
 })
 
 test_that("ci_method = 'profile' leaves estimate / SE / p unchanged (CI only)", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
-  td_wald    <- broom::tidy(table_regression(fit, ci_method = "wald"))
+  td_wald <- broom::tidy(table_regression(fit, ci_method = "wald"))
   td_profile <- broom::tidy(table_regression(fit, ci_method = "profile"))
   for (term_nm in c("mpg", "wt")) {
     w_row <- td_wald[td_wald$estimate_type == "B" & td_wald$term == term_nm, ]
-    p_row <- td_profile[td_profile$estimate_type == "B" &
-                          td_profile$term == term_nm, ]
+    p_row <- td_profile[
+      td_profile$estimate_type == "B" &
+        td_profile$term == term_nm,
+    ]
     expect_equal(w_row$estimate, p_row$estimate, tolerance = 1e-12)
     expect_equal(w_row$std.error, p_row$std.error, tolerance = 1e-12)
     expect_equal(w_row$p.value, p_row$p.value, tolerance = 1e-12)
     # CI bounds DO differ
-    expect_false(isTRUE(all.equal(w_row$conf.low, p_row$conf.low,
-                                    tolerance = 1e-3)))
+    expect_false(isTRUE(all.equal(
+      w_row$conf.low,
+      p_row$conf.low,
+      tolerance = 1e-3
+    )))
   }
 })
 
@@ -855,12 +1206,13 @@ test_that("ci_method = 'profile' on lm: rejected with hint", {
     spicy_invalid_input = function(e) e
   )
   expect_s3_class(err, "spicy_invalid_input")
-  expect_match(conditionMessage(err), "glm.*only", perl = TRUE)
+  expect_match(conditionMessage(err), "only for", fixed = TRUE)
+  expect_match(conditionMessage(err), "glm", fixed = TRUE)
   expect_match(conditionMessage(err), "Wald", fixed = TRUE)
 })
 
 test_that("ci_method = 'profile' on mixed lm + glm: rejected", {
-  m_lm  <- lm(mpg ~ wt, data = mt)
+  m_lm <- lm(mpg ~ wt, data = mt)
   m_glm <- glm(am ~ mpg, data = mt, family = binomial)
   expect_error(
     table_regression(list(m_lm, m_glm), ci_method = "profile"),
@@ -875,10 +1227,10 @@ test_that("ci_method = 'profile': asymmetric CI for sparse logistic", {
   td <- broom::tidy(table_regression(fit, ci_method = "profile"))
   for (term_nm in c("mpg", "wt")) {
     row <- td[td$estimate_type == "B" & td$term == term_nm, ]
-    half_low  <- row$estimate - row$conf.low
+    half_low <- row$estimate - row$conf.low
     half_high <- row$conf.high - row$estimate
     # Wald would give symmetric (half_low == half_high). Profile is
-    # asymmetric — the gap should be visibly different.
+    # asymmetric – the gap should be visibly different.
     expect_false(isTRUE(all.equal(half_low, half_high, tolerance = 1e-3)))
   }
 })
@@ -901,66 +1253,101 @@ test_that("E2E: logistic with exponentiate + AME + partial_chi2 + standardized",
   expect_match(attr(out, "title"), "^Logistic regression: am$")
   td <- broom::tidy(out)
   # All four estimate types present
-  expect_true(all(c("B", "beta", "AME", "partial_chi2") %in% td$estimate_type))
+  expect_true(all(c("B", "beta", "ame", "partial_chi2") %in% td$estimate_type))
   # B exponentiated → row for mpg has positive value (OR scale)
   b_mpg <- td$estimate[td$estimate_type == "B" & td$term == "mpg"]
-  expect_true(b_mpg > 0)  # OR is exp(-0.32) ≈ 0.72
-  # AME on response scale (probability units) — magnitude < |B|
-  ame_mpg <- td$estimate[td$estimate_type == "AME" & td$term == "mpg"]
+  expect_true(b_mpg > 0) # OR is exp(-0.32) ≈ 0.72
+  # Pinned: the displayed OR is exactly exp() of the link-scale coef
+  expect_equal(b_mpg, exp(unname(coef(fit)["mpg"])), tolerance = 1e-12)
+  # AME on response scale (probability units) – magnitude < |B|
+  ame_mpg <- td$estimate[td$estimate_type == "ame" & td$term == "mpg"]
   expect_true(abs(ame_mpg) < 0.1)
+  # Pinned: AME matches the avg_slopes oracle (untouched by exponentiate)
+  skip_if_not_installed("marginaleffects")
+  ame_oracle <- marginaleffects::avg_slopes(fit)
+  expect_equal(
+    ame_mpg,
+    ame_oracle$estimate[ame_oracle$term == "mpg"],
+    tolerance = 1e-12
+  )
 })
 
 test_that("E2E: poisson IRR + nested LRT hierarchy", {
-  m1 <- glm(I(round(mpg)) ~ wt,         data = mt, family = poisson)
-  m2 <- glm(I(round(mpg)) ~ wt + cyl,   data = mt, family = poisson)
+  m1 <- glm(I(round(mpg)) ~ wt, data = mt, family = poisson)
+  m2 <- glm(I(round(mpg)) ~ wt + cyl, data = mt, family = poisson)
   out <- table_regression(
     list(m1, m2),
     exponentiate = TRUE,
     nested = TRUE
   )
-  expect_match(attr(out, "title"), "^Hierarchical poisson regression: ")
+  expect_identical(
+    attr(out, "title"),
+    "Hierarchical Poisson regression: I(round(mpg))"
+  )
   note <- attr(out, "note")
-  expect_match(note, "IRR", fixed = TRUE)
+  expect_match(
+    note,
+    paste0(
+      "Coefficients exponentiated and displayed as IRR; ",
+      "SE on the IRR scale (delta method); ",
+      "CI bounds exponentiated (asymmetric)."
+    ),
+    fixed = TRUE
+  )
   # Change rows in the body (not in the footer)
   vars <- trimws(as.data.frame(out, stringsAsFactors = FALSE)$Variable)
   expect_true("Δχ²" %in% vars)
 })
 
 test_that("E2E: mixed lm + glm side-by-side renders without error", {
-  m_lm  <- lm(mpg ~ wt, data = mt)
+  m_lm <- lm(mpg ~ wt, data = mt)
   m_glm <- glm(am ~ mpg + wt, data = mt, family = binomial)
   out <- table_regression(list("OLS" = m_lm, "Logistic" = m_glm))
   expect_s3_class(out, "spicy_regression_table")
   # Title falls back to plain "Regression comparison" (mixed families)
   expect_match(attr(out, "title"), "^Regression comparison$")
-  # vcov footer per-model: OLS / MLE
+  # vcov footer per-model, cited by the spanner labels (named models).
   note <- attr(out, "note")
-  expect_match(note, "OLS", fixed = TRUE)
-  expect_match(note, "MLE inverse Hessian", fixed = TRUE)
+  expect_match(note, "OLS: classical (OLS)", fixed = TRUE)
+  expect_match(note, "Logistic: classical (Fisher information)", fixed = TRUE)
 })
 
 test_that("E2E: CR2 + glm + AME + Satterthwaite + nested LRT", {
   set.seed(42)
   n <- 200L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x1 = rnorm(n), x2 = rnorm(n),
-                  clinic = rep(letters[1:20], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x1 = rnorm(n),
+    x2 = rnorm(n),
+    clinic = rep(letters[1:20], each = 10)
+  )
   m1 <- glm(y ~ x1, data = d, family = binomial)
   m2 <- glm(y ~ x1 + x2, data = d, family = binomial)
   out <- table_regression(
     list(m1, m2),
-    vcov = "CR2", cluster = d$clinic,
+    vcov = "CR2",
+    cluster = d$clinic,
     show_columns = c("b", "p", "ame", "ame_p"),
     nested = TRUE
   )
   note <- attr(out, "note")
-  expect_match(note, "cluster-robust [(]CR2[)]", perl = TRUE)
-  expect_match(note, "Satterthwaite-corrected df", fixed = TRUE)
+  expect_match(
+    note,
+    "Std. errors: cluster-robust (CR2), clusters by clinic.",
+    fixed = TRUE
+  )
+  # Phase 7c22 (item e): trimmed wording -- pin the full line.
+  expect_match(
+    note,
+    "AME inference: t-test with Satterthwaite df (dominant-coefficient approximation).",
+    fixed = TRUE
+  )
   # Change rows live in the body now
   vars <- trimws(as.data.frame(out, stringsAsFactors = FALSE)$Variable)
   expect_true("Δχ²" %in% vars)
   # AME df_Satt is finite (not Inf) under CR2
   td <- broom::tidy(out)
-  ame_rows <- td[td$estimate_type == "AME", ]
+  ame_rows <- td[td$estimate_type == "ame", ]
   expect_true(all(is.finite(ame_rows$df)))
 })
 
@@ -992,13 +1379,25 @@ test_that("E2E: broom::tidy() schema stable for glm output", {
   )
   td <- broom::tidy(out)
   # Required broom-style columns
-  expect_true(all(c("term", "estimate", "std.error", "statistic",
-                     "p.value", "conf.low", "conf.high", "df",
-                     "test_type", "estimate_type") %in% names(td)))
+  expect_true(all(
+    c(
+      "term",
+      "estimate",
+      "std.error",
+      "statistic",
+      "p.value",
+      "conf.low",
+      "conf.high",
+      "df",
+      "test_type",
+      "estimate_type"
+    ) %in%
+      names(td)
+  ))
 })
 
 test_that("E2E: standardized refit + glm + multi-model rendering", {
-  m1 <- glm(am ~ mpg,      data = mt, family = binomial)
+  m1 <- glm(am ~ mpg, data = mt, family = binomial)
   m2 <- glm(am ~ mpg + wt, data = mt, family = binomial)
   out <- table_regression(list(m1, m2), standardized = "refit")
   expect_s3_class(out, "spicy_regression_table")
@@ -1009,7 +1408,7 @@ test_that("E2E: standardized refit + glm + multi-model rendering", {
 })
 
 test_that("E2E: full feature surface in a single call (acceptance)", {
-  # Single comprehensive call that should succeed — covers ALL Phase 3
+  # Single comprehensive call that should succeed – covers ALL Phase 3
   # additions: exponentiate, partial_chi2, AME, standardized=pseudo,
   # ci_method=profile, custom labels, p_adjust, fit-stats override.
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
@@ -1021,8 +1420,13 @@ test_that("E2E: full feature surface in a single call (acceptance)", {
       standardized = "pseudo",
       p_adjust = "holm",
       show_columns = c("b", "beta", "ci", "p", "ame", "ame_p", "partial_chi2"),
-      show_fit_stats = c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_tjur",
-                          "AIC", "BIC"),
+      show_fit_stats = c(
+        "nobs",
+        "pseudo_r2_mcfadden",
+        "pseudo_r2_tjur",
+        "aic",
+        "bic"
+      ),
       labels = c(mpg = "Miles per gallon", wt = "Weight (1000 lbs)"),
       stars = TRUE,
       digits = 3L
@@ -1040,24 +1444,43 @@ test_that("E2E: full feature surface in a single call (acceptance)", {
 test_that("AUDIT C1: glm + CR* + standardized -- B and beta share Satterthwaite df", {
   set.seed(1)
   n <- 200L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x1 = rnorm(n), x2 = rnorm(n),
-                  clinic = rep(letters[1:20], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x1 = rnorm(n),
+    x2 = rnorm(n),
+    clinic = rep(letters[1:20], each = 10)
+  )
   fit <- glm(y ~ x1 + x2, data = d, family = binomial)
   for (m in c("refit", "posthoc", "basic", "smart", "pseudo")) {
-    td <- broom::tidy(table_regression(fit, vcov = "CR2", cluster = d$clinic,
-                                         standardized = m))
-    rows <- td[td$term %in% c("x1", "x2") &
-                  td$estimate_type %in% c("B", "beta"), ]
+    td <- broom::tidy(table_regression(
+      fit,
+      vcov = "CR2",
+      cluster = d$clinic,
+      standardized = m
+    ))
+    rows <- td[
+      td$term %in% c("x1", "x2") & td$estimate_type %in% c("B", "beta"),
+    ]
     by_term <- split(rows$df, rows$term)
     for (term_nm in names(by_term)) {
       dfs <- by_term[[term_nm]]
       # B df_Satt and beta df_Satt must match (same Satterthwaite df,
       # not z-asymptotic Inf for one and finite for the other)
-      expect_true(all(is.finite(dfs)),
-                  info = paste("method =", m, "term =", term_nm))
-      expect_true(length(unique(round(dfs, 6))) == 1L,
-                  info = paste("method =", m, "term =", term_nm,
-                                "df values:", paste(dfs, collapse = ", ")))
+      expect_true(
+        all(is.finite(dfs)),
+        info = paste("method =", m, "term =", term_nm)
+      )
+      expect_true(
+        length(unique(round(dfs, 6))) == 1L,
+        info = paste(
+          "method =",
+          m,
+          "term =",
+          term_nm,
+          "df values:",
+          paste(dfs, collapse = ", ")
+        )
+      )
     }
   }
 })
@@ -1076,11 +1499,14 @@ test_that("AUDIT M4: lm-only change tokens on all-glm rejected via show_fit_stat
   # Since 0.12: change tokens flow through `show_fit_stats`, not via
   # the dropped `nested_stats` argument. Class-aware validation
   # rejects variance-explained change tokens on an all-glm hierarchy.
-  m1 <- glm(am ~ mpg,      data = mtcars, family = binomial)
+  m1 <- glm(am ~ mpg, data = mtcars, family = binomial)
   m2 <- glm(am ~ mpg + wt, data = mtcars, family = binomial)
   err <- tryCatch(
-    table_regression(list(m1, m2), nested = TRUE,
-                      show_fit_stats = c("nobs", "r2_change", "p_change")),
+    table_regression(
+      list(m1, m2),
+      nested = TRUE,
+      show_fit_stats = c("nobs", "r2_change", "p_change")
+    ),
     spicy_invalid_input = function(e) e
   )
   expect_s3_class(err, "spicy_invalid_input")
@@ -1095,31 +1521,40 @@ test_that("AUDIT M5: standardize_algebraic_glm preserves no-intercept predictors
     beta_rows <- td[td$estimate_type == "beta", ]
     # Both predictors should have FINITE beta (not NA-out of first row)
     mpg_beta <- beta_rows$estimate[beta_rows$term == "mpg"]
-    wt_beta  <- beta_rows$estimate[beta_rows$term == "wt"]
+    wt_beta <- beta_rows$estimate[beta_rows$term == "wt"]
     expect_true(is.finite(mpg_beta), info = paste("method =", m))
-    expect_true(is.finite(wt_beta),  info = paste("method =", m))
+    expect_true(is.finite(wt_beta), info = paste("method =", m))
   }
 })
 
 test_that("AUDIT: less common families have correct titles", {
   # quasibinomial / quasipoisson explicit prefixes
   fit_qb <- glm(am ~ mpg, data = mtcars, family = quasibinomial)
-  expect_match(attr(table_regression(fit_qb), "title"),
-               "^Quasi-binomial regression: am$")
+  expect_match(
+    attr(table_regression(fit_qb), "title"),
+    "^Quasi-binomial regression: am$"
+  )
   fit_qp <- glm(I(round(mpg)) ~ wt, data = mtcars, family = quasipoisson)
-  expect_match(attr(table_regression(fit_qp), "title"),
-               "^Quasi-Poisson regression:")
+  expect_identical(
+    attr(table_regression(fit_qp), "title"),
+    "Quasi-Poisson regression: I(round(mpg))"
+  )
   # inverse.gaussian
   set.seed(5)
   d <- data.frame(y = rgamma(50, 2, 0.5), x = rnorm(50))
   fit_ig <- tryCatch(
-    suppressWarnings(glm(y ~ x, data = d,
-                          family = inverse.gaussian(link = "1/mu^2"))),
+    suppressWarnings(glm(
+      y ~ x,
+      data = d,
+      family = inverse.gaussian(link = "1/mu^2")
+    )),
     error = function(e) NULL
   )
   skip_if(is.null(fit_ig), "inverse.gaussian fit did not converge")
-  expect_match(attr(table_regression(fit_ig), "title"),
-               "^Inverse-Gaussian regression:")
+  expect_identical(
+    attr(table_regression(fit_ig), "title"),
+    "Inverse-Gaussian regression: y"
+  )
 })
 
 test_that("AUDIT: Gamma(log) exponentiate header is MR (mean ratio)", {
@@ -1133,16 +1568,24 @@ test_that("AUDIT: Gamma(log) exponentiate header is MR (mean ratio)", {
 test_that("AUDIT: B-row Satterthwaite under CR* (direct unit test)", {
   set.seed(8)
   n <- 200L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n),
-                  clinic = rep(letters[1:20], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x = rnorm(n),
+    clinic = rep(letters[1:20], each = 10)
+  )
   fit <- glm(y ~ x, data = d, family = binomial)
-  vc <- compute_lm_vcov(fit, type = "CR2", cluster = d$clinic)
-  inf <- spicy:::compute_glm_coef_inference(
-    fit, coef_idx = 2L, vc = vc, vcov_type = "CR2",
-    cluster = d$clinic, ci_level = 0.95
+  vc <- compute_model_vcov(fit, type = "CR2", cluster = d$clinic)
+  inf <- spicy:::compute_coef_inference(
+    fit,
+    coef_idx = 2L,
+    vc = vc,
+    vcov_type = "CR2",
+    cluster = d$clinic,
+    ci_level = 0.95,
+    test = "z"
   )
   expect_equal(inf$test_type, "t")
-  expect_true(is.finite(inf$df) && inf$df < n)  # Satterthwaite df is small
+  expect_true(is.finite(inf$df) && inf$df < n) # Satterthwaite df is small
 })
 
 
@@ -1152,18 +1595,23 @@ test_that("AUDIT: B-row Satterthwaite under CR* (direct unit test)", {
 
 test_that("AUDIT B1: pseudo_r2_* render with pretty labels (not raw tokens)", {
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
-  out <- table_regression(fit, show_fit_stats = c("nobs",
-                                                    "pseudo_r2_mcfadden",
-                                                    "pseudo_r2_nagelkerke",
-                                                    "pseudo_r2_tjur"))
+  out <- table_regression(
+    fit,
+    show_fit_stats = c(
+      "nobs",
+      "pseudo_r2_mcfadden",
+      "pseudo_r2_nagelkerke",
+      "pseudo_r2_tjur"
+    )
+  )
   vars <- out$Variable
-  expect_true("R² (McFadden)"   %in% vars)
+  expect_true("R² (McFadden)" %in% vars)
   expect_true("R² (Nagelkerke)" %in% vars)
-  expect_true("R² (Tjur)"       %in% vars)
+  expect_true("R² (Tjur)" %in% vars)
   # Raw token names must NOT appear
-  expect_false("pseudo_r2_mcfadden"   %in% vars)
+  expect_false("pseudo_r2_mcfadden" %in% vars)
   expect_false("pseudo_r2_nagelkerke" %in% vars)
-  expect_false("pseudo_r2_tjur"       %in% vars)
+  expect_false("pseudo_r2_tjur" %in% vars)
 })
 
 test_that("AUDIT B2: pseudo_r2_* work with formula-wrapped response", {
@@ -1180,14 +1628,91 @@ test_that("AUDIT B2: pseudo_r2_* work with formula-wrapped response", {
   fit_log <- glm(I(log(mpg)) ~ wt, data = mt, family = gaussian)
   expect_true(is.finite(spicy:::compute_pseudo_r2_mcfadden(fit_log)))
 
-  # cbind() form (binomial proportions): not common in spicy's
-  # use cases but should not crash.
-  d <- data.frame(s = c(2,5,7,3,1), n = c(10,12,15,8,9), x = 1:5)
+  # cbind() form (grouped binomial): the intercept-only refit used to
+  # pass the response MATRIX back to glm() together with the
+  # post-initialize weights (the row totals), so the binomial
+  # initialize re-applied the totals (effective weights = totals^2)
+  # and ll_null was silently wrong. Assert the real value against the
+  # direct intercept-only oracle, not mere absence of error.
+  d <- data.frame(s = c(2, 5, 7, 3, 1), n = c(10, 12, 15, 8, 9), x = 1:5)
   fit_cb <- suppressWarnings(
     glm(cbind(s, n - s) ~ x, data = d, family = binomial)
   )
-  # Just check it runs without error (value may be NA if quirky)
-  expect_no_error(spicy:::compute_pseudo_r2_mcfadden(fit_cb))
+  ll_null <- as.numeric(stats::logLik(
+    glm(cbind(s, n - s) ~ 1, data = d, family = binomial)
+  ))
+  expect_equal(
+    spicy:::compute_intercept_only_loglik_glm(fit_cb),
+    ll_null,
+    tolerance = 1e-12
+  )
+  expect_equal(
+    spicy:::compute_pseudo_r2_mcfadden(fit_cb),
+    1 - as.numeric(stats::logLik(fit_cb)) / ll_null,
+    tolerance = 1e-12
+  )
+})
+
+test_that("pseudo-R2 on a cbind() fit match the proportion-form oracle", {
+  # Oracle pins from the cbind double-weighting dossier
+  # (vcov_cbind_oracle_pins.csv, 17 digits): llnull_forme_matrice_VRAI,
+  # mcfadden_CORRECT, nagelkerke_spicy_fit_pr_CORRECT, and the
+  # negative-control pins llnull_spicy_ACTUEL_FAUX /
+  # mcfadden_spicy_ACTUEL_FAUX (the totals^2 regime this test guards
+  # against).
+  set.seed(42)
+  n <- 40
+  d <- data.frame(
+    x = rnorm(n),
+    g = factor(rep(c("A", "B"), each = 20)),
+    tot = sample(3:12, n, TRUE)
+  )
+  d$succ <- rbinom(n, d$tot, plogis(-0.2 + 0.6 * d$x + 0.5 * (d$g == "B")))
+  d$prop <- d$succ / d$tot
+  fit_cb <- glm(cbind(succ, tot - succ) ~ x + g, family = binomial, data = d)
+  fit_pr <- glm(prop ~ x + g, family = binomial, data = d, weights = tot)
+
+  ll_null <- spicy:::compute_intercept_only_loglik_glm(fit_cb)
+  expect_equal(ll_null, -83.21304014662627, tolerance = 1e-12)
+  expect_equal(
+    spicy:::compute_pseudo_r2_mcfadden(fit_cb),
+    0.32396695353665972,
+    tolerance = 1e-12
+  )
+  expect_equal(
+    spicy:::compute_pseudo_r2_nagelkerke(fit_cb),
+    0.75194673902763853,
+    tolerance = 1e-12
+  )
+  # Invariance: the cbind and proportion-plus-weights forms of the SAME
+  # model must report the same pseudo-R2.
+  expect_equal(
+    spicy:::compute_pseudo_r2_mcfadden(fit_cb),
+    spicy:::compute_pseudo_r2_mcfadden(fit_pr),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    spicy:::compute_pseudo_r2_nagelkerke(fit_cb),
+    spicy:::compute_pseudo_r2_nagelkerke(fit_pr),
+    tolerance = 1e-12
+  )
+  # Negative control: the totals^2 signature must no longer match.
+  expect_gt(abs(ll_null - (-719.22608518147433)), 1)
+  expect_gt(
+    abs(spicy:::compute_pseudo_r2_mcfadden(fit_cb) - 0.92178430928070987),
+    0.1
+  )
+
+  # Default user surface: both R2 rows are shown by default on a logit
+  # table and must render identically for the two forms.
+  tab_cb <- table_regression(fit_cb)
+  tab_pr <- table_regression(fit_pr)
+  for (row in c("R² (McFadden)", "R² (Nagelkerke)")) {
+    expect_identical(
+      tab_cb[["B"]][tab_cb$Variable == row],
+      tab_pr[["B"]][tab_pr$Variable == row]
+    )
+  }
 })
 
 test_that("AUDIT: spicy_caveat conditions inherit from spicy_warning", {
@@ -1214,12 +1739,12 @@ test_that("AUDIT: spicy_caveat conditions inherit from spicy_warning", {
 test_that("AUDIT B3: pseudo_r2_* preserve offset in null model refit", {
   # Bug: compute_intercept_only_loglik_glm dropped the offset, so the
   # null model under-modelled the rate baseline and pseudo-R^2 went
-  # negative for offset glms (Long & Freese 2014 sec. 3.6: the null
-  # model must carry the same offset as the full model).
+  # negative for offset glms (the null model must carry the same
+  # offset as the full model -- the Stata convention; on offsets see
+  # Long & Freese 2014 sec. 9.2.6).
   set.seed(1)
   n <- 50L
-  d <- data.frame(y = rpois(n, 3), x = rnorm(n),
-                  exposure = runif(n, 1, 10))
+  d <- data.frame(y = rpois(n, 3), x = rnorm(n), exposure = runif(n, 1, 10))
   fit <- glm(y ~ x + offset(log(exposure)), data = d, family = poisson)
   mcf <- spicy:::compute_pseudo_r2_mcfadden(fit)
   nag <- spicy:::compute_pseudo_r2_nagelkerke(fit)
@@ -1229,38 +1754,43 @@ test_that("AUDIT B3: pseudo_r2_* preserve offset in null model refit", {
 })
 
 test_that("AUDIT B4: glm + bootstrap vcov refits as glm (not lm)", {
-  # Bug: compute_lm_vcov_bootstrap hard-coded stats::lm() in the refit
+  # Bug: compute_resample_vcov_bootstrap hard-coded stats::lm() in the refit
   # closure, so for a glm fit the bootstrap variance was computed for
   # a misspecified linear model on the (often binary) response. SEs
   # were underestimated by an order of magnitude.
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
   set.seed(42)
-  vc_boot <- spicy:::compute_lm_vcov(fit, type = "bootstrap", boot_n = 100L)
+  vc_boot <- spicy:::compute_model_vcov(fit, type = "bootstrap", boot_n = 100L)
   # SE order of magnitude under the FIX should be roughly comparable
   # to (or larger than, for small n with binary data) the classical
   # MLE SE. Under the BUG, bootstrap SEs were ~30x smaller.
   se_classical <- sqrt(diag(vcov(fit)))
-  se_boot      <- sqrt(diag(vc_boot))
+  se_boot <- sqrt(diag(vc_boot))
   # All bootstrap SEs should be at least 50% of classical; the bug
   # produced ratios around 0.03-0.07.
-  expect_true(all(se_boot / se_classical > 0.5),
-              info = sprintf("ratios: %s",
-                              paste(round(se_boot / se_classical, 3),
-                                     collapse = ", ")))
+  expect_true(
+    all(se_boot / se_classical > 0.5),
+    info = sprintf(
+      "ratios: %s",
+      paste(round(se_boot / se_classical, 3), collapse = ", ")
+    )
+  )
 })
 
 test_that("AUDIT B4: glm + jackknife vcov refits as glm (not lm)", {
   set.seed(42)
   d <- data.frame(y = rbinom(50, 1, 0.5), x = rnorm(50))
   fit <- glm(y ~ x, data = d, family = binomial)
-  vc_jk <- spicy:::compute_lm_vcov(fit, type = "jackknife")
+  vc_jk <- spicy:::compute_model_vcov(fit, type = "jackknife")
   # SE on x should be on the same order of magnitude as classical
   # (jackknife is conservative; ratio should be in [0.5, 5] under
   # the FIX, was ~0.05 under the BUG).
   se_classical <- sqrt(diag(vcov(fit)))["x"]
-  se_jk        <- sqrt(diag(vc_jk))["x"]
-  expect_true(se_jk / se_classical > 0.5 && se_jk / se_classical < 10,
-              info = sprintf("ratio = %.3f", se_jk / se_classical))
+  se_jk <- sqrt(diag(vc_jk))["x"]
+  expect_true(
+    se_jk / se_classical > 0.5 && se_jk / se_classical < 10,
+    info = sprintf("ratio = %.3f", se_jk / se_classical)
+  )
 })
 
 
@@ -1273,15 +1803,21 @@ test_that("AUDIT B4: glm + jackknife vcov refits as glm (not lm)", {
 test_that("AUDIT: glm pseudo-R^2 matches performance::r2_* for binomial", {
   skip_if_not_installed("performance")
   fit <- glm(am ~ mpg + wt, data = mt, family = binomial)
-  expect_equal(spicy:::compute_pseudo_r2_mcfadden(fit),
-               unname(performance::r2_mcfadden(fit)$R2),
-               tolerance = 1e-10)
-  expect_equal(spicy:::compute_pseudo_r2_nagelkerke(fit),
-               unname(performance::r2_nagelkerke(fit)),
-               tolerance = 1e-10)
-  expect_equal(spicy:::compute_pseudo_r2_tjur(fit),
-               unname(performance::r2_tjur(fit)),
-               tolerance = 1e-10)
+  expect_equal(
+    spicy:::compute_pseudo_r2_mcfadden(fit),
+    unname(performance::r2_mcfadden(fit)$R2),
+    tolerance = 1e-10
+  )
+  expect_equal(
+    spicy:::compute_pseudo_r2_nagelkerke(fit),
+    unname(performance::r2_nagelkerke(fit)),
+    tolerance = 1e-10
+  )
+  expect_equal(
+    spicy:::compute_pseudo_r2_tjur(fit),
+    unname(performance::r2_tjur(fit)),
+    tolerance = 1e-10
+  )
 })
 
 test_that("AUDIT: glm B / SE / z / p match parameters::model_parameters", {
@@ -1292,13 +1828,17 @@ test_that("AUDIT: glm B / SE / z / p match parameters::model_parameters", {
   for (term_nm in c("(Intercept)", "mpg", "wt")) {
     s_row <- td[td$estimate_type == "B" & td$term == term_nm, ]
     o_row <- oracle[oracle$Parameter == term_nm, ]
-    expect_equal(s_row$estimate,  o_row$Coefficient, tolerance = 1e-10,
-                 info = paste("term =", term_nm))
-    expect_equal(s_row$std.error, o_row$SE,          tolerance = 1e-10)
-    expect_equal(s_row$statistic, o_row$z,           tolerance = 1e-10)
-    expect_equal(s_row$p.value,   o_row$p,           tolerance = 1e-10)
-    expect_equal(s_row$conf.low,  o_row$CI_low,      tolerance = 1e-10)
-    expect_equal(s_row$conf.high, o_row$CI_high,     tolerance = 1e-10)
+    expect_equal(
+      s_row$estimate,
+      o_row$Coefficient,
+      tolerance = 1e-10,
+      info = paste("term =", term_nm)
+    )
+    expect_equal(s_row$std.error, o_row$SE, tolerance = 1e-10)
+    expect_equal(s_row$statistic, o_row$z, tolerance = 1e-10)
+    expect_equal(s_row$p.value, o_row$p, tolerance = 1e-10)
+    expect_equal(s_row$conf.low, o_row$CI_low, tolerance = 1e-10)
+    expect_equal(s_row$conf.high, o_row$CI_high, tolerance = 1e-10)
   }
 })
 
@@ -1313,38 +1853,54 @@ test_that("AUDIT: glm + NA in predictors -> nobs reflects na.omit, no crash", {
   expect_true(all(is.finite(td$estimate[!is.na(td$estimate)])))
 })
 
-test_that("AUDIT: glm + cluster vector with NAs -> clear fallback warning", {
+test_that("AUDIT: glm + cluster vector with NAs -> clear refusal", {
+  # Was a spicy_fallback warning and a table of CLASSICAL standard errors
+  # under a "cluster-robust (CR2)" footer (register n. 229).
+  #
+  # The refusal used to come from clubSandwich, relayed. It now comes
+  # from spicy's own cluster guard, which runs BEFORE any backend: the
+  # three cluster-robust backends disagreed about a missing id and one of
+  # them (the Cox path) answered with an invented cluster instead of an
+  # error, so the property is settled once, on `cluster`, for all of
+  # them. Earlier, and the same answer whatever the class.
   set.seed(1)
   n <- 100L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n),
-                  clinic = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x = rnorm(n),
+    clinic = rep(letters[1:10], each = 10)
+  )
   d$clinic[1:3] <- NA
   fit <- glm(y ~ x, data = d, family = binomial)
-  expect_warning(
+  err <- tryCatch(
     table_regression(fit, vcov = "CR2", cluster = d$clinic),
-    class = "spicy_fallback"
+    error = function(e) e
   )
+  expect_s3_class(err, "spicy_invalid_input")
+  expect_match(conditionMessage(err), "3 missing value(s)", fixed = TRUE)
+  expect_match(conditionMessage(err), "belongs to no cluster", fixed = TRUE)
+  # Nothing is rendered: the old contract returned a full table here.
+  expect_false(inherits(err, "spicy_regression_table"))
 })
 
 test_that("AUDIT: cluster length mismatch -> clear actionable error", {
   set.seed(1)
   n <- 100L
   d <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n))
-  d$x[1:5] <- NA  # creates a 5-row mismatch
+  d$x[1:5] <- NA # creates a 5-row mismatch
   fit <- glm(y ~ x, data = d, family = binomial)
-  cluster_full <- rep(letters[1:10], each = 10)  # length 100, fit nobs = 95
+  cluster_full <- rep(letters[1:10], each = 10) # length 100, fit nobs = 95
   err <- tryCatch(
     table_regression(fit, vcov = "CR2", cluster = cluster_full),
     spicy_invalid_input = function(e) e
   )
   expect_s3_class(err, "spicy_invalid_input")
   expect_match(conditionMessage(err), "length 100", fixed = TRUE)
-  expect_match(conditionMessage(err), "95 observations", fixed = TRUE)
+  expect_match(conditionMessage(err), "requires length 95", fixed = TRUE)
 })
 
 test_that("AUDIT: glm + subset -> nobs reflects subset, table renders", {
-  fit <- glm(am ~ mpg + wt, data = mtcars, subset = mpg > 15,
-              family = binomial)
+  fit <- glm(am ~ mpg + wt, data = mtcars, subset = mpg > 15, family = binomial)
   expect_equal(nobs(fit), 26L)
   out <- table_regression(fit)
   expect_s3_class(out, "spicy_regression_table")
@@ -1370,31 +1926,42 @@ test_that("AUDIT: empty list + NULL element -> clear errors", {
 })
 
 test_that("AUDIT: error messages reference both lm and glm (no stale lm-only)", {
-  err <- tryCatch(table_regression(NULL),
-                   spicy_invalid_input = function(e) e)
+  err <- tryCatch(table_regression(NULL), spicy_invalid_input = function(e) e)
   expect_match(conditionMessage(err), "lm.*glm|glm.*lm", perl = TRUE)
-  err <- tryCatch(table_regression(list()),
-                   spicy_invalid_input = function(e) e)
+  err <- tryCatch(table_regression(list()), spicy_invalid_input = function(e) e)
   expect_match(conditionMessage(err), "lm.*glm|glm.*lm", perl = TRUE)
 })
 
 test_that("AUDIT: ci_level boundary values rejected with clear error", {
   fit <- glm(am ~ mpg, data = mt, family = binomial)
   for (bad in list(0, 1, -0.1, 1.5, NA_real_)) {
-    err <- tryCatch(table_regression(fit, ci_level = bad),
-                     spicy_invalid_input = function(e) e)
+    err <- tryCatch(
+      table_regression(fit, ci_level = bad),
+      spicy_invalid_input = function(e) e
+    )
     expect_s3_class(err, "spicy_invalid_input")
   }
 })
 
 test_that("AUDIT: mixed-family glms -> per-model exp header (OR / IRR)", {
-  m_log  <- glm(am ~ mpg, data = mt, family = binomial)
+  m_log <- glm(am ~ mpg, data = mt, family = binomial)
   m_pois <- glm(am ~ mpg, data = mt, family = poisson)
-  out <- table_regression(list("Logit" = m_log, "Pois" = m_pois),
-                            exponentiate = TRUE)
-  expect_true("Logit: OR"  %in% names(out))
-  expect_true("Pois: IRR"  %in% names(out))
-  expect_match(attr(out, "note"), "OR / IRR", fixed = TRUE)
+  out <- table_regression(
+    list("Logit" = m_log, "Pois" = m_pois),
+    exponentiate = TRUE
+  )
+  expect_true("Logit: OR" %in% names(out))
+  expect_true("Pois: IRR" %in% names(out))
+  expect_match(
+    attr(out, "note"),
+    paste0(
+      "Coefficients exponentiated and displayed as ",
+      "OR / IRR (per family); ",
+      "SE on the displayed ratio scale (delta method); ",
+      "CI bounds exponentiated (asymmetric)."
+    ),
+    fixed = TRUE
+  )
 })
 
 test_that("AUDIT: all HC* variants work for glm (sandwich S3 method present)", {
@@ -1404,8 +1971,7 @@ test_that("AUDIT: all HC* variants work for glm (sandwich S3 method present)", {
       td <- broom::tidy(table_regression(fit, vcov = h))
     )
     se <- td$std.error[td$estimate_type == "B" & td$term == "mpg"]
-    expect_true(is.finite(se) && se > 0,
-                info = paste("vcov =", h, "se =", se))
+    expect_true(is.finite(se) && se > 0, info = paste("vcov =", h, "se =", se))
   }
 })
 
@@ -1437,8 +2003,7 @@ test_that("AUDIT: beta token without standardized -> hint lists all 5 methods", 
   expect_s3_class(err, "spicy_invalid_input")
   msg <- conditionMessage(err)
   for (m in c("refit", "posthoc", "basic", "smart", "pseudo")) {
-    expect_match(msg, m, fixed = TRUE,
-                 info = paste("missing method =", m))
+    expect_match(msg, m, fixed = TRUE, info = paste("missing method =", m))
   }
 })
 
@@ -1458,8 +2023,8 @@ test_that("AUDIT B5: non-alphabetical model names map to correct columns", {
   # order ("Z", "A") differs from alphabetical ("A", "Z"). The B value
   # under "Z: B" must come from the model the user passed as "Z", NOT
   # the alphabetically-first model.
-  m1 <- lm(mpg ~ wt,           data = mtcars)
-  m2 <- lm(mpg ~ wt + cyl,     data = mtcars)
+  m1 <- lm(mpg ~ wt, data = mtcars)
+  m2 <- lm(mpg ~ wt + cyl, data = mtcars)
   out <- table_regression(list("Z" = m1, "A" = m2))
   df <- as.data.frame(out, stringsAsFactors = FALSE)
   # Z has only intercept + wt; A has intercept + wt + cyl.
@@ -1478,10 +2043,12 @@ test_that("AUDIT B5: non-alphabetical model names map to correct columns", {
 test_that("AUDIT B5: mixed lm + glm with non-alphabetical labels", {
   # The original audit reproducer: lm + glm with exponentiate. Under
   # the bug, the OLS column got the OR header AND the binomial values.
-  m_lm  <- lm(mpg ~ wt, data = mtcars)
+  m_lm <- lm(mpg ~ wt, data = mtcars)
   m_glm <- glm(am ~ mpg, data = mtcars, family = binomial)
-  out <- table_regression(list("OLS" = m_lm, "Logit" = m_glm),
-                            exponentiate = TRUE)
+  out <- table_regression(
+    list("OLS" = m_lm, "Logit" = m_glm),
+    exponentiate = TRUE
+  )
   df <- as.data.frame(out, stringsAsFactors = FALSE)
   # OLS column header must be "OLS: B" (no exp on lm)
   expect_true("OLS: B" %in% names(df))
@@ -1498,9 +2065,11 @@ test_that("AUDIT B5: mixed lm + glm with non-alphabetical labels", {
   expect_equal(trimws(mpg_row$`OLS: B`), "")
   expect_match(mpg_row$`Logit: OR`, "1\\.36")
   # Outcome row is hidden by default; opt back in via outcome_labels.
-  out2 <- table_regression(list("OLS" = m_lm, "Logit" = m_glm),
-                            exponentiate = TRUE,
-                            outcome_labels = c("mpg", "am"))
+  out2 <- table_regression(
+    list("OLS" = m_lm, "Logit" = m_glm),
+    exponentiate = TRUE,
+    outcome_labels = c("mpg", "am")
+  )
   df2 <- as.data.frame(out2, stringsAsFactors = FALSE)
   out_row <- df2[df2$Variable == "Outcome", , drop = FALSE]
   expect_equal(trimws(out_row$`OLS: B`), "mpg")
@@ -1508,9 +2077,9 @@ test_that("AUDIT B5: mixed lm + glm with non-alphabetical labels", {
 })
 
 test_that("AUDIT B5: 3-model with non-alphabetical names preserves input order", {
-  m1 <- lm(mpg ~ wt,             data = mtcars)
-  m2 <- lm(mpg ~ wt + cyl,       data = mtcars)
-  m3 <- lm(mpg ~ wt + cyl + hp,  data = mtcars)
+  m1 <- lm(mpg ~ wt, data = mtcars)
+  m2 <- lm(mpg ~ wt + cyl, data = mtcars)
+  m3 <- lm(mpg ~ wt + cyl + hp, data = mtcars)
   out <- table_regression(list("Z" = m1, "A" = m2, "M" = m3))
   cols <- names(as.data.frame(out, stringsAsFactors = FALSE))
   # First non-Variable col must be Z (input position 1), then A, then M
@@ -1525,26 +2094,28 @@ test_that("AUDIT B5: 3-model with non-alphabetical names preserves input order",
 test_that("AUDIT B5: pivot_aligned_wide also respects input order", {
   m1 <- lm(mpg ~ wt, data = mtcars)
   m2 <- lm(mpg ~ wt + cyl, data = mtcars)
-  ext1 <- spicy:::extract_lm_phase1(m1, model_id = "Z")
-  ext2 <- spicy:::extract_lm_phase1(m2, model_id = "A")
-  aligned <- spicy:::align_extracts(list(ext1, ext2))
-  wide <- spicy:::pivot_aligned_wide(aligned,
-                                       model_labels = c("Z-label", "A-label"))
+  fr1 <- spicy:::as_regression_frame(m1, model_id = "Z")
+  fr2 <- spicy:::as_regression_frame(m2, model_id = "A")
+  aligned <- spicy:::align_frames(list(fr1, fr2), model_ids = c("Z", "A"))
+  wide <- spicy:::pivot_aligned_wide(
+    aligned,
+    model_labels = c("Z-label", "A-label")
+  )
   cols <- names(wide)
   z_est <- grep("^Z-label__estimate", cols)[1]
   a_est <- grep("^A-label__estimate", cols)[1]
   expect_true(!is.na(z_est) && !is.na(a_est))
   expect_true(z_est < a_est)
   # Z's intercept value must be the lm(mpg ~ wt) intercept (37.29),
-  # NOT the lm(mpg ~ wt + cyl) intercept (39.69) — confirms the bug
+  # NOT the lm(mpg ~ wt + cyl) intercept (39.69) – confirms the bug
   # is fixed at the data level (input model_id Z paired with the
   # first input fit, alphabetical re-sort notwithstanding).
-  int_row <- wide[wide$term == "(Intercept)" &
-                    wide$estimate_type == "B", ]
-  expect_equal(int_row[["Z-label__estimate"]], 37.28512627,
-               tolerance = 1e-3)
-  expect_equal(int_row[["A-label__estimate"]], 39.68616,
-               tolerance = 1e-3)
+  int_row <- wide[
+    wide$term == "(Intercept)" &
+      wide$estimate_type == "B",
+  ]
+  expect_equal(int_row[["Z-label__estimate"]], 37.28512627, tolerance = 1e-3)
+  expect_equal(int_row[["A-label__estimate"]], 39.68616, tolerance = 1e-3)
 })
 
 
@@ -1563,11 +2134,14 @@ test_that("AUDIT B6: partially-named models list auto-fills missing slots", {
   models <- list(m1, m2)
   names(models) <- c("", "B")
   out <- table_regression(models)
-  cols <- names(as.data.frame(out, stringsAsFactors = FALSE,
-                                check.names = FALSE))
+  cols <- names(as.data.frame(
+    out,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  ))
   # The unnamed slot gets "Model 1" as label, the named slot keeps "B".
-  expect_true(any(grepl("Model 1:", cols, fixed = TRUE)))
-  expect_true(any(grepl("B:", cols, fixed = TRUE)))
+  expect_true("Model 1: B" %in% cols)
+  expect_true("B: B" %in% cols)
 })
 
 test_that("AUDIT B6: existing duplicate-name validator still fires cleanly", {
@@ -1575,26 +2149,31 @@ test_that("AUDIT B6: existing duplicate-name validator still fires cleanly", {
   m2 <- lm(mpg ~ wt + cyl, data = mtcars)
   models <- list(m1, m2)
   names(models) <- c("A", "A")
-  err <- tryCatch(table_regression(models),
-                   spicy_invalid_input = function(e) e)
+  err <- tryCatch(table_regression(models), spicy_invalid_input = function(e) e)
   expect_s3_class(err, "spicy_invalid_input")
   expect_match(conditionMessage(err), "Duplicate name", fixed = TRUE)
 })
 
 test_that("AUDIT B7: ordered factor with poly contrasts -- grouped under header", {
   # Ordered factors under `contr.poly` (R default for `ordered()`)
-  # produce `<var>.L`, `<var>.Q`, `<var>.C`, ... — orthogonal trend
+  # produce `<var>.L`, `<var>.Q`, `<var>.C`, ... – orthogonal trend
   # coefficients, NOT per-level contrasts. They are grouped under
   # the factor name (like a treatment factor) but with the bare
   # poly suffix (`.L` / `.Q` / `.C` / `^k`) as the sub-row label,
   # in polynomial degree order, and with NO reference row (none
   # exists for poly contrasts). The footer adds an auto note
   # explaining the parameterisation.
-  fit <- glm(dentist_12m ~ age + sex + education,
-              data = sochealth, family = binomial)
+  fit <- glm(
+    dentist_12m ~ age + sex + education,
+    data = sochealth,
+    family = binomial
+  )
   out <- table_regression(fit)
-  vars <- as.data.frame(out, stringsAsFactors = FALSE,
-                         check.names = FALSE)$Variable
+  vars <- as.data.frame(
+    out,
+    stringsAsFactors = FALSE,
+    check.names = FALSE
+  )$Variable
   vars_trimmed <- trimws(vars)
   # The factor header IS present (poly factors are now grouped).
   expect_true(any(vars == "education:"))
@@ -1609,12 +2188,15 @@ test_that("AUDIT B7: ordered factor with poly contrasts -- grouped under header"
   l_pos <- which(vars_trimmed == ".L")
   q_pos <- which(vars_trimmed == ".Q")
   expect_true(l_pos < q_pos)
-  # Auto footer mentions the poly contrasts.
-  expect_match(attr(out, "note"),
-                "Ordered factor `education`: polynomial trends")
+  # Auto footer mentions the poly contrasts (pin the full note line).
+  expect_match(
+    attr(out, "note"),
+    "Ordered factor `education`: polynomial trends (.L = linear, .Q = quadratic).",
+    fixed = TRUE
+  )
   # sex (treatment factor) still groups correctly with ref row
-  expect_true(any(grepl("^sex:", vars)))
-  expect_true(any(grepl("Female.*ref", vars)))
+  expect_true(any(vars == "sex:"))
+  expect_true("Female (ref.)" %in% vars_trimmed)
 })
 
 test_that("AUDIT B7: treatment-coded factor unchanged (regression check)", {
@@ -1622,12 +2204,12 @@ test_that("AUDIT B7: treatment-coded factor unchanged (regression check)", {
   # factors) still get the factor header + reference row + indented
   # levels.
   mt <- mtcars
-  mt$cyl <- factor(mt$cyl)  # unordered factor -> contr.treatment
+  mt$cyl <- factor(mt$cyl) # unordered factor -> contr.treatment
   fit <- glm(am ~ mpg + cyl, data = mt, family = binomial)
   out <- table_regression(fit)
   vars <- as.data.frame(out, stringsAsFactors = FALSE)$Variable
-  expect_true(any(grepl("^cyl:", vars)))     # factor header present
-  expect_true(any(grepl("4.*ref", vars)))    # ref row for cyl=4
+  expect_true(any(vars == "cyl:")) # factor header present
+  expect_true("4 (ref.)" %in% trimws(vars)) # ref row for cyl=4
 })
 
 
@@ -1723,8 +2305,11 @@ test_that("AUDIT B12: cluster supplied without CR* vcov warns explicitly", {
 test_that("AUDIT: no warning when cluster IS used (CR* + cluster)", {
   set.seed(1)
   n <- 100L
-  d <- data.frame(y = rbinom(n, 1, 0.5), x = rnorm(n),
-                  clinic = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rbinom(n, 1, 0.5),
+    x = rnorm(n),
+    clinic = rep(letters[1:10], each = 10)
+  )
   fit <- glm(y ~ x, data = d, family = binomial)
   expect_no_warning(
     table_regression(fit, vcov = "CR2", cluster = d$clinic),
@@ -1735,23 +2320,25 @@ test_that("AUDIT: no warning when cluster IS used (CR* + cluster)", {
 test_that("AUDIT round 6: family x link matrix -- 14 combos all run cleanly", {
   set.seed(1)
   n <- 100L
-  d <- data.frame(y_b = rbinom(n, 1, 0.5),
-                  y_p = rpois(n, 3L),
-                  y_g = rgamma(n, 2, 1),
-                  x = rnorm(n))
+  d <- data.frame(
+    y_b = rbinom(n, 1, 0.5),
+    y_p = rpois(n, 3L),
+    y_g = rgamma(n, 2, 1),
+    x = rnorm(n)
+  )
   matrix_specs <- list(
-    list(fam = binomial(link = "logit"),    y = "y_b"),
-    list(fam = binomial(link = "probit"),   y = "y_b"),
-    list(fam = binomial(link = "cloglog"),  y = "y_b"),
-    list(fam = binomial(link = "log"),      y = "y_b"),
-    list(fam = poisson(link = "log"),       y = "y_p"),
-    list(fam = poisson(link = "identity"),  y = "y_p"),
-    list(fam = poisson(link = "sqrt"),      y = "y_p"),
-    list(fam = Gamma(link = "inverse"),     y = "y_g"),
-    list(fam = Gamma(link = "log"),         y = "y_g"),
-    list(fam = Gamma(link = "identity"),    y = "y_g"),
-    list(fam = quasibinomial(),             y = "y_b"),
-    list(fam = quasipoisson(),              y = "y_p")
+    list(fam = binomial(link = "logit"), y = "y_b"),
+    list(fam = binomial(link = "probit"), y = "y_b"),
+    list(fam = binomial(link = "cloglog"), y = "y_b"),
+    list(fam = binomial(link = "log"), y = "y_b"),
+    list(fam = poisson(link = "log"), y = "y_p"),
+    list(fam = poisson(link = "identity"), y = "y_p"),
+    list(fam = poisson(link = "sqrt"), y = "y_p"),
+    list(fam = Gamma(link = "inverse"), y = "y_g"),
+    list(fam = Gamma(link = "log"), y = "y_g"),
+    list(fam = Gamma(link = "identity"), y = "y_g"),
+    list(fam = quasibinomial(), y = "y_b"),
+    list(fam = quasipoisson(), y = "y_p")
   )
   for (spec in matrix_specs) {
     y <- d[[spec$y]]
@@ -1759,40 +2346,57 @@ test_that("AUDIT round 6: family x link matrix -- 14 combos all run cleanly", {
       suppressWarnings(glm(y ~ d$x, family = spec$fam)),
       error = function(e) NULL
     )
-    if (is.null(fit)) next
+    if (is.null(fit)) {
+      next
+    }
     expect_no_error(
       table_regression(fit),
-      message = sprintf("family = %s / link = %s",
-                         spec$fam$family, spec$fam$link)
+      message = sprintf(
+        "family = %s / link = %s",
+        spec$fam$family,
+        spec$fam$link
+      )
     )
   }
 })
 
 test_that("AUDIT: Helmert and sum contrasts render without bogus ref row", {
+  # Since the non-default-contrasts lot, these rows GROUP under the
+  # parent variable (labelled by contrast-matrix column index) instead
+  # of rendering flat -- still with no reference row, since none
+  # exists under these codings.
   d <- mtcars
   d$cyl_h <- factor(d$cyl)
   contrasts(d$cyl_h) <- contr.helmert(3)
   fit_h <- glm(am ~ cyl_h, data = d, family = binomial)
-  vars_h <- as.data.frame(table_regression(fit_h),
-                            stringsAsFactors = FALSE)$Variable
-  expect_false(any(grepl("ref", vars_h)))    # no ref row for poly-style
-  expect_true("cyl_h1" %in% vars_h)
+  vars_h <- as.data.frame(
+    table_regression(fit_h),
+    stringsAsFactors = FALSE
+  )$Variable
+  expect_false(any(grepl("ref", vars_h))) # no ref row, ever
+  expect_true("cyl_h:" %in% vars_h) # grouped header row
+  expect_true(any(trimws(vars_h) == "1")) # contrast-column label
 
   d$cyl_s <- factor(d$cyl)
   contrasts(d$cyl_s) <- contr.sum(3)
   fit_s <- glm(am ~ cyl_s, data = d, family = binomial)
-  vars_s <- as.data.frame(table_regression(fit_s),
-                            stringsAsFactors = FALSE)$Variable
+  vars_s <- as.data.frame(
+    table_regression(fit_s),
+    stringsAsFactors = FALSE
+  )$Variable
   expect_false(any(grepl("ref", vars_s)))
-  expect_true("cyl_s1" %in% vars_s)
+  expect_true("cyl_s:" %in% vars_s)
+  expect_true(any(trimws(vars_s) == "2"))
 })
 
 test_that("AUDIT: long predictor names render correctly", {
   d <- mtcars
-  names(d)[c(2, 3)] <- c("very_long_predictor_name_1",
-                          "super_long_predictor_2")
-  fit <- glm(am ~ very_long_predictor_name_1 + super_long_predictor_2,
-              data = d, family = binomial)
+  names(d)[c(2, 3)] <- c("very_long_predictor_name_1", "super_long_predictor_2")
+  fit <- glm(
+    am ~ very_long_predictor_name_1 + super_long_predictor_2,
+    data = d,
+    family = binomial
+  )
   out <- table_regression(fit)
   vars <- as.data.frame(out, stringsAsFactors = FALSE)$Variable
   expect_true("very_long_predictor_name_1" %in% vars)
@@ -1803,8 +2407,7 @@ test_that("AUDIT: response types (logical, integer, character->factor)", {
   set.seed(1)
   n <- 100L
   # logical Y
-  d_b <- data.frame(y = sample(c(TRUE, FALSE), n, replace = TRUE),
-                    x = rnorm(n))
+  d_b <- data.frame(y = sample(c(TRUE, FALSE), n, replace = TRUE), x = rnorm(n))
   fit_b <- glm(y ~ x, data = d_b, family = binomial)
   expect_no_error(table_regression(fit_b))
   # integer Y
@@ -1812,8 +2415,7 @@ test_that("AUDIT: response types (logical, integer, character->factor)", {
   fit_p <- glm(y ~ x, data = d_p, family = poisson)
   expect_no_error(table_regression(fit_p))
   # character Y -> factor
-  d_c <- data.frame(y = sample(c("Yes", "No"), n, replace = TRUE),
-                    x = rnorm(n))
+  d_c <- data.frame(y = sample(c("Yes", "No"), n, replace = TRUE), x = rnorm(n))
   fit_c <- glm(factor(y) ~ x, data = d_c, family = binomial)
   expect_no_error(table_regression(fit_c))
 })
@@ -1881,26 +2483,36 @@ test_that("AME caveat: NO caveat when ame + p + ame_p all present", {
   expect_null(cnd)
 })
 
-test_that("align_ci_strings: em-dash and blank cells centered in column", {
-  values <- c("[61.78, 67.49]", "[-0.03, 0.08]", "[2.09, 5.22]",
-              "—", "", NA_character_)
+test_that("align_ci_strings: en-dash and blank cells centered in column", {
+  values <- c(
+    "[61.78, 67.49]",
+    "[-0.03, 0.08]",
+    "[2.09, 5.22]",
+    "–",
+    "",
+    NA_character_
+  )
   out <- spicy:::align_ci_strings(values)
   # All cells have the same total width
   expect_equal(length(unique(nchar(out))), 1L)
   # CI cells: brackets, commas, decimal points all at fixed positions
   ci_rows <- out[seq_len(3L)]
-  bracket_positions <- vapply(ci_rows,
-                                function(s) regexpr("\\[", s)[[1]],
-                                integer(1))
+  bracket_positions <- vapply(
+    ci_rows,
+    function(s) regexpr("\\[", s)[[1]],
+    integer(1)
+  )
   expect_equal(length(unique(bracket_positions)), 1L)
-  close_positions <- vapply(ci_rows,
-                              function(s) regexpr("\\]", s)[[1]],
-                              integer(1))
+  close_positions <- vapply(
+    ci_rows,
+    function(s) regexpr("\\]", s)[[1]],
+    integer(1)
+  )
   expect_equal(length(unique(close_positions)), 1L)
-  # em-dash cell: contains the em-dash glyph, surrounded by spaces
+  # en-dash cell: contains the en-dash glyph, surrounded by spaces
   em_cell <- out[4L]
-  expect_true(grepl("—", em_cell))
-  expect_match(em_cell, "^\\s+—\\s+$", perl = TRUE)
+  expect_true(grepl("–", em_cell))
+  expect_match(em_cell, "^\\s+–\\s+$", perl = TRUE)
   # blank / NA: full-width whitespace
   expect_match(out[5L], "^\\s+$", perl = TRUE)
   expect_match(out[6L], "^\\s+$", perl = TRUE)
@@ -1917,34 +2529,47 @@ test_that("align_ci_strings: works with European decimal mark (semicolon sep)", 
   expect_match(out[1L], "; ", fixed = TRUE)
 })
 
-test_that("partial_chi2 cell renders em-dash when estimate is NA (direct)", {
+test_that("partial_chi2 cell renders en-dash when estimate is NA (direct)", {
   # Exercises the is.na(est) branch of the 'value (df)' formatter.
-  long_row <- data.frame(estimate = NA_real_, df = NA_real_,
-                          stringsAsFactors = FALSE)
+  long_row <- data.frame(
+    estimate = NA_real_,
+    df = NA_real_,
+    stringsAsFactors = FALSE
+  )
   cs <- list(token = "partial_chi2", fields = c("estimate", "df"))
-  out <- spicy:::format_cell_value(long_row, cs, stars_map = NULL,
-                                     digits = 2L, p_digits = 3L,
-                                     effect_size_digits = 2L,
-                                     decimal_mark = ".",
-                                     show_columns = c("b", "partial_chi2"))
-  expect_equal(out, "—")
+  out <- spicy:::format_cell_value(
+    long_row,
+    cs,
+    stars_map = NULL,
+    digits = 2L,
+    p_digits = 3L,
+    effect_size_digits = 2L,
+    decimal_mark = ".",
+    show_columns = c("b", "partial_chi2")
+  )
+  expect_equal(out, "–")
 })
 
-test_that("AME cell renders em-dash when estimate is NA (estimate-only token)", {
+test_that("AME cell renders en-dash when estimate is NA (estimate-only token)", {
   # Post-split (0.12): the `ame` token is estimate-only. The is.na(val)
-  # branch of the single-field path returns the em-dash.
+  # branch of the single-field path returns the en-dash.
   format_cell <- spicy:::format_cell_value
   long_row <- data.frame(
     estimate = NA_real_,
     stringsAsFactors = FALSE
   )
   cs <- list(token = "ame", fields = "estimate")
-  out <- format_cell(long_row, cs, stars_map = NULL,
-                       digits = 2L, p_digits = 3L,
-                       effect_size_digits = 2L,
-                       decimal_mark = ".",
-                       show_columns = c("b", "ame"))
-  expect_equal(out, "—")
+  out <- format_cell(
+    long_row,
+    cs,
+    stars_map = NULL,
+    digits = 2L,
+    p_digits = 3L,
+    effect_size_digits = 2L,
+    decimal_mark = ".",
+    show_columns = c("b", "ame")
+  )
+  expect_equal(out, "–")
 })
 
 
@@ -1965,6 +2590,64 @@ test_that("table_regression: padding = 0L produces the most compact output", {
   out_0 <- table_regression(fit, padding = 0L)
   expect_s3_class(out_0, "spicy_regression_table")
   expect_equal(attr(out_0, "padding"), 0L)
+})
+
+# Phase 3 matrix – rd-core:padding-default-headers-centered
+test_that("padding widens every column by exactly N; negative rejected", {
+  fit <- lm(mpg ~ wt + cyl, data = mtcars)
+  seg_widths <- function(lines) {
+    rule <- lines[grepl("┼", lines, fixed = TRUE)][1]
+    nchar(strsplit(rule, "┼", fixed = TRUE)[[1]])
+  }
+  l0 <- capture.output(print(table_regression(fit, padding = 0L)))
+  l4 <- capture.output(print(table_regression(fit, padding = 4L)))
+  w0 <- seg_widths(l0)
+  w4 <- seg_widths(l4)
+  # Variable segment +4; stat segment +4 per data column (B, SE, CI, p)
+  expect_identical(w4[1] - w0[1], 4L)
+  expect_identical(w4[2] - w0[2], 16L)
+  expect_error(
+    table_regression(fit, padding = -1L),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("headers stay centered above the data region regardless of padding", {
+  # Single stat column so the data region is unambiguous: the header
+  # label's midpoint tracks the midpoint of the widest data value.
+  fit <- lm(mpg ~ wt + cyl, data = mtcars)
+  header_center <- function(lines) {
+    hdr <- lines[grepl("│", lines, fixed = TRUE)][1]
+    cell <- strsplit(hdr, "│", fixed = TRUE)[[1]][2]
+    at <- as.integer(regexpr("B", cell, fixed = TRUE))
+    at
+  }
+  data_center <- function(lines) {
+    body <- lines[grepl("│", lines, fixed = TRUE)][-1]
+    cells <- vapply(
+      body,
+      function(x) strsplit(x, "│", fixed = TRUE)[[1]][2],
+      character(1)
+    )
+    cells <- cells[grepl("[0-9]", cells)]
+    starts <- vapply(
+      cells,
+      function(x) as.integer(regexpr("[^ ]", x)),
+      integer(1)
+    )
+    ends <- vapply(
+      cells,
+      function(x) max(which(strsplit(x, "")[[1]] != " ")),
+      integer(1)
+    )
+    (min(starts) + max(ends)) / 2
+  }
+  for (pad in c(0L, 8L)) {
+    lines <- capture.output(print(
+      table_regression(fit, show_columns = "b", padding = pad)
+    ))
+    expect_lt(abs(header_center(lines) - data_center(lines)), 1.5)
+  }
 })
 
 
@@ -2000,18 +2683,24 @@ test_that("lm basic: matches effectsize::standardize_parameters", {
   td <- broom::tidy(table_regression(fit, standardized = "basic"))
   beta <- td[td$estimate_type == "beta", ]
   oracle <- effectsize::standardize_parameters(fit, method = "basic")
+  n_checked <- 0L
   for (term_nm in c("wt", "cyl6", "cyl8")) {
-    if (!term_nm %in% beta$term) next
+    if (!term_nm %in% beta$term) {
+      next
+    }
     expect_equal(
       beta$estimate[beta$term == term_nm],
       oracle$Std_Coefficient[oracle$Parameter == term_nm],
       tolerance = 1e-8,
       info = paste("term =", term_nm)
     )
+    n_checked <- n_checked + 1L
   }
+  # All three terms, not "whichever happened to survive a rename".
+  expect_oracle_covered(n_checked, 3L)
 })
 
-test_that("lm smart: binary numeric uses 2 * SD (Gelman 2008)", {
+test_that("lm smart: continuous uses 2 * SD, binary stays raw (Gelman 2008)", {
   set.seed(1)
   n <- 100L
   d <- data.frame(
@@ -2023,14 +2712,63 @@ test_that("lm smart: binary numeric uses 2 * SD (Gelman 2008)", {
   td <- broom::tidy(table_regression(fit, standardized = "smart"))
   beta_bin <- td$estimate[td$estimate_type == "beta" & td$term == "bin_num"]
   beta_cont <- td$estimate[td$estimate_type == "beta" & td$term == "cont"]
-  # Manual Gelman 2008:
-  #   binary: beta = b * 2 * sd(X) / sd(Y)
-  #   continuous: beta = b * sd(X) / sd(Y)
+  # Gelman (2008), "Scaling regression inputs by dividing by two
+  # standard deviations": CONTINUOUS inputs are divided by 2 sd(X)
+  # (so the coefficient reports a 2-SD swing, comparable to a
+  # binary's 0 -> 1 step); BINARY inputs stay untouched. y is
+  # z-scored by one sd, spicy's shared beta convention. (The
+  # <= 0.12.0 implementation applied the rule inverted.)
   b <- coef(fit)
-  expected_bin <- b["bin_num"] * 2 * sd(d$bin_num) / sd(d$y)
-  expected_cont <- b["cont"] * sd(d$cont) / sd(d$y)
+  expected_bin <- b["bin_num"] / sd(d$y)
+  expected_cont <- b["cont"] * 2 * sd(d$cont) / sd(d$y)
   expect_equal(beta_bin, unname(expected_bin), tolerance = 1e-10)
   expect_equal(beta_cont, unname(expected_cont), tolerance = 1e-10)
+
+  # Independent refit oracle: transform the DATA per the paper
+  # (continuous / 2sd, binary raw, y z-scored) and refit -- the
+  # coefficients of that refit ARE the smart betas.
+  d2 <- data.frame(
+    y = as.numeric(scale(d$y)),
+    bin_num = d$bin_num,
+    cont = d$cont / (2 * sd(d$cont))
+  )
+  refit <- lm(y ~ bin_num + cont, data = d2)
+  expect_equal(beta_bin, unname(coef(refit)["bin_num"]), tolerance = 1e-10)
+  expect_equal(beta_cont, unname(coef(refit)["cont"]), tolerance = 1e-10)
+})
+
+test_that("glm smart: continuous 2 * SD, binary raw (X-only Gelman)", {
+  set.seed(2)
+  n <- 300L
+  d <- data.frame(
+    bin_num = sample(c(0, 1), n, replace = TRUE),
+    cont = rnorm(n)
+  )
+  d$y <- rbinom(n, 1, plogis(-0.4 + 0.8 * d$bin_num + 0.6 * d$cont))
+  fit <- glm(y ~ bin_num + cont, data = d, family = binomial)
+  res <- spicy:::standardize_glm(fit, method = "smart", weights = NULL)
+  b <- coef(fit)
+  # X-only scaling (sd_y_div = 1): continuous x 2sd(X), binary raw.
+  expect_equal(
+    res$estimate[res$term == "cont"],
+    unname(b["cont"]) * 2 * sd(d$cont),
+    tolerance = 1e-10
+  )
+  expect_equal(
+    res$estimate[res$term == "bin_num"],
+    unname(b["bin_num"]),
+    tolerance = 1e-10
+  )
+  # Independent refit oracle: glm on cont / (2 sd) reproduces the
+  # smart beta for the continuous input exactly (link fixed; the
+  # linear predictor is reparametrised, not changed).
+  d2 <- transform(d, cont = cont / (2 * sd(cont)))
+  refit <- glm(y ~ bin_num + cont, data = d2, family = binomial)
+  expect_equal(
+    res$estimate[res$term == "cont"],
+    unname(coef(refit)["cont"]),
+    tolerance = 1e-8
+  )
 })
 
 test_that("lm standardize: intercept beta absent from tidy for algebraic methods", {
@@ -2040,8 +2778,10 @@ test_that("lm standardize: intercept beta absent from tidy for algebraic methods
   fit <- lm(mpg ~ wt, data = mtcars)
   for (m in c("posthoc", "basic", "smart")) {
     td <- broom::tidy(table_regression(fit, standardized = m))
-    n_int_beta <- sum(td$estimate_type == "beta" &
-                        td$term == "(Intercept)")
+    n_int_beta <- sum(
+      td$estimate_type == "beta" &
+        td$term == "(Intercept)"
+    )
     expect_equal(n_int_beta, 0L, info = paste("method =", m))
   }
 })
@@ -2049,8 +2789,10 @@ test_that("lm standardize: intercept beta absent from tidy for algebraic methods
 test_that("lm standardize: refit returns finite intercept (preserved)", {
   fit <- lm(mpg ~ wt, data = mtcars)
   td <- broom::tidy(table_regression(fit, standardized = "refit"))
-  int_beta <- td$estimate[td$estimate_type == "beta" &
-                            td$term == "(Intercept)"]
+  int_beta <- td$estimate[
+    td$estimate_type == "beta" &
+      td$term == "(Intercept)"
+  ]
   # Refit on z-scored data: intercept is theoretically 0 but
   # floating-point produces machine-epsilon noise. Either way it
   # must be finite (not NA like the algebraic methods).
@@ -2062,22 +2804,35 @@ test_that("lm standardize: t-statistic invariant under linear rescaling", {
   raw_t <- broom::tidy(table_regression(fit))$statistic
   for (m in c("posthoc", "basic", "smart")) {
     td <- broom::tidy(table_regression(fit, standardized = m))
-    beta_t <- td$statistic[td$estimate_type == "beta" &
-                             td$term %in% c("wt", "cyl")]
-    raw_t_wt_cyl <- raw_t[c(2L, 3L)]   # wt, cyl B rows
-    expect_equal(beta_t, raw_t_wt_cyl, tolerance = 1e-10,
-                 info = paste("method =", m))
+    beta_t <- td$statistic[
+      td$estimate_type == "beta" &
+        td$term %in% c("wt", "cyl")
+    ]
+    raw_t_wt_cyl <- raw_t[c(2L, 3L)] # wt, cyl B rows
+    expect_equal(
+      beta_t,
+      raw_t_wt_cyl,
+      tolerance = 1e-10,
+      info = paste("method =", m)
+    )
   }
 })
 
 test_that("lm standardize: CR* yields t-distribution inference with df.residual", {
   set.seed(1)
   n <- 100L
-  d <- data.frame(y = rnorm(n), x = rnorm(n),
-                  clinic = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rnorm(n),
+    x = rnorm(n),
+    clinic = rep(letters[1:10], each = 10)
+  )
   fit <- lm(y ~ x, data = d)
-  td <- broom::tidy(table_regression(fit, vcov = "CR2", cluster = d$clinic,
-                                       standardized = "posthoc"))
+  td <- broom::tidy(table_regression(
+    fit,
+    vcov = "CR2",
+    cluster = d$clinic,
+    standardized = "posthoc"
+  ))
   beta_rows <- td[td$estimate_type == "beta" & td$term == "x", ]
   expect_true(is.finite(beta_rows$df))
   expect_equal(beta_rows$df, df.residual(fit))
@@ -2106,8 +2861,12 @@ test_that("lm standardize: bootstrap vcov path runs cleanly (z-asymptotic CIs)",
   # finite numeric output.
   fit <- lm(mpg ~ wt, data = mtcars)
   set.seed(1)
-  td <- broom::tidy(table_regression(fit, vcov = "bootstrap", boot_n = 100L,
-                                       standardized = "posthoc"))
+  td <- broom::tidy(table_regression(
+    fit,
+    vcov = "bootstrap",
+    boot_n = 100L,
+    standardized = "posthoc"
+  ))
   beta_rows <- td[td$estimate_type == "beta" & td$term == "wt", ]
   expect_true(is.finite(beta_rows$estimate))
   expect_true(is.finite(beta_rows$std.error))
@@ -2115,7 +2874,7 @@ test_that("lm standardize: bootstrap vcov path runs cleanly (z-asymptotic CIs)",
 })
 
 test_that("detect_factor_design_cols: returns integer(0) when no factor", {
-  fit <- lm(mpg ~ wt + cyl, data = mtcars)  # numeric predictors only
+  fit <- lm(mpg ~ wt + cyl, data = mtcars) # numeric predictors only
   cols <- spicy:::detect_factor_design_cols(fit)
   expect_equal(cols, integer(0))
 })
@@ -2162,12 +2921,22 @@ test_that("apply_exponentiate_to_coefs no-ops when no eligible rows", {
   # Frame with only reference rows (all NA) -> no eligible rows
   coefs <- spicy:::empty_coefs_long()
   ref_row <- spicy:::build_one_b_row(
-    nm = "cyl4", model_id = "M1", outcome = "y",
-    estimate = NA_real_, se = NA_real_, ci_low = NA_real_, ci_high = NA_real_,
-    statistic = NA_real_, df = NA_real_, p_value = NA_real_,
+    nm = "cyl4",
+    model_id = "M1",
+    outcome = "y",
+    estimate = NA_real_,
+    se = NA_real_,
+    ci_low = NA_real_,
+    ci_high = NA_real_,
+    statistic = NA_real_,
+    df = NA_real_,
+    p_value = NA_real_,
     test_type = NA_character_,
-    is_singular = FALSE, is_intercept = FALSE, is_reference = TRUE,
-    factor_term = "cyl", factor_level = "4"
+    is_singular = FALSE,
+    is_intercept = FALSE,
+    is_reference = TRUE,
+    factor_term = "cyl",
+    factor_level = "4"
   )
   with_ref <- rbind(coefs, ref_row)
   out2 <- spicy:::apply_exponentiate_to_coefs(with_ref)
@@ -2179,14 +2948,16 @@ test_that("spicy_glm_title_prefix: generic quasi() family", {
   set.seed(1)
   d <- data.frame(y = rnorm(50), x = rnorm(50))
   fit <- tryCatch(
-    suppressWarnings(glm(y ~ x, data = d,
-                          family = quasi(link = "identity",
-                                          variance = "constant"))),
+    suppressWarnings(glm(
+      y ~ x,
+      data = d,
+      family = quasi(link = "identity", variance = "constant")
+    )),
     error = function(e) NULL
   )
   skip_if(is.null(fit), "quasi() fit did not converge")
   title <- attr(table_regression(fit), "title")
-  expect_match(title, "^Quasi-likelihood regression:")
+  expect_identical(title, "Quasi-likelihood regression: y")
 })
 
 test_that("compute_pseudo_r2_nagelkerke: NA when 1 - exp(2 * LL_null / n) <= 0", {
@@ -2211,8 +2982,10 @@ test_that("compute_intercept_only_loglik_glm: returns NA for non-glm-fit-like in
   # NA-defensive paths are unreachable without a contrived fit.
   # This test just ensures the function doesn't error on lm.
   fit <- lm(mpg ~ wt, data = mtcars)
-  out <- tryCatch(spicy:::compute_intercept_only_loglik_glm(fit),
-                   error = function(e) NA_real_)
+  out <- tryCatch(
+    spicy:::compute_intercept_only_loglik_glm(fit),
+    error = function(e) NA_real_
+  )
   expect_true(is.finite(out) || is.na(out))
 })
 
@@ -2226,20 +2999,32 @@ test_that("AME-Satterthwaite footer: mixed lm + glm uses compound wording", {
   set.seed(1)
   n <- 100L
   d <- data.frame(
-    y_l = rnorm(n), y_b = rbinom(n, 1, 0.5),
-    x = rnorm(n), clinic = rep(letters[1:10], each = 10)
+    y_l = rnorm(n),
+    y_b = rbinom(n, 1, 0.5),
+    x = rnorm(n),
+    clinic = rep(letters[1:10], each = 10)
   )
   m_lm <- lm(y_l ~ x, data = d)
   m_gl <- glm(y_b ~ x, data = d, family = binomial)
   out <- table_regression(
     list(m_lm, m_gl),
-    vcov = "CR2", cluster = d$clinic,
+    vcov = "CR2",
+    cluster = d$clinic,
     show_columns = c("b", "ame", "ame_p", "p")
   )
   note <- attr(out, "note")
-  expect_match(note, "linear_contrast", fixed = TRUE)
-  expect_match(note, "coef_test", fixed = TRUE)
-  expect_match(note, "closed-form", fixed = TRUE)
+  # Phase 7c22 (item e): footer trimmed for the lm+glm mixed case --
+  # pin the complete compound line.
+  expect_match(
+    note,
+    paste0(
+      "AME inference: t-test with Satterthwaite df ",
+      "(closed-form for lm; dominant-coefficient approximation for glm)."
+    ),
+    fixed = TRUE
+  )
+  expect_false(grepl("clubSandwich", note, fixed = TRUE))
+  expect_false(grepl("linear_contrast", note, fixed = TRUE))
 })
 
 
@@ -2250,18 +3035,28 @@ test_that("AME-Satterthwaite footer: mixed lm + glm uses compound wording", {
 test_that("cluster - formula form (~region) resolves against model.frame", {
   skip_if_not_installed("clubSandwich")
   set.seed(1)
-  d <- data.frame(y = rnorm(100), x = rnorm(100),
-                  region = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rnorm(100),
+    x = rnorm(100),
+    region = rep(letters[1:10], each = 10)
+  )
   fit <- lm(y ~ x, data = d)
   out <- table_regression(fit, vcov = "CR2", cluster = ~region)
-  expect_match(attr(out, "note"), "clusters by region", fixed = TRUE)
+  expect_match(
+    attr(out, "note"),
+    "Std. errors: cluster-robust (CR2), clusters by region.",
+    fixed = TRUE
+  )
 })
 
 test_that("cluster - string form ('region') resolves identically", {
   skip_if_not_installed("clubSandwich")
   set.seed(2)
-  d <- data.frame(y = rnorm(100), x = rnorm(100),
-                  region = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rnorm(100),
+    x = rnorm(100),
+    region = rep(letters[1:10], each = 10)
+  )
   fit <- lm(y ~ x, data = d)
   out_str <- table_regression(fit, vcov = "CR2", cluster = "region")
   out_form <- table_regression(fit, vcov = "CR2", cluster = ~region)
@@ -2272,8 +3067,11 @@ test_that("cluster - string form ('region') resolves identically", {
 test_that("cluster - vector form (df$region) still supported for derived keys", {
   skip_if_not_installed("clubSandwich")
   set.seed(3)
-  d <- data.frame(y = rnorm(100), x = rnorm(100),
-                  region = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rnorm(100),
+    x = rnorm(100),
+    region = rep(letters[1:10], each = 10)
+  )
   fit <- lm(y ~ x, data = d)
   # Derived cluster key not present as a column
   derived <- as.character(d$region)
@@ -2285,13 +3083,18 @@ test_that("cluster - formula with interaction (~region:year)", {
   skip_if_not_installed("clubSandwich")
   set.seed(4)
   d <- data.frame(
-    y = rnorm(200), x = rnorm(200),
+    y = rnorm(200),
+    x = rnorm(200),
     region = rep(letters[1:10], each = 20),
-    year   = rep(2010:2019, times = 20)
+    year = rep(2010:2019, times = 20)
   )
   fit <- lm(y ~ x, data = d)
-  out <- table_regression(fit, vcov = "CR2", cluster = ~region:year)
-  expect_match(attr(out, "note"), "clusters by region:year", fixed = TRUE)
+  out <- table_regression(fit, vcov = "CR2", cluster = ~ region:year)
+  expect_match(
+    attr(out, "note"),
+    "Std. errors: cluster-robust (CR2), clusters by region:year.",
+    fixed = TRUE
+  )
 })
 
 test_that("cluster - unknown column raises spicy_invalid_input with hint", {
@@ -2316,8 +3119,11 @@ test_that("cluster - string column not in data raises spicy_invalid_input", {
 test_that("cluster - list of mixed forms (formula / string / vector) for multi-model", {
   skip_if_not_installed("clubSandwich")
   set.seed(5)
-  d <- data.frame(y = rnorm(80), x = rnorm(80),
-                  region = rep(letters[1:8], each = 10))
+  d <- data.frame(
+    y = rnorm(80),
+    x = rnorm(80),
+    region = rep(letters[1:8], each = 10)
+  )
   m1 <- lm(y ~ x, data = d)
   m2 <- lm(y ~ x, data = d)
   m3 <- lm(y ~ x, data = d)
@@ -2351,12 +3157,145 @@ test_that("cluster - local variable with the same name as a column still works (
   # in the caller env: must use the vector silently, no error.
   skip_if_not_installed("clubSandwich")
   set.seed(6)
-  d <- data.frame(y = rnorm(100), x = rnorm(100),
-                  region = rep(letters[1:10], each = 10))
+  d <- data.frame(
+    y = rnorm(100),
+    x = rnorm(100),
+    region = rep(letters[1:10], each = 10)
+  )
   fit <- lm(y ~ x, data = d)
   my_cluster <- d$region
   out <- table_regression(fit, vcov = "CR2", cluster = my_cluster)
   expect_s3_class(out, "spicy_regression_table")
   # Footer reflects the local var name
-  expect_match(attr(out, "note"), "clusters by my_cluster", fixed = TRUE)
+  expect_match(
+    attr(out, "note"),
+    "Std. errors: cluster-robust (CR2), clusters by my_cluster.",
+    fixed = TRUE
+  )
+})
+
+
+# ============================================================================
+# Phase 3 matrix – rd-core: glm family coverage, Tjur scope, chi2 format
+# ============================================================================
+
+test_that("every documented glm family renders with summary()-oracle SEs", {
+  # rd-core:description-glm-families
+  fits <- list(
+    binomial = glm(am ~ mpg, data = mtcars, family = binomial),
+    poisson = glm(carb ~ wt, data = mtcars, family = poisson),
+    gamma_log = glm(mpg ~ wt, data = mtcars, family = Gamma(link = "log")),
+    inverse_gaussian_log = glm(
+      mpg ~ wt,
+      data = mtcars,
+      family = inverse.gaussian(link = "log")
+    ),
+    quasipoisson = glm(carb ~ wt, data = mtcars, family = quasipoisson),
+    quasibinomial = glm(am ~ mpg, data = mtcars, family = quasibinomial)
+  )
+  for (nm in names(fits)) {
+    fit <- fits[[nm]]
+    out <- table_regression(fit)
+    s <- as_structured(out)
+    coef_rows <- match(rownames(summary(fit)$coefficients), s$body$Variable)
+    expect_false(anyNA(coef_rows), info = nm)
+    expect_equal(
+      s$body$SE[coef_rows],
+      unname(summary(fit)$coefficients[, 2]),
+      tolerance = 1e-10,
+      info = nm
+    )
+  }
+})
+
+test_that("pseudo_r2_tjur: binomial oracle value; no row for other families", {
+  # rd-core:fit-stats-tjur-binomial-only
+  gfit <- glm(am ~ mpg + factor(cyl), data = mtcars, family = binomial)
+  out <- table_regression(gfit, show_fit_stats = "pseudo_r2_tjur")
+  s <- as_structured(out)
+  pi_hat <- fitted(gfit)
+  y <- mtcars$am
+  oracle <- mean(pi_hat[y == 1]) - mean(pi_hat[y == 0])
+  expect_equal(
+    s$body$B[s$body$Variable == "R² (Tjur)"],
+    oracle,
+    tolerance = 1e-10
+  )
+  # Non-binomial set: Tjur is undefined, and an explicit request is
+  # refused up front (the theta/alpha precedent) -- no model in the set
+  # can carry the statistic, so silently dropping the row would hide
+  # the request.
+  pfit <- glm(carb ~ wt, data = mtcars, family = poisson)
+  expect_error(
+    table_regression(pfit, show_fit_stats = c("nobs", "pseudo_r2_tjur")),
+    class = "spicy_invalid_input"
+  )
+  # Mixed set with at least one binomial glm: the request is honoured,
+  # and the non-binomial column renders the per-cell en-dash.
+  outm <- table_regression(
+    list(bin = gfit, pois = pfit),
+    show_fit_stats = c("nobs", "pseudo_r2_tjur")
+  )
+  dm <- as.data.frame(outm, stringsAsFactors = FALSE)
+  varsm <- trimws(dm$Variable)
+  bin_col <- grep("^bin", names(dm), value = TRUE)[1L]
+  pois_col <- grep("^pois", names(dm), value = TRUE)[1L]
+  expect_match(trimws(dm[[bin_col]][varsm == "R² (Tjur)"]), "^[0-9.]+$")
+  expect_identical(trimws(dm[[pois_col]][varsm == "R² (Tjur)"]), "–")
+})
+
+test_that("partial_chi2 renders as 'value (df)' and is refused for lm", {
+  # rd-core:show-columns-partial-chi2-glm-format
+  gfit <- glm(am ~ mpg + factor(cyl), data = mtcars, family = binomial)
+  out <- table_regression(gfit, show_columns = c("b", "partial_chi2"))
+  d <- as.data.frame(out, stringsAsFactors = FALSE)
+  chi_col <- d[["χ²"]]
+  mpg_cell <- trimws(chi_col[trimws(d$Variable) == "mpg"])
+  # Display format: value (df) – numeric term = 1 df
+  expect_match(mpg_cell, "^[0-9]+\\.[0-9]{2} \\(1\\)$")
+  # Values match the drop1(test = 'LRT') oracle
+  dr <- drop1(gfit, test = "LRT")
+  expect_identical(
+    mpg_cell,
+    sprintf("%.2f (%d)", dr["mpg", "LRT"], as.integer(dr["mpg", "Df"]))
+  )
+  # Factor term: k-1 df shared across its dummies
+  lvl_cells <- trimws(chi_col[trimws(d$Variable) %in% c("6", "8")])
+  expect_identical(
+    unique(lvl_cells),
+    sprintf(
+      "%.2f (%d)",
+      dr["factor(cyl)", "LRT"],
+      as.integer(dr["factor(cyl)", "Df"])
+    )
+  )
+  # lm refusal with the variance-explained pointer
+  lfit <- lm(mpg ~ wt + factor(cyl), data = mtcars)
+  expect_error(
+    table_regression(lfit, show_columns = c("b", "partial_chi2")),
+    class = "spicy_invalid_input"
+  )
+})
+
+
+# Phase 3 matrix – vignettes-news:counts-offset-silent (lot T4)
+
+test_that("an offset term is absorbed silently: no coefficient row appears", {
+  set.seed(11)
+  d <- data.frame(
+    y = rpois(80, 3),
+    x = rnorm(80),
+    exposure = runif(80, 1, 5)
+  )
+  fit <- glm(y ~ x + offset(log(exposure)), family = poisson, data = d)
+  tbl <- table_regression(fit)
+  td <- broom::tidy(tbl)
+  expect_false(any(grepl("offset", td$term, fixed = TRUE)))
+  expect_false(any(grepl("exposure", td$term, fixed = TRUE)))
+  out <- paste(capture.output(print(tbl)), collapse = "\n")
+  expect_false(grepl("offset", out, fixed = TRUE))
+  # The offset is still part of the model: the intercept differs from
+  # the same fit without it.
+  fit0 <- glm(y ~ x, family = poisson, data = d)
+  expect_gt(abs(coef(fit)[1] - coef(fit0)[1]), 1e-6)
 })

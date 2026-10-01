@@ -14,13 +14,19 @@
 #' @keywords internal
 #' @export
 print.spicy_continuous_lm_table <- function(x, ...) {
+  # This method re-formats from the raw values, so a journal style used
+  # to build the table has to be back in force here (see
+  # `.style_stamp()`); with no style it is a no-op.
+  .style_pushed <- .style_restore(x)
+  on.exit(.style_end(.style_pushed), add = TRUE)
   digits <- attr(x, "digits") %||% 2L
   fit_digits <- attr(x, "fit_digits") %||% 2L
   effect_size_digits <- attr(x, "effect_size_digits") %||% 2L
   p_digits <- attr(x, "p_digits") %||% 3L
   decimal_mark <- attr(x, "decimal_mark") %||% "."
   ci_level <- attr(x, "ci_level") %||% 0.95
-  by_label <- attr(x, "by_label") %||% "Predictor"
+  by_label <- attr(x, "by_label") %||%
+    spicy_str("title_continuous_lm_by_fallback")
   show_statistic <- attr(x, "show_statistic") %||% FALSE
   show_p_value <- attr(x, "show_p_value") %||% TRUE
   show_n <- attr(x, "show_n") %||% TRUE
@@ -30,8 +36,24 @@ print.spicy_continuous_lm_table <- function(x, ...) {
   r2_type <- attr(x, "r2_type") %||% "r2"
   show_ci <- attr(x, "show_ci") %||% TRUE
   align <- attr(x, "align") %||% "decimal"
-  covariates <- attr(x, "covariates") %||% character()
-  adjustment <- attr(x, "adjustment") %||% NA_character_
+
+  # One spec for the frame and for its headers, from the attributes
+  # read above -- the same object `table_continuous_lm()` hands to the
+  # exporters, rebuilt here because print() may be called on a stored
+  # table long after that call returned.
+  spec <- .lm_column_spec(
+    x,
+    ci_level = ci_level,
+    show_statistic = show_statistic,
+    show_p_value = show_p_value,
+    show_n = show_n,
+    show_weighted_n = show_weighted_n,
+    effect_size = effect_size,
+    effect_size_ci = show_effect_size_ci,
+    r2_type = r2_type,
+    ci = show_ci,
+    decimal_mark = decimal_mark
+  )
 
   display_df <- build_wide_display_df_continuous_lm(
     x,
@@ -48,8 +70,16 @@ print.spicy_continuous_lm_table <- function(x, ...) {
     effect_size = effect_size,
     effect_size_ci = show_effect_size_ci,
     r2_type = r2_type,
-    ci = show_ci
+    ci = show_ci,
+    spec = spec
   )
+
+  # The header a reader sees is the registry label, never the frozen
+  # column key. No shape guard is needed, unlike the categorical
+  # console: `.lm_labels()` maps `names(display_df)` to a vector of the
+  # same length by construction, so `spicy_print_table()`'s abort on a
+  # mismatched label vector is unreachable from here.
+  header_labels <- .lm_labels(names(display_df), .lm_spec_labels(spec))
 
   align_left <- 1L
   if (identical(align, "decimal")) {
@@ -60,21 +90,12 @@ print.spicy_continuous_lm_table <- function(x, ...) {
         decimal_mark = decimal_mark
       )
     }
-    right_cols <- integer(0)
     align_center <- numeric_cols
   } else if (identical(align, "center")) {
-    right_cols <- integer(0)
     align_center <- setdiff(seq_along(display_df), align_left)
-  } else if (identical(align, "right")) {
-    right_cols <- setdiff(seq_along(display_df), align_left)
-    align_center <- integer(0)
   } else {
-    # "auto": legacy per-column rule
-    right_cols <- which(names(display_df) %in% c("n", "Weighted n", "p"))
-    align_center <- setdiff(
-      seq_len(ncol(display_df)),
-      c(align_left, right_cols)
-    )
+    # "right": all numeric columns right-aligned, so nothing is centred.
+    align_center <- integer(0)
   }
 
   # Auto-select padding: use 0 (compact) when the default 2-char
@@ -82,11 +103,28 @@ print.spicy_continuous_lm_table <- function(x, ...) {
   # Each column in build_ascii_table uses: 1 (gutter) + w[i] + 1
   # (gutter) chars, plus 1 char for the vertical separator after
   # column 1; `padding` is added to each w[i].
+  # Measured on what is PRINTED -- the labels, not the keys: measuring
+  # the keys while printing the labels would leave this decision
+  # disagreeing with the header the reader actually gets.
+  #
+  # And measured the way `ascii_table_widths()` measures, by display
+  # WIDTH rather than character count: `nchar()` counts a CJK glyph as
+  # one where the renderer lays it out as two, so a wide label made this
+  # decision over-estimate how much room the compact layout needed and
+  # split the table into panels the console had space for.
+  # `nchar(NA_character_)` is NA on top of that, which would turn the
+  # comparison below into "missing value where TRUE/FALSE needed".
   padding <- 2L
   col_widths <- vapply(
     seq_along(display_df),
     function(i) {
-      max(nchar(c(names(display_df)[i], as.character(display_df[[i]]))))
+      max(
+        crayon::col_nchar(
+          c(header_labels[i], as.character(display_df[[i]])),
+          type = "width"
+        ),
+        na.rm = TRUE
+      )
     },
     numeric(1)
   )
@@ -96,38 +134,162 @@ print.spicy_continuous_lm_table <- function(x, ...) {
     padding <- 0L
   }
 
-  # APA-style footer when the model is covariate-adjusted. Names the
-  # covariate(s) and the adjustment estimand explicitly because the
-  # interpretation of the displayed `emmean` column changes with the
-  # method: "proportional" = G-computation over the observed
-  # covariate distribution; "balanced" = synthetic-grid equal-weight
-  # marginal means. Without the method tag the user cannot tell
-  # which estimand they are reading.
-  note <- if (length(covariates) > 0L && !is.na(adjustment)) {
-    paste0(
-      "Note. Adjusted for ",
-      paste(covariates, collapse = ", "),
-      " (", adjustment, ")."
-    )
-  } else {
-    NULL
-  }
+  # APA-style footer: covariate-adjustment estimand + non-classical
+  # SE-estimator disclosure, built by the shared helper so the console
+  # and every rich exporter carry the same note.
+  note <- .tclm_note_text(x)
 
   spicy_print_table(
     display_df,
-    title = paste0("Continuous outcomes by ", by_label),
+    title = .continuous_lm_title(by_label),
     note = note,
     padding = padding,
     first_column_line = TRUE,
     row_total_line = FALSE,
-    column_total_line = FALSE,
     bottom_line = FALSE,
     align_left_cols = align_left,
     align_center_cols = align_center,
-    group_sep_rows = integer(0)
+    group_sep_rows = integer(0),
+    display_labels = header_labels
   )
 
   invisible(x)
+}
+
+# ---- Table title -----------------------------------------------------------
+
+# Internal: the title of a bivariate linear-model table, from the label
+# of the grouping / predictor variable. Single source for the console
+# header and the caption the rendering engines set, so the two can
+# never drift apart (same contract as `.categorical_title()`).
+.continuous_lm_title <- function(by_label) {
+  spicy_fmt("title_continuous_lm_by", by_label)
+}
+
+# ---- Shared note builder ---------------------------------------------------
+
+# Internal: build the table note shared by the console print method
+# and every rich exporter from the attributes stored on a
+# `spicy_continuous_lm_table` object.
+#
+#   * Line 1 (covariate-adjusted models only): names the covariate(s)
+#     and the adjustment estimand explicitly because the
+#     interpretation of the displayed `emmean` column changes with
+#     the method: "proportional" = G-computation over the observed
+#     covariate distribution; "balanced" = synthetic-grid
+#     equal-weight marginal means. Without the method tag the user
+#     cannot tell which estimand they are reading.
+#   * Line 2 (non-classical `vcov` only): discloses the SE estimator.
+#     Robust / resampling standard errors are never silently
+#     labelled -- same doctrine as table_regression()'s footers.
+#
+# Returns NULL when there is nothing to disclose; otherwise a single
+# string with "Note. " prefixed to the FIRST line and lines joined by
+# "\n" (the console renderer prints multi-line notes as-is; the rich
+# engines collapse the newlines themselves).
+.tclm_note_text <- function(x) {
+  covariates <- attr(x, "covariates") %||% character()
+  adjustment <- attr(x, "adjustment") %||% NA_character_
+  vcov_type <- attr(x, "vcov_type") %||% "classical"
+  cluster_name <- attr(x, "cluster_name") %||% NA_character_
+  # Valid bootstrap replicate counts, one lm fit per table variable:
+  # a single shared count when every fit kept the same number, a
+  # range otherwise (failed replicates are dropped per fit).
+  boot_valid <- if ("boot_n_valid" %in% names(x)) {
+    v <- unique(stats::na.omit(as.integer(x[["boot_n_valid"]])))
+    if (length(v)) v else NULL
+  } else {
+    NULL
+  }
+
+  lines <- character()
+  if (length(covariates) > 0L && !is.na(adjustment)) {
+    # The `adjustment` TOKEN stays an API identifier; only its display form
+    # comes from the registry.
+    adjustment_label <- switch(
+      adjustment,
+      proportional = spicy_str("note_adjustment_proportional"),
+      balanced = spicy_str("note_adjustment_balanced"),
+      adjustment
+    )
+    lines <- c(
+      lines,
+      spicy_fmt(
+        "note_adjusted_for",
+        paste(covariates, collapse = ", "),
+        adjustment_label
+      )
+    )
+  }
+  if (!identical(vcov_type, "classical")) {
+    lines <- c(
+      lines,
+      spicy_fmt(
+        "note_std_errors_single",
+        .tclm_vcov_label(vcov_type, cluster_name, boot_valid)
+      )
+    )
+  }
+  # Missing-data disclosure (rows dropped for a missing `by` value or
+  # a missing weight), assembled by table_continuous_lm() -- the same
+  # ledger convention as table_continuous() / table_categorical().
+  missing_note <- attr(x, "missing_note")
+  if (!is.null(missing_note)) {
+    lines <- c(lines, missing_note)
+  }
+  if (length(lines) == 0L) {
+    return(NULL)
+  }
+  lines[1L] <- paste0(spicy_str("note_prefix"), lines[1L])
+  paste(lines, collapse = "\n")
+}
+
+# Internal: human-readable label for a non-classical SE estimator.
+# `cluster_name` (the resolved cluster column name, or NA when the
+# cluster vector was supplied without a recoverable name) is only
+# used by the CR* branch.
+# `boot_valid`: integer vector of valid bootstrap replicate counts
+# (one lm fit per table variable); NULL outside vcov = "bootstrap".
+.tclm_vcov_label <- function(
+  vcov_type,
+  cluster_name = NA_character_,
+  boot_valid = NULL
+) {
+  if (startsWith(vcov_type, "HC")) {
+    return(spicy_fmt("note_vcov_hc", vcov_type))
+  }
+  if (startsWith(vcov_type, "CR")) {
+    # The regression family's `note_vcov_cr` bundles the cluster fragment;
+    # here it is optional, so the two halves are composed instead.
+    label <- spicy_fmt("note_vcov_cr_bare", vcov_type)
+    if (
+      is.character(cluster_name) &&
+        length(cluster_name) == 1L &&
+        !is.na(cluster_name) &&
+        nzchar(cluster_name)
+    ) {
+      label <- paste0(label, spicy_fmt("note_vcov_cluster_by", cluster_name))
+    }
+    return(label)
+  }
+  if (identical(vcov_type, "bootstrap")) {
+    reps <- if (is.null(boot_valid) || !length(boot_valid)) {
+      ""
+    } else if (length(boot_valid) == 1L) {
+      spicy_fmt("note_vcov_bootstrap_reps", boot_valid)
+    } else {
+      spicy_fmt(
+        "note_vcov_bootstrap_reps_range",
+        min(boot_valid),
+        max(boot_valid)
+      )
+    }
+    return(spicy_fmt("note_vcov_bootstrap", reps))
+  }
+  if (identical(vcov_type, "jackknife")) {
+    return(spicy_str("note_vcov_jackknife_plain"))
+  }
+  vcov_type # nocov -- defensive: `vcov` is validated upstream
 }
 
 # ---- Coercion to plain data.frame / tibble --------------------------------
@@ -240,8 +402,7 @@ as_tibble.spicy_continuous_lm_table <- function(x, ...) {
 #' @param ... Currently ignored. Present for compatibility with the
 #'   [broom::tidy()] / [broom::glance()] generics.
 #'
-#' @return A `tbl_df` (when `tibble` is installed) or a plain
-#'   `data.frame`.
+#' @return A `tbl_df`.
 #'
 #' @seealso [as.data.frame.spicy_continuous_lm_table()] for the raw
 #'   long-format access.
@@ -274,6 +435,9 @@ tidy.spicy_continuous_lm_table <- function(x, ...) {
   if (any(effect_idx)) {
     types <- long$estimate_type[effect_idx]
     is_slope <- types == "slope"
+    # A tidy VALUE, not a header: the " - " reads like the one in the
+    # delta column key but names a contrast in a data column, so it must
+    # never follow that header's template.
     term_strings <- ifelse(
       is_slope,
       long$predictor_label[effect_idx],

@@ -25,11 +25,39 @@
 # the conventional Steiger inversion and always brackets the
 # Olejnik & Algina point estimate in non-degenerate cases.
 
+# Every show_columns token that asks for a term-level partial effect
+# size: the four estimands and the `_ci` variants that reuse the same
+# underlying computation. Single producer, so the capability guard in
+# table_regression() and the extraction gate below can never disagree
+# about what "a partial effect size was requested" means.
+.PARTIAL_ES_TOKENS <- c(
+  "partial_f2",
+  "partial_f2_ci",
+  "partial_eta2",
+  "partial_eta2_ci",
+  "partial_omega2",
+  "partial_omega2_ci",
+  "partial_chi2"
+)
+
+# The variance-explained half of the set: everything above except the
+# likelihood-ratio chi-square, which is the GLM analog rather than a
+# partition of sums of squares. This is the subset the class refusals
+# name -- glm, GEE and mixed fits each reject exactly these, for the same
+# reason -- and the subset the lm extractor computes. Derived, not
+# re-spelt, so adding an estimand upstream cannot leave one of the four
+# readers behind.
+.PARTIAL_VARIANCE_ES_TOKENS <- setdiff(.PARTIAL_ES_TOKENS, "partial_chi2")
 
 # ---- Public-internal entry point ------------------------------------------
 
-extract_partial_effect_rows <- function(fit, ci_level, show_columns,
-                                         model_id, outcome) {
+extract_partial_effect_rows <- function(
+  fit,
+  ci_level,
+  show_columns,
+  model_id,
+  outcome
+) {
   # glm path: only partial_chi2 is defined (variance-explained
   # tokens were rejected upstream by validate_class_appropriate_tokens).
   if (inherits(fit, "glm")) {
@@ -48,10 +76,7 @@ extract_partial_effect_rows <- function(fit, ci_level, show_columns,
   # Map both atomic tokens AND their _ci counterparts to the same
   # underlying long-data computation: `partial_f2_ci` reuses the same
   # CI columns built by `partial_f2`.
-  partial_tokens <- c("partial_f2", "partial_f2_ci",
-                       "partial_eta2", "partial_eta2_ci",
-                       "partial_omega2", "partial_omega2_ci")
-  active <- intersect(show_columns, partial_tokens)
+  active <- intersect(show_columns, .PARTIAL_VARIANCE_ES_TOKENS)
   if (length(active) == 0L) {
     return(empty_coefs_long())
   }
@@ -71,7 +96,7 @@ extract_partial_effect_rows <- function(fit, ci_level, show_columns,
   # Cache: one partial-effect computation per unique non-intercept term.
   # Factor coefs (k-1 dummies) and interaction coefs (multi-df) all
   # share the same partial F-test, so caching by term avoids duplicate
-  # drop1() + uniroot() work.
+  # nested-refit + uniroot() work.
   unique_term_idx <- unique(assign_idx[assign_idx != 0L])
   cache <- setNames(
     vector("list", length(unique_term_idx)),
@@ -88,10 +113,16 @@ extract_partial_effect_rows <- function(fit, ci_level, show_columns,
   rows <- list()
   for (i in seq_along(cf_names)) {
     term_idx <- assign_idx[i]
-    if (term_idx == 0L) next       # intercept -- no partial effect
-    if (is.na(cf[i])) next         # singular coef -- em-dashed by renderer
+    if (term_idx == 0L) {
+      next
+    } # intercept -- no partial effect
+    if (is.na(cf[i])) {
+      next
+    } # singular coef -- en-dashed by renderer
     eff <- cache[[as.character(term_idx)]]
-    if (is.null(eff)) next         # drop1 failed -- renderer em-dashes
+    if (is.null(eff)) {
+      next
+    } # focal F unavailable -- renderer en-dashes
 
     nm <- cf_names[i]
     fmeta <- factor_meta[[nm]]
@@ -114,7 +145,8 @@ extract_partial_effect_rows <- function(fit, ci_level, show_columns,
         is_intercept = FALSE,
         is_reference = FALSE,
         factor_term = fmeta$factor_term %||% NA_character_,
-        factor_level = fmeta$factor_level %||% NA_character_
+        factor_level = fmeta$factor_level %||% NA_character_,
+        factor_level_pos = fmeta$factor_level_pos %||% NA_integer_
       )
     }
   }
@@ -127,10 +159,10 @@ extract_partial_effect_rows <- function(fit, ci_level, show_columns,
 
 # ---- Per-term computation -------------------------------------------------
 
-# Compute the partial F + the three effect-size estimands and their
-# CIs for one model term. Returns NULL on any failure (drop1 failure,
-# non-finite F, etc.) -- the caller skips the term and the renderer
-# em-dashes the corresponding cells.
+# Compute the Type-II partial F + the three effect-size estimands and
+# their CIs for one model term. Returns NULL on any failure (nested
+# refit failure, non-finite F, etc.) -- the caller skips the term and
+# the renderer en-dashes the corresponding cells.
 compute_partial_effects_for_term <- function(fit, term_label, ci_level) {
   fs <- extract_lm_focal_f_stat(fit, term_label)
   if (is.null(fs) || !is.finite(fs$f_obs) || fs$f_obs < 0) {
@@ -191,7 +223,7 @@ compute_partial_effects_for_term <- function(fit, term_label, ci_level) {
 }
 
 
-# ---- glm path: term-level partial chi^2 via drop1 LRT -----------------------
+# ---- glm path: term-level partial chi^2 via the Type-II nested LRT ----------
 
 # Build the partial_chi2 rows for one glm fit. One row per non-intercept
 # coef; factor terms emit one row per non-reference dummy, all sharing
@@ -224,10 +256,16 @@ extract_partial_chi2_rows_glm <- function(fit, model_id, outcome) {
   rows <- list()
   for (i in seq_along(cf_names)) {
     term_idx <- assign_idx[i]
-    if (term_idx == 0L) next
-    if (is.na(cf[i])) next
+    if (term_idx == 0L) {
+      next
+    }
+    if (is.na(cf[i])) {
+      next
+    }
     eff <- cache[[as.character(term_idx)]]
-    if (is.null(eff)) next
+    if (is.null(eff)) {
+      next
+    }
 
     nm <- cf_names[i]
     fmeta <- factor_meta[[nm]]
@@ -255,4 +293,250 @@ extract_partial_chi2_rows_glm <- function(fit, model_id, outcome) {
     return(empty_coefs_long())
   }
   do.call(rbind, rows)
+}
+
+
+# ---- Phase 7c18: Type-II Wald chi^2 for mixed-effects fits --------------
+#
+# For each non-intercept term (numeric or factor), compute the joint
+# Wald chi^2 test of the term's fixed-effect coefficients under the
+# marginality-respecting Type-II hypothesis of `car::Anova(type = 2)`
+# (car's `Anova_II_mer` mechanics): the tested rows span the
+# V-orthogonal complement of any higher-order relative of the focal
+# term (A:B is projected out when testing A), so main effects under
+# interactions are invariant to the factor coding (treatment / sum /
+# Helmert). When no relative contains the term -- additive models and
+# highest-order terms -- the hypothesis matrix reduces to the identity
+# block of the term's own coefficients and the statistic is the plain
+# block Wald
+#
+#     chi^2(k) = beta_hat[term]' * V[term, term]^{-1} * beta_hat[term]
+#
+# where k is the number of coefficients spanned by the term (1 for a
+# numeric / Boolean, k-1 for a k-level factor) and V is the model-based
+# vcov.
+#
+# Convention note: SAS PROC MIXED / SPSS GENLINMIXED / Stata `mixed,
+# testparm` and `lmerTest::anova()` report Type-III tests by default.
+# spicy deliberately follows the Type-II convention instead, for
+# coherence with the lm partial F and the glm partial LRT (see
+# `type2_nested_column_masks()` in R/lm_compute.R for the shared
+# containment logic). The two conventions coincide for models without
+# interactions, so those outputs match this column there.
+#
+# Engine support:
+#   * lmer / glmer / glmmTMB: standard `model.matrix(fit)` + `vcov(fit)`.
+#     The fixed-effect coefficient vector aligns 1-to-1 with
+#     model.matrix columns via attr(., "assign").
+#   * nlme::lme: model.matrix uses nlme::getData(fit), in the same
+#     column order as fixef(fit).
+#
+# Returns a frame-schema data.frame ready to rbind onto coefs (same
+# columns as the AME helper's output) with estimate_type = "partial_chi2".
+
+# Internal: Type-II Wald hypothesis matrix for one focal term,
+# replicating car's `Anova_II_mer` / `ConjComp` mechanics. `rel_cols`
+# indexes the coefficients of the higher-order relatives, `focal_cols`
+# those of the focal term, in a length-`p` coefficient vector with
+# covariance `V`. Without relatives the matrix is the identity block of
+# the focal coefficients (the plain block Wald). With relatives, the
+# rows form a basis of the V-orthogonal complement of the relatives'
+# identity rows within the span of { relatives + focal } rows; the
+# quadratic form is invariant to the basis choice, so the statistic
+# matches `car::Anova(type = 2)` for any factor coding.
+type2_wald_hypothesis_matrix <- function(p, rel_cols, focal_cols, V) {
+  I_p <- diag(p)
+  L2 <- I_p[c(rel_cols, focal_cols), , drop = FALSE]
+  if (length(rel_cols) == 0L) {
+    return(L2)
+  }
+  L1 <- I_p[rel_cols, , drop = FALSE]
+  # car:::ConjComp(t(L1), t(L2), V): QR of L2 %*% V %*% t(L1).
+  xq <- qr(L2 %*% V %*% t(L1))
+  L <- if (xq$rank == 0L) {
+    L2 # nocov: identity rows of distinct coefficients are never rank-0
+  } else {
+    t(t(L2) %*% qr.Q(xq, complete = TRUE)[, -seq_len(xq$rank), drop = FALSE])
+  }
+  L[!apply(L, 1L, function(x) all(x == 0)), , drop = FALSE]
+}
+
+.compute_partial_chi2_rows_for_mixed <- function(fit) {
+  fixed_form <- tryCatch(
+    if (inherits(fit, "glmmTMB")) {
+      stats::formula(fit, fixed.only = TRUE, component = "cond")
+    } else if (inherits(fit, c("lmerMod", "glmerMod"))) {
+      stats::formula(lme4::nobars(stats::formula(fit)))
+    } else {
+      stats::formula(fit)
+    },
+    error = function(e) NULL
+  )
+  if (is.null(fixed_form)) {
+    return(NULL) # nocov
+  }
+
+  bhat <- tryCatch(
+    if (inherits(fit, "glmmTMB")) {
+      # glmmTMB::fixef returns a list with $cond / $zi / $disp slots;
+      # the $cond element is the named numeric for the conditional model.
+      cond <- glmmTMB::fixef(fit)$cond
+      setNames(as.numeric(cond), names(cond))
+    } else if (inherits(fit, c("lmerMod", "glmerMod"))) {
+      lme4::fixef(fit)
+    } else {
+      nlme::fixef(fit)
+    },
+    error = function(e) NULL
+  )
+  if (is.null(bhat) || length(bhat) == 0L) {
+    return(NULL) # nocov
+  }
+
+  V <- tryCatch(
+    {
+      v <- stats::vcov(fit)
+      # glmmTMB::vcov returns an S3 object of class c("vcov.glmmTMB",
+      # "matrix") -- the $cond slot is accessible via `$cond` /
+      # `[["cond"]]`. lme4 / nlme return a plain matrix-like object.
+      if (inherits(fit, "glmmTMB")) {
+        v_cond <- tryCatch(v$cond, error = function(e) NULL)
+        if (is.null(v_cond)) {
+          v_cond <- tryCatch(v[["cond"]], error = function(e) NULL) # nocov: v$cond never NULL for glmmTMB
+        }
+        if (!is.null(v_cond)) v <- v_cond
+      }
+      as.matrix(v)
+    },
+    error = function(e) NULL
+  )
+  if (is.null(V) || nrow(V) != length(bhat)) {
+    return(NULL) # nocov
+  }
+
+  data <- tryCatch(
+    if (inherits(fit, c("lme", "gls"))) {
+      nlme::getData(fit)
+    } else {
+      stats::model.frame(fit)
+    },
+    error = function(e) NULL
+  )
+  mm <- tryCatch(
+    stats::model.matrix(fixed_form, data = data),
+    error = function(e) NULL
+  )
+  if (is.null(mm) || ncol(mm) != length(bhat)) {
+    return(NULL) # nocov
+  }
+
+  assign_idx <- attr(mm, "assign")
+  trm <- stats::terms(fixed_form)
+  term_labels <- attr(trm, "term.labels")
+  if (
+    is.null(assign_idx) || is.null(term_labels) || length(term_labels) == 0L
+  ) {
+    return(NULL)
+  }
+
+  factor_meta <- tryCatch(detect_factor_term_meta(fit), error = function(e) {
+    list()
+  })
+
+  unique_terms <- unique(assign_idx[assign_idx != 0L])
+  chi2_cache <- list()
+  for (k in unique_terms) {
+    cols <- which(assign_idx == k)
+    # Higher-order relatives of the focal term, via the shared Type-II
+    # containment logic. `masks` is non-NULL by construction (the label
+    # comes from `trm` itself; `which(!NULL)` would still yield
+    # integer(0)); relative columns are the ones excluded from BOTH
+    # nested models of the Type-II comparison.
+    masks <- type2_nested_column_masks(trm, assign_idx, term_labels[k])
+    rel_cols <- which(!masks$keep_with)
+    res <- tryCatch(
+      {
+        L <- type2_wald_hypothesis_matrix(length(bhat), rel_cols, cols, V)
+        Lb <- as.numeric(L %*% bhat)
+        M <- L %*% V %*% t(L)
+        list(
+          chi2 = as.numeric(t(Lb) %*% solve(M) %*% Lb),
+          df = nrow(L)
+        )
+      },
+      error = function(e) list(chi2 = NA_real_, df = length(cols))
+    )
+    chi2_val <- res$chi2
+    df_val <- res$df
+    if (!is.finite(chi2_val) || chi2_val < 0 || df_val < 1L) {
+      # nocov start
+      chi2_cache[[as.character(k)]] <- NULL
+      next
+      # nocov end
+    }
+    chi2_cache[[as.character(k)]] <- list(
+      chi2 = chi2_val,
+      df = df_val,
+      p_value = stats::pchisq(chi2_val, df = df_val, lower.tail = FALSE)
+    )
+  }
+
+  rows <- list()
+  for (i in seq_along(bhat)) {
+    term_idx <- assign_idx[i]
+    if (term_idx == 0L) {
+      next
+    }
+    eff <- chi2_cache[[as.character(term_idx)]]
+    if (is.null(eff)) {
+      next # nocov: cache entry only NULL via the unreachable chi2-fail arm
+    }
+
+    nm <- names(bhat)[i]
+    fmeta <- factor_meta[[nm]]
+    parent_var <- fmeta$factor_term %||% nm
+    label <- fmeta$factor_level %||% nm
+    pos <- fmeta$factor_level_pos %||% NA_integer_
+
+    rows[[length(rows) + 1L]] <- data.frame(
+      term = nm,
+      parent_var = parent_var,
+      label = label,
+      factor_level_pos = as.integer(pos),
+      is_ref = FALSE,
+      estimate_type = "partial_chi2",
+      estimate = eff$chi2,
+      std_error = NA_real_,
+      df = as.numeric(eff$df),
+      statistic = eff$chi2,
+      p_value = eff$p_value,
+      ci_lower = NA_real_,
+      ci_upper = NA_real_,
+      test_type = "X2",
+      stringsAsFactors = FALSE
+    )
+  }
+  if (length(rows) == 0L) {
+    return(NULL) # nocov
+  }
+  do.call(rbind, rows)
+}
+
+
+# Append Wald chi^2 partial-effect rows to a frame's coefs when
+# `partial_chi2` is in show_columns. No-op otherwise. Mirrors the
+# AME-attach helper in regression_ame.R.
+.attach_partial_chi2_to_frame_coefs <- function(coefs, fit, show_columns) {
+  if (!"partial_chi2" %in% show_columns) {
+    return(coefs)
+  }
+  rows <- .compute_partial_chi2_rows_for_mixed(fit)
+  if (is.null(rows) || nrow(rows) == 0L) {
+    return(coefs)
+  }
+  for (col in setdiff(colnames(coefs), colnames(rows))) {
+    rows[[col]] <- coefs[[col]][NA_integer_]
+  }
+  rows <- rows[, colnames(coefs), drop = FALSE]
+  rbind(coefs, rows)
 }

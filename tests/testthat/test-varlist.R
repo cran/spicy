@@ -213,13 +213,13 @@ test_that("varlist() handles exotic / empty column types without crashing", {
   # historically tripped up the `Values` summary path. The radix sort
   # helper short-circuits on length <= 1 to keep these inputs safe.
   exotic <- list(
-    empty_int       = integer(0),
-    empty_char      = character(0),
-    empty_factor    = factor(character(0)),
-    all_na_date     = as.Date(c(NA, NA, NA)),
-    all_na_posix    = as.POSIXct(c(NA_character_, NA_character_)),
-    difftime_days   = structure(c(1, 2, 3), class = "difftime", units = "days"),
-    factor_unused   = factor(c("a", "a"), levels = c("a", "b", "c"))
+    empty_int = integer(0),
+    empty_char = character(0),
+    empty_factor = factor(character(0)),
+    all_na_date = as.Date(c(NA, NA, NA)),
+    all_na_posix = as.POSIXct(c(NA_character_, NA_character_)),
+    difftime_days = structure(c(1, 2, 3), class = "difftime", units = "days"),
+    factor_unused = factor(c("a", "a"), levels = c("a", "b", "c"))
   )
   for (nm in names(exotic)) {
     df <- data.frame(x = exotic[[nm]])
@@ -275,6 +275,9 @@ test_that("varlist() returns empty tibble when no columns match", {
 })
 
 test_that("varlist() non-interactive with no tbl returns message", {
+  # The block tests the non-interactive branch by name; a console
+  # session takes the viewer branch instead (premise = guard).
+  skip_if(interactive(), "needs a non-interactive session")
   expect_message(
     varlist(mtcars),
     "Non-interactive session"
@@ -393,6 +396,100 @@ test_that("summarize_values_minmax handles POSIXct columns", {
   df <- data.frame(t = as.POSIXct(c("2024-01-01 10:00", "2024-06-15 12:00")))
   res <- varlist(df, tbl = TRUE)
   expect_match(res$Values, "2024")
+})
+
+test_that("varlist() values = TRUE renders POSIXlt columns as datetimes", {
+  # Regression (audit finding posixlt-values-true-rendered-as-list):
+  # POSIXlt is a list underneath, so summarize_values_all() fell into
+  # the list-column branch ("List(3): list") without the datetime
+  # check that summarize_values_minmax() already had.
+  df <- tibble::tibble(
+    lt = as.POSIXlt(
+      c("2020-01-01 10:00:00", "2020-01-01 10:00:00", NA),
+      tz = "UTC"
+    )
+  )
+  res <- varlist(df, tbl = TRUE, values = TRUE, include_na = TRUE)
+  expect_identical(res$Values, "2020-01-01 10:00:00, <NA>")
+  # Same rendering as the values = FALSE path on the same column.
+  res_minmax <- varlist(df, tbl = TRUE, include_na = TRUE)
+  expect_identical(res_minmax$Values, res$Values)
+})
+
+test_that("varlist() annotates difftime values with their units", {
+  # Regression (audit finding difftime-units-dropped-in-values):
+  # as.character() drops the units attribute, leaving "1.5, 2.5"
+  # ambiguous between hours and days.
+  df <- data.frame(
+    hours = as.difftime(c(1.5, 2.5, NA), units = "hours"),
+    days = as.difftime(c(1.5, 2.5, NA), units = "days")
+  )
+  res <- varlist(df, tbl = TRUE, values = TRUE, include_na = TRUE)
+  expect_identical(res$Values[1], "1.5, 2.5 (hours), <NA>")
+  expect_identical(res$Values[2], "1.5, 2.5 (days), <NA>")
+
+  # Compact path: units follow the truncated value list.
+  df6 <- data.frame(dt = as.difftime(1:6, units = "mins"))
+  res6 <- varlist(df6, tbl = TRUE)
+  expect_identical(res6$Values, "1, 2, 3, ..., 6 (mins)")
+})
+
+test_that("varlist() difftime units annotation degrades safely", {
+  # All-NA difftime: no values, so no dangling units annotation.
+  df_na <- data.frame(
+    dt = as.difftime(c(NA_real_, NA_real_), units = "hours")
+  )
+  res_na <- varlist(df_na, tbl = TRUE, values = TRUE, include_na = TRUE)
+  expect_identical(res_na$Values, "<NA>")
+  expect_identical(varlist(df_na, tbl = TRUE, include_na = TRUE)$Values, "<NA>")
+
+  # Malformed difftime without a units string: bare values, no suffix.
+  df_bad <- data.frame(dt = structure(c(1, 2), class = "difftime"))
+  expect_identical(varlist(df_bad, tbl = TRUE, values = TRUE)$Values, "1, 2")
+})
+
+test_that("varlist() shows an explicit NA factor level as <NA>", {
+  # Regression (audit finding addna-level-dropped-despite-factor-
+  # levels-all): the declared NA level of addNA() was silently
+  # dropped from Values while N_distinct counted it.
+  df <- data.frame(f = addNA(factor(c("a", "b", NA))))
+  res <- varlist(
+    df,
+    tbl = TRUE,
+    values = TRUE,
+    include_na = TRUE,
+    factor_levels = "all"
+  )
+  expect_identical(res$Values, "a, b, <NA>")
+  expect_identical(res$N_distinct, 3L)
+  expect_identical(res$NAs, 0L)
+
+  # "observed" shows the NA level too when observations carry it ...
+  res_obs <- varlist(df, tbl = TRUE, values = TRUE)
+  expect_identical(res_obs$Values, "a, b, <NA>")
+
+  # ... but drops it, like any unused level, when nothing does.
+  df_unused <- data.frame(f = addNA(factor(c("a", "b")), ifany = FALSE))
+  res_unused <- varlist(df_unused, tbl = TRUE, values = TRUE)
+  expect_identical(res_unused$Values, "a, b")
+  res_unused_all <- varlist(
+    df_unused,
+    tbl = TRUE,
+    values = TRUE,
+    factor_levels = "all"
+  )
+  expect_identical(res_unused_all$Values, "a, b, <NA>")
+})
+
+test_that("varlist() columns carry no names attribute", {
+  # Regression (audit finding tibble-columns-carry-names-attr):
+  # vapply's USE.NAMES default left variable names on 5 of 7 columns,
+  # breaking element-wise identical() comparisons.
+  res <- varlist(sochealth, tbl = TRUE)
+  for (col in names(res)) {
+    expect_null(names(res[[col]]), info = col)
+  }
+  expect_identical(res$Label[res$Variable == "sex"], "Sex")
 })
 
 test_that("varlist() summarizes matrix columns by rows", {
@@ -612,7 +709,11 @@ test_that("varlist() honours `factor_levels = 'all'` for labelled (declared > ob
 test_that("match_varlist_factor_levels rejects bad inputs with a stable message", {
   msg <- '`factor_levels` must be "observed" or "all".'
   expect_error(varlist(mtcars, factor_levels = "foo"), msg, fixed = TRUE)
-  expect_error(varlist(mtcars, factor_levels = NA_character_), msg, fixed = TRUE)
+  expect_error(
+    varlist(mtcars, factor_levels = NA_character_),
+    msg,
+    fixed = TRUE
+  )
   expect_error(varlist(mtcars, factor_levels = character()), msg, fixed = TRUE)
   expect_error(varlist(mtcars, factor_levels = 1L), msg, fixed = TRUE)
   expect_error(
@@ -635,6 +736,7 @@ test_that("varlist() empty selection returns empty data.frame with tbl", {
 })
 
 test_that("varlist() non-interactive empty selection prints message", {
+  skip_if(interactive(), "needs a non-interactive session")
   df <- data.frame(x = 1:3)
   expect_message(
     suppressWarnings(varlist(df, starts_with("z"))),
@@ -643,6 +745,7 @@ test_that("varlist() non-interactive empty selection prints message", {
 })
 
 test_that("varlist() non-interactive prints message", {
+  skip_if(interactive(), "needs a non-interactive session")
   expect_message(
     varlist(mtcars),
     "Non-interactive"
@@ -668,8 +771,14 @@ test_that("varlist() warns and marks the cell when a column cannot be summarized
   )
 
   expect_length(warnings, 2L)
-  expect_match(warnings[[1]], "Could not summarize column `x`.*synthetic failure")
-  expect_match(warnings[[2]], "Could not summarize column `y`.*synthetic failure")
+  expect_match(
+    warnings[[1]],
+    "Could not summarize column `x`.*synthetic failure"
+  )
+  expect_match(
+    warnings[[2]],
+    "Could not summarize column `y`.*synthetic failure"
+  )
   expect_equal(
     unname(res$Values),
     rep("<error: synthetic failure>", 2L)

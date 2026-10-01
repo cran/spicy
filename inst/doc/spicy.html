@@ -340,6 +340,23 @@ code > span.er { color: #a61717; background-color: #e3d2d2; }
 <h1 class="title toc-ignore">Getting started with spicy</h1>
 
 
+<div id="TOC">
+<ul>
+<li><a href="#inspect-your-data" id="toc-inspect-your-data">Inspect your
+data</a></li>
+<li><a href="#frequency-tables" id="toc-frequency-tables">Frequency
+tables</a></li>
+<li><a href="#cross-tabulations" id="toc-cross-tabulations">Cross-tabulations</a></li>
+<li><a href="#association-measures" id="toc-association-measures">Association measures</a></li>
+<li><a href="#summary-tables" id="toc-summary-tables">Summary
+tables</a></li>
+<li><a href="#regression-tables" id="toc-regression-tables">Regression
+tables</a></li>
+<li><a href="#row-wise-summaries" id="toc-row-wise-summaries">Row-wise
+summaries</a></li>
+<li><a href="#learn-more" id="toc-learn-more">Learn more</a></li>
+</ul>
+</div>
 
 <div class="sourceCode" id="cb1"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb1-1"><a href="#cb1-1" tabindex="-1"></a><span class="fu">library</span>(spicy)</span></code></pre></div>
 <p>spicy is an R package for descriptive statistics and data analysis,
@@ -348,18 +365,18 @@ variable inspection, frequency tables, cross-tabulations with
 chi-squared tests and effect sizes, and publication-ready summary
 tables, offering functionality similar to Stata or SPSS but within a
 tidyverse-friendly R environment. This vignette walks through the core
-workflow using the bundled <a href="../reference/sochealth.html"><code>sochealth</code></a> dataset, a
-simulated social-health survey with 1200 respondents and 24
-variables.</p>
+workflow using the bundled <code>sochealth</code> dataset, a simulated
+social-health survey with 1200 respondents and 24 variables.</p>
 <div id="inspect-your-data" class="section level2">
 <h2>Inspect your data</h2>
 <p><code>varlist()</code> (or its shortcut <code>vl()</code>) gives a
 compact overview of every variable in a data frame: name, label,
 representative values, class, number of distinct values, valid
 observations, and missing values. In RStudio or Positron, calling
-<code>varlist()</code> without arguments opens an interactive viewer -
-this is the most common usage in practice. Here we use
-<code>tbl = TRUE</code> to produce static output for the vignette:</p>
+<code>varlist(mydata)</code> with the default <code>tbl = FALSE</code>
+opens an interactive viewer - this is the most common usage in practice.
+Here we use <code>tbl = TRUE</code> to produce static output for the
+vignette:</p>
 <div class="sourceCode" id="cb2"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" tabindex="-1"></a><span class="fu">varlist</span>(sochealth, <span class="at">tbl =</span> <span class="cn">TRUE</span>)</span>
 <span id="cb2-2"><a href="#cb2-2" tabindex="-1"></a><span class="co">#&gt; # A tibble: 24 × 7</span></span>
 <span id="cb2-3"><a href="#cb2-3" tabindex="-1"></a><span class="co">#&gt;    Variable          Label                 Values Class N_distinct N_valid   NAs</span></span>
@@ -388,7 +405,8 @@ this is the most common usage in practice. Here we use
 <div id="frequency-tables" class="section level2">
 <h2>Frequency tables</h2>
 <p><code>freq()</code> produces frequency tables with counts,
-percentages, and (optionally) valid and cumulative percentages.</p>
+percentages, valid percentages (shown by default whenever missing values
+are present), and optionally cumulative percentages.</p>
 <div class="sourceCode" id="cb4"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" tabindex="-1"></a><span class="fu">freq</span>(sochealth, education)</span>
 <span id="cb4-2"><a href="#cb4-2" tabindex="-1"></a><span class="co">#&gt; Frequency table: education</span></span>
 <span id="cb4-3"><a href="#cb4-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
@@ -437,9 +455,10 @@ default it shows counts, a chi-squared test, and Cramer’s V:</p>
 <span id="cb6-9"><a href="#cb6-9" tabindex="-1"></a><span class="co">#&gt;  Total    │               257                527         391 │    1175 </span></span>
 <span id="cb6-10"><a href="#cb6-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb6-11"><a href="#cb6-11" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt;.001</span></span>
-<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
+<span id="cb6-12"><a href="#cb6-12" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span>
+<span id="cb6-13"><a href="#cb6-13" tabindex="-1"></a><span class="co">#&gt; Missing values removed: smoking (25).</span></span></code></pre></div>
 <p>Add percentages with <code>percent</code>:</p>
-<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education, <span class="at">percent =</span> <span class="st">&quot;col&quot;</span>)</span>
+<div class="sourceCode" id="cb7"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb7-1"><a href="#cb7-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education, <span class="at">percent =</span> <span class="st">&quot;column&quot;</span>)</span>
 <span id="cb7-2"><a href="#cb7-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (Column %)</span></span>
 <span id="cb7-3"><a href="#cb7-3" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb7-4"><a href="#cb7-4" tabindex="-1"></a><span class="co">#&gt;  Values   │   Lower secondary    Upper secondary    Tertiary │   Total </span></span>
@@ -451,7 +470,8 @@ default it shows counts, a chi-squared test, and Cramer’s V:</p>
 <span id="cb7-10"><a href="#cb7-10" tabindex="-1"></a><span class="co">#&gt;  N        │               257                527         391 │    1175 </span></span>
 <span id="cb7-11"><a href="#cb7-11" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb7-12"><a href="#cb7-12" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 21.6, p &lt;.001</span></span>
-<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span></code></pre></div>
+<span id="cb7-13"><a href="#cb7-13" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.14</span></span>
+<span id="cb7-14"><a href="#cb7-14" tabindex="-1"></a><span class="co">#&gt; Missing values removed: smoking (25).</span></span></code></pre></div>
 <p>Group by a third variable with <code>by</code>:</p>
 <div class="sourceCode" id="cb8"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" tabindex="-1"></a><span class="fu">cross_tab</span>(sochealth, smoking, education, <span class="at">by =</span> sex)</span>
 <span id="cb8-2"><a href="#cb8-2" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Female</span></span>
@@ -465,18 +485,20 @@ default it shows counts, a chi-squared test, and Cramer’s V:</p>
 <span id="cb8-10"><a href="#cb8-10" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb8-11"><a href="#cb8-11" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 7.1, p = .029</span></span>
 <span id="cb8-12"><a href="#cb8-12" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.11</span></span>
-<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Male</span></span>
-<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt;  Values   │   Lower secondary    Upper secondary    Tertiary │   Total </span></span>
-<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt; ──────────┼──────────────────────────────────────────────────┼─────────</span></span>
-<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt;  No       │                84                195         172 │     451 </span></span>
-<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt;  Yes      │                40                 50          28 │     118 </span></span>
-<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt; ──────────┼──────────────────────────────────────────────────┼─────────</span></span>
-<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt;  Total    │               124                245         200 │     569 </span></span>
-<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt; </span></span>
-<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 15.6, p &lt;.001</span></span>
-<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.17</span></span></code></pre></div>
+<span id="cb8-13"><a href="#cb8-13" tabindex="-1"></a><span class="co">#&gt; Missing values removed: smoking (14).</span></span>
+<span id="cb8-14"><a href="#cb8-14" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-15"><a href="#cb8-15" tabindex="-1"></a><span class="co">#&gt; Crosstable: smoking x education (N) | sex = Male</span></span>
+<span id="cb8-16"><a href="#cb8-16" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-17"><a href="#cb8-17" tabindex="-1"></a><span class="co">#&gt;  Values   │   Lower secondary    Upper secondary    Tertiary │   Total </span></span>
+<span id="cb8-18"><a href="#cb8-18" tabindex="-1"></a><span class="co">#&gt; ──────────┼──────────────────────────────────────────────────┼─────────</span></span>
+<span id="cb8-19"><a href="#cb8-19" tabindex="-1"></a><span class="co">#&gt;  No       │                84                195         172 │     451 </span></span>
+<span id="cb8-20"><a href="#cb8-20" tabindex="-1"></a><span class="co">#&gt;  Yes      │                40                 50          28 │     118 </span></span>
+<span id="cb8-21"><a href="#cb8-21" tabindex="-1"></a><span class="co">#&gt; ──────────┼──────────────────────────────────────────────────┼─────────</span></span>
+<span id="cb8-22"><a href="#cb8-22" tabindex="-1"></a><span class="co">#&gt;  Total    │               124                245         200 │     569 </span></span>
+<span id="cb8-23"><a href="#cb8-23" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb8-24"><a href="#cb8-24" tabindex="-1"></a><span class="co">#&gt; Chi-2(2) = 15.6, p &lt;.001</span></span>
+<span id="cb8-25"><a href="#cb8-25" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V = 0.17</span></span>
+<span id="cb8-26"><a href="#cb8-26" tabindex="-1"></a><span class="co">#&gt; Missing values removed: smoking (11).</span></span></code></pre></div>
 <p>When both variables are ordered factors, <code>cross_tab()</code>
 automatically selects an ordinal measure (Kendall’s Tau-b) instead of
 Cramer’s V:</p>
@@ -493,7 +515,8 @@ Cramer’s V:</p>
 <span id="cb9-11"><a href="#cb9-11" tabindex="-1"></a><span class="co">#&gt;  Total       │               260                527         393 │    1180 </span></span>
 <span id="cb9-12"><a href="#cb9-12" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb9-13"><a href="#cb9-13" tabindex="-1"></a><span class="co">#&gt; Chi-2(6) = 73.2, p &lt;.001</span></span>
-<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b = 0.20</span></span></code></pre></div>
+<span id="cb9-14"><a href="#cb9-14" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b = 0.20</span></span>
+<span id="cb9-15"><a href="#cb9-15" tabindex="-1"></a><span class="co">#&gt; Missing values removed: self_rated_health (20).</span></span></code></pre></div>
 </div>
 <div id="association-measures" class="section level2">
 <h2>Association measures</h2>
@@ -502,11 +525,11 @@ contingency table to <code>assoc_measures()</code>:</p>
 <div class="sourceCode" id="cb10"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" tabindex="-1"></a>tbl <span class="ot">&lt;-</span> <span class="fu">xtabs</span>(<span class="sc">~</span> smoking <span class="sc">+</span> education, <span class="at">data =</span> sochealth)</span>
 <span id="cb10-2"><a href="#cb10-2" tabindex="-1"></a><span class="fu">assoc_measures</span>(tbl)</span>
 <span id="cb10-3"><a href="#cb10-3" tabindex="-1"></a><span class="co">#&gt; Measure                            Estimate     SE  CI lower  CI upper      p </span></span>
-<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V                            0.136     --     0.079     0.191  &lt;.001 </span></span>
-<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt; Contingency Coefficient               0.134     --        --        --  &lt;.001 </span></span>
-<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt; Lambda symmetric                      0.000  0.000     0.000     0.000     -- </span></span>
-<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; Lambda R|C                            0.000  0.000     0.000     0.000     -- </span></span>
-<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; Lambda C|R                            0.000  0.000     0.000     0.000     -- </span></span>
+<span id="cb10-4"><a href="#cb10-4" tabindex="-1"></a><span class="co">#&gt; Cramer&#39;s V                            0.136      –     0.079     0.191  &lt;.001 </span></span>
+<span id="cb10-5"><a href="#cb10-5" tabindex="-1"></a><span class="co">#&gt; Contingency Coefficient               0.134      –         –         –  &lt;.001 </span></span>
+<span id="cb10-6"><a href="#cb10-6" tabindex="-1"></a><span class="co">#&gt; Lambda symmetric                      0.000  0.000     0.000     0.000      – </span></span>
+<span id="cb10-7"><a href="#cb10-7" tabindex="-1"></a><span class="co">#&gt; Lambda R|C                            0.000  0.000     0.000     0.000      – </span></span>
+<span id="cb10-8"><a href="#cb10-8" tabindex="-1"></a><span class="co">#&gt; Lambda C|R                            0.000  0.000     0.000     0.000      – </span></span>
 <span id="cb10-9"><a href="#cb10-9" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau R|C             0.018  0.008     0.003     0.034   .023 </span></span>
 <span id="cb10-10"><a href="#cb10-10" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal&#39;s Tau C|R             0.008  0.003     0.001     0.014   .022 </span></span>
 <span id="cb10-11"><a href="#cb10-11" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient symmetric     0.011  0.005     0.002     0.021   .021 </span></span>
@@ -514,7 +537,7 @@ contingency table to <code>assoc_measures()</code>:</p>
 <span id="cb10-13"><a href="#cb10-13" tabindex="-1"></a><span class="co">#&gt; Uncertainty Coefficient C|R           0.009  0.004     0.001     0.016   .021 </span></span>
 <span id="cb10-14"><a href="#cb10-14" tabindex="-1"></a><span class="co">#&gt; Goodman-Kruskal Gamma                -0.268  0.056    -0.378    -0.158  &lt;.001 </span></span>
 <span id="cb10-15"><a href="#cb10-15" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-b                      -0.126  0.027    -0.180    -0.073  &lt;.001 </span></span>
-<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a><span class="co">#&gt; Kendall&#39;s Tau-c                      -0.117  0.026    -0.167    -0.067  &lt;.001 </span></span>
+<span id="cb10-16"><a href="#cb10-16" tabindex="-1"></a><span class="co">#&gt; Stuart&#39;s Tau-c                       -0.117  0.026    -0.167    -0.067  &lt;.001 </span></span>
 <span id="cb10-17"><a href="#cb10-17" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D R|C                        -0.091  0.020    -0.131    -0.052  &lt;.001 </span></span>
 <span id="cb10-18"><a href="#cb10-18" tabindex="-1"></a><span class="co">#&gt; Somers&#39; D C|R                        -0.175  0.038    -0.249    -0.101  &lt;.001</span></span></code></pre></div>
 <p>Individual functions such as <code>cramer_v()</code>,
@@ -522,8 +545,8 @@ contingency table to <code>assoc_measures()</code>:</p>
 by default. Pass <code>detail = TRUE</code> for the confidence interval
 and p-value:</p>
 <div class="sourceCode" id="cb11"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" tabindex="-1"></a><span class="fu">cramer_v</span>(tbl, <span class="at">detail =</span> <span class="cn">TRUE</span>)</span>
-<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; Estimate  CI lower  CI upper      p</span></span>
-<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt;    0.136     0.079     0.191  &lt;.001</span></span></code></pre></div>
+<span id="cb11-2"><a href="#cb11-2" tabindex="-1"></a><span class="co">#&gt; Estimate  SE  CI lower  CI upper      p</span></span>
+<span id="cb11-3"><a href="#cb11-3" tabindex="-1"></a><span class="co">#&gt;    0.136   –     0.079     0.191  &lt;.001</span></span></code></pre></div>
 </div>
 <div id="summary-tables" class="section level2">
 <h2>Summary tables</h2>
@@ -532,18 +555,79 @@ tables for categorical variables:</p>
 <div class="sourceCode" id="cb12"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" tabindex="-1"></a><span class="fu">table_categorical</span>(</span>
 <span id="cb12-2"><a href="#cb12-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb12-3"><a href="#cb12-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(smoking, physical_activity, dentist_12m),</span>
-<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">by =</span> education,</span>
-<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>  <span class="at">output =</span> <span class="st">&quot;tinytable&quot;</span></span>
-<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a>)</span></code></pre></div>
+<span id="cb12-4"><a href="#cb12-4" tabindex="-1"></a>  <span class="at">by =</span> education</span>
+<span id="cb12-5"><a href="#cb12-5" tabindex="-1"></a>)</span>
+<span id="cb12-6"><a href="#cb12-6" tabindex="-1"></a><span class="co">#&gt; Categorical table by education</span></span>
+<span id="cb12-7"><a href="#cb12-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-8"><a href="#cb12-8" tabindex="-1"></a><span class="co">#&gt;  Variable                        │ Lower secondary n  Lower secondary % </span></span>
+<span id="cb12-9"><a href="#cb12-9" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────────────┼──────────────────────────────────────</span></span>
+<span id="cb12-10"><a href="#cb12-10" tabindex="-1"></a><span class="co">#&gt;  Current smoker                  │                                      </span></span>
+<span id="cb12-11"><a href="#cb12-11" tabindex="-1"></a><span class="co">#&gt;    No                            │        179               68.6        </span></span>
+<span id="cb12-12"><a href="#cb12-12" tabindex="-1"></a><span class="co">#&gt;    Yes                           │         78               29.9        </span></span>
+<span id="cb12-13"><a href="#cb12-13" tabindex="-1"></a><span class="co">#&gt;    (Missing)                     │          4                1.5        </span></span>
+<span id="cb12-14"><a href="#cb12-14" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-15"><a href="#cb12-15" tabindex="-1"></a><span class="co">#&gt;  Regular physical activity       │                                      </span></span>
+<span id="cb12-16"><a href="#cb12-16" tabindex="-1"></a><span class="co">#&gt;    No                            │        177               67.8        </span></span>
+<span id="cb12-17"><a href="#cb12-17" tabindex="-1"></a><span class="co">#&gt;    Yes                           │         84               32.2        </span></span>
+<span id="cb12-18"><a href="#cb12-18" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-19"><a href="#cb12-19" tabindex="-1"></a><span class="co">#&gt;  Dentist visit in last 12 months │                                      </span></span>
+<span id="cb12-20"><a href="#cb12-20" tabindex="-1"></a><span class="co">#&gt;    No                            │        113               43.3        </span></span>
+<span id="cb12-21"><a href="#cb12-21" tabindex="-1"></a><span class="co">#&gt;    Yes                           │        148               56.7        </span></span>
+<span id="cb12-22"><a href="#cb12-22" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-23"><a href="#cb12-23" tabindex="-1"></a><span class="co">#&gt;  Variable                        │ Upper secondary n  Upper secondary % </span></span>
+<span id="cb12-24"><a href="#cb12-24" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────────────┼──────────────────────────────────────</span></span>
+<span id="cb12-25"><a href="#cb12-25" tabindex="-1"></a><span class="co">#&gt;  Current smoker                  │                                      </span></span>
+<span id="cb12-26"><a href="#cb12-26" tabindex="-1"></a><span class="co">#&gt;    No                            │        415               77.0        </span></span>
+<span id="cb12-27"><a href="#cb12-27" tabindex="-1"></a><span class="co">#&gt;    Yes                           │        112               20.8        </span></span>
+<span id="cb12-28"><a href="#cb12-28" tabindex="-1"></a><span class="co">#&gt;    (Missing)                     │         12                2.2        </span></span>
+<span id="cb12-29"><a href="#cb12-29" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-30"><a href="#cb12-30" tabindex="-1"></a><span class="co">#&gt;  Regular physical activity       │                                      </span></span>
+<span id="cb12-31"><a href="#cb12-31" tabindex="-1"></a><span class="co">#&gt;    No                            │        310               57.5        </span></span>
+<span id="cb12-32"><a href="#cb12-32" tabindex="-1"></a><span class="co">#&gt;    Yes                           │        229               42.5        </span></span>
+<span id="cb12-33"><a href="#cb12-33" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-34"><a href="#cb12-34" tabindex="-1"></a><span class="co">#&gt;  Dentist visit in last 12 months │                                      </span></span>
+<span id="cb12-35"><a href="#cb12-35" tabindex="-1"></a><span class="co">#&gt;    No                            │        174               32.3        </span></span>
+<span id="cb12-36"><a href="#cb12-36" tabindex="-1"></a><span class="co">#&gt;    Yes                           │        365               67.7        </span></span>
+<span id="cb12-37"><a href="#cb12-37" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-38"><a href="#cb12-38" tabindex="-1"></a><span class="co">#&gt;  Variable                        │ Tertiary n  Tertiary %  Total n  Total % </span></span>
+<span id="cb12-39"><a href="#cb12-39" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────────────┼──────────────────────────────────────────</span></span>
+<span id="cb12-40"><a href="#cb12-40" tabindex="-1"></a><span class="co">#&gt;  Current smoker                  │                                          </span></span>
+<span id="cb12-41"><a href="#cb12-41" tabindex="-1"></a><span class="co">#&gt;    No                            │    332         83.0       926     77.2   </span></span>
+<span id="cb12-42"><a href="#cb12-42" tabindex="-1"></a><span class="co">#&gt;    Yes                           │     59         14.8       249     20.8   </span></span>
+<span id="cb12-43"><a href="#cb12-43" tabindex="-1"></a><span class="co">#&gt;    (Missing)                     │      9          2.2        25      2.1   </span></span>
+<span id="cb12-44"><a href="#cb12-44" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-45"><a href="#cb12-45" tabindex="-1"></a><span class="co">#&gt;  Regular physical activity       │                                          </span></span>
+<span id="cb12-46"><a href="#cb12-46" tabindex="-1"></a><span class="co">#&gt;    No                            │    163         40.8       650     54.2   </span></span>
+<span id="cb12-47"><a href="#cb12-47" tabindex="-1"></a><span class="co">#&gt;    Yes                           │    237         59.2       550     45.8   </span></span>
+<span id="cb12-48"><a href="#cb12-48" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-49"><a href="#cb12-49" tabindex="-1"></a><span class="co">#&gt;  Dentist visit in last 12 months │                                          </span></span>
+<span id="cb12-50"><a href="#cb12-50" tabindex="-1"></a><span class="co">#&gt;    No                            │     67         16.8       354     29.5   </span></span>
+<span id="cb12-51"><a href="#cb12-51" tabindex="-1"></a><span class="co">#&gt;    Yes                           │    333         83.2       846     70.5   </span></span>
+<span id="cb12-52"><a href="#cb12-52" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb12-53"><a href="#cb12-53" tabindex="-1"></a><span class="co">#&gt;  Variable                        │   p    Cramer&#39;s V </span></span>
+<span id="cb12-54"><a href="#cb12-54" tabindex="-1"></a><span class="co">#&gt; ─────────────────────────────────┼───────────────────</span></span>
+<span id="cb12-55"><a href="#cb12-55" tabindex="-1"></a><span class="co">#&gt;  Current smoker                  │ &lt;.001     .14     </span></span>
+<span id="cb12-56"><a href="#cb12-56" tabindex="-1"></a><span class="co">#&gt;    No                            │                   </span></span>
+<span id="cb12-57"><a href="#cb12-57" tabindex="-1"></a><span class="co">#&gt;    Yes                           │                   </span></span>
+<span id="cb12-58"><a href="#cb12-58" tabindex="-1"></a><span class="co">#&gt;    (Missing)                     │                   </span></span>
+<span id="cb12-59"><a href="#cb12-59" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-60"><a href="#cb12-60" tabindex="-1"></a><span class="co">#&gt;  Regular physical activity       │ &lt;.001     .21     </span></span>
+<span id="cb12-61"><a href="#cb12-61" tabindex="-1"></a><span class="co">#&gt;    No                            │                   </span></span>
+<span id="cb12-62"><a href="#cb12-62" tabindex="-1"></a><span class="co">#&gt;    Yes                           │                   </span></span>
+<span id="cb12-63"><a href="#cb12-63" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb12-64"><a href="#cb12-64" tabindex="-1"></a><span class="co">#&gt;  Dentist visit in last 12 months │ &lt;.001     .22     </span></span>
+<span id="cb12-65"><a href="#cb12-65" tabindex="-1"></a><span class="co">#&gt;    No                            │                   </span></span>
+<span id="cb12-66"><a href="#cb12-66" tabindex="-1"></a><span class="co">#&gt;    Yes                           │</span></span></code></pre></div>
 <p><code>table_continuous()</code> summarizes continuous variables,
-either overall or by a categorical <code>by</code> variable, and can
-also add group-comparison tests:</p>
+either overall or by a categorical <code>by</code> variable; when
+<code>by</code> is supplied it also reports a group-comparison test (a
+Welch test by default):</p>
 <div class="sourceCode" id="cb13"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb13-1"><a href="#cb13-1" tabindex="-1"></a><span class="fu">table_continuous</span>(</span>
 <span id="cb13-2"><a href="#cb13-2" tabindex="-1"></a>  sochealth,</span>
 <span id="cb13-3"><a href="#cb13-3" tabindex="-1"></a>  <span class="at">select =</span> <span class="fu">c</span>(bmi, life_sat_health),</span>
 <span id="cb13-4"><a href="#cb13-4" tabindex="-1"></a>  <span class="at">by =</span> education</span>
 <span id="cb13-5"><a href="#cb13-5" tabindex="-1"></a>)</span>
-<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics</span></span>
+<span id="cb13-6"><a href="#cb13-6" tabindex="-1"></a><span class="co">#&gt; Descriptive statistics by Highest education level</span></span>
 <span id="cb13-7"><a href="#cb13-7" tabindex="-1"></a><span class="co">#&gt; </span></span>
 <span id="cb13-8"><a href="#cb13-8" tabindex="-1"></a><span class="co">#&gt;  Variable                       │ Group              M     SD    Min    Max  </span></span>
 <span id="cb13-9"><a href="#cb13-9" tabindex="-1"></a><span class="co">#&gt; ────────────────────────────────┼────────────────────────────────────────────</span></span>
@@ -573,7 +657,9 @@ also add group-comparison tests:</p>
 <span id="cb13-33"><a href="#cb13-33" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
 <span id="cb13-34"><a href="#cb13-34" tabindex="-1"></a><span class="co">#&gt;  Satisfaction with health (1-5) │ Lower secondary  &lt;.001 </span></span>
 <span id="cb13-35"><a href="#cb13-35" tabindex="-1"></a><span class="co">#&gt;                                 │ Upper secondary        </span></span>
-<span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary</span></span></code></pre></div>
+<span id="cb13-36"><a href="#cb13-36" tabindex="-1"></a><span class="co">#&gt;                                 │ Tertiary               </span></span>
+<span id="cb13-37"><a href="#cb13-37" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb13-38"><a href="#cb13-38" tabindex="-1"></a><span class="co">#&gt; Missing values removed: bmi (12), life_sat_health (8).</span></span></code></pre></div>
 <p><code>table_continuous_lm()</code> covers the same reporting
 territory when you want to stay in a linear-model framework, for example
 with robust or cluster-robust standard errors, case weights, or additive
@@ -594,66 +680,181 @@ covariate adjustment:</p>
 <span id="cb14-14"><a href="#cb14-14" tabindex="-1"></a><span class="co">#&gt;  Variable                      │ 95% CI LL  95% CI UL    p     R²    n   </span></span>
 <span id="cb14-15"><a href="#cb14-15" tabindex="-1"></a><span class="co">#&gt; ───────────────────────────────┼─────────────────────────────────────────</span></span>
 <span id="cb14-16"><a href="#cb14-16" tabindex="-1"></a><span class="co">#&gt;  WHO-5 wellbeing index (0-100) │   2.12       5.65     &lt;.001  0.02  1200 </span></span>
-<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.09       0.93      .018  0.00  1188</span></span></code></pre></div>
+<span id="cb14-17"><a href="#cb14-17" tabindex="-1"></a><span class="co">#&gt;  Body mass index               │   0.09       0.93      .018  0.00  1188 </span></span>
+<span id="cb14-18"><a href="#cb14-18" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb14-19"><a href="#cb14-19" tabindex="-1"></a><span class="co">#&gt; Note. Std. errors: heteroskedasticity-robust (HC3).</span></span>
+<span id="cb14-20"><a href="#cb14-20" tabindex="-1"></a><span class="co">#&gt; Missing values removed: bmi (12).</span></span></code></pre></div>
+<p>By default every <code>table_*</code> helper formats to APA
+conventions. To match a journal instead, pass <code>style =</code> —
+<code>&quot;jama&quot;</code>, <code>&quot;nejm&quot;</code>, <code>&quot;lancet&quot;</code>,
+<code>&quot;annals&quot;</code>, <code>&quot;apa&quot;</code>, <code>&quot;aer&quot;</code>;
+<code>spicy_style_names()</code> lists them all. Set it once for a whole
+document with <code>options(spicy.style = &quot;nejm&quot;)</code>, or compose a
+custom variant with <code>spicy_style()</code>, for example
+<code>spicy_style(&quot;lancet&quot;, ci_sep = &quot; to &quot;)</code>. The same styles
+apply to the regression tables below. French typographic conventions are
+not a journal style: they come with the language, through
+<code>options(spicy.language = &quot;fr&quot;)</code>.</p>
 <p>For detailed guidance, see the dedicated articles on
-<code>table_categorical()</code>, <code>table_continuous()</code>,
-<code>table_continuous_lm()</code>, and the final reporting overview for
-APA-style summary tables.</p>
+<code>table_categorical()</code>, <code>table_continuous()</code>, and
+<code>table_continuous_lm()</code>, and the final reporting overview
+tying the summary tables together.</p>
+</div>
+<div id="regression-tables" class="section level2">
+<h2>Regression tables</h2>
+<p><code>table_regression()</code> reports the full coefficient table
+for one or several fitted models — more than thirty classes, from
+<code>lm()</code> / <code>glm()</code> to mixed-effects, ordinal,
+survival and Bayesian engines (the full map is the <a href="https://amaltawfik.github.io/spicy/articles/table-regression-supported-models.html">Supported
+models</a> article) — with APA formatting by default and the same
+journal styles on demand (<code>style = &quot;jama&quot;</code>,
+<code>&quot;nejm&quot;</code>, <code>&quot;lancet&quot;</code> and more), factor grouping
+with reference rows, robust variance, standardised coefficients, average
+marginal effects, hierarchical comparisons, and side-by-side multi-model
+layouts:</p>
+<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>fit <span class="ot">&lt;-</span> <span class="fu">lm</span>(wellbeing_score <span class="sc">~</span> age <span class="sc">+</span> sex <span class="sc">+</span> smoking, <span class="at">data =</span> sochealth)</span>
+<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a><span class="fu">table_regression</span>(fit)</span>
+<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a><span class="co">#&gt; Linear regression: wellbeing_score</span></span>
+<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a><span class="co">#&gt;  Variable        │    B      SE       95% CI        p   </span></span>
+<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a><span class="co">#&gt; ─────────────────┼──────────────────────────────────────</span></span>
+<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a><span class="co">#&gt;  (Intercept)     │   65.20  1.66  [61.95, 68.45]  &lt;.001 </span></span>
+<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a><span class="co">#&gt;  age             │    0.05  0.03  [-0.01,  0.11]   .130 </span></span>
+<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a><span class="co">#&gt;  sex:            │                                      </span></span>
+<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt;    Female (ref.) │     –     –          –          –    </span></span>
+<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt;    Male          │    3.86  0.91  [ 2.08,  5.63]  &lt;.001 </span></span>
+<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt;  smoking:        │                                      </span></span>
+<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt;    No (ref.)     │     –     –          –          –    </span></span>
+<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt;    Yes           │   -1.72  1.11  [-3.89,  0.45]   .121 </span></span>
+<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co">#&gt; ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌</span></span>
+<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="co">#&gt;  n               │ 1175                                 </span></span>
+<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt;  R²              │    0.02                              </span></span>
+<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt;  Adj. R²         │    0.02                              </span></span>
+<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt; </span></span>
+<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt; Note. Linear regression.</span></span>
+<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt; Std. errors: classical (OLS).</span></span></code></pre></div>
+<p>For detailed guidance, start with the core
+<code>table_regression()</code> article; the Learn more section below
+lists the companion articles by model family.</p>
 </div>
 <div id="row-wise-summaries" class="section level2">
 <h2>Row-wise summaries</h2>
 <p><code>mean_n()</code>, <code>sum_n()</code>, and
 <code>count_n()</code> compute row-wise statistics across selected
-columns, with automatic handling of missing values.</p>
-<div class="sourceCode" id="cb15"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb15-1"><a href="#cb15-1" tabindex="-1"></a>sochealth <span class="sc">|&gt;</span></span>
-<span id="cb15-2"><a href="#cb15-2" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
-<span id="cb15-3"><a href="#cb15-3" tabindex="-1"></a>    <span class="at">mean_sat  =</span> <span class="fu">mean_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>)),</span>
-<span id="cb15-4"><a href="#cb15-4" tabindex="-1"></a>    <span class="at">sum_sat   =</span> <span class="fu">sum_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">min_valid =</span> <span class="dv">2</span>),</span>
-<span id="cb15-5"><a href="#cb15-5" tabindex="-1"></a>    <span class="at">n_missing =</span> <span class="fu">count_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">special =</span> <span class="st">&quot;NA&quot;</span>)</span>
-<span id="cb15-6"><a href="#cb15-6" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
-<span id="cb15-7"><a href="#cb15-7" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), mean_sat, sum_sat, n_missing) <span class="sc">|&gt;</span></span>
-<span id="cb15-8"><a href="#cb15-8" tabindex="-1"></a>  <span class="fu">head</span>() <span class="sc">|&gt;</span></span>
-<span id="cb15-9"><a href="#cb15-9" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
-<span id="cb15-10"><a href="#cb15-10" tabindex="-1"></a><span class="co">#&gt;   life_sat_health life_sat_work life_sat_relationships life_sat_standard</span></span>
-<span id="cb15-11"><a href="#cb15-11" tabindex="-1"></a><span class="co">#&gt; 1               5             3                      5                 5</span></span>
-<span id="cb15-12"><a href="#cb15-12" tabindex="-1"></a><span class="co">#&gt; 2               4             4                      5                 5</span></span>
-<span id="cb15-13"><a href="#cb15-13" tabindex="-1"></a><span class="co">#&gt; 3               3             2                      5                 3</span></span>
-<span id="cb15-14"><a href="#cb15-14" tabindex="-1"></a><span class="co">#&gt; 4               3             4                      3                 2</span></span>
-<span id="cb15-15"><a href="#cb15-15" tabindex="-1"></a><span class="co">#&gt; 5               4             5                      4                 4</span></span>
-<span id="cb15-16"><a href="#cb15-16" tabindex="-1"></a><span class="co">#&gt; 6               5             5                      5                 3</span></span>
-<span id="cb15-17"><a href="#cb15-17" tabindex="-1"></a><span class="co">#&gt;   mean_sat sum_sat n_missing</span></span>
-<span id="cb15-18"><a href="#cb15-18" tabindex="-1"></a><span class="co">#&gt; 1     4.50      18         0</span></span>
-<span id="cb15-19"><a href="#cb15-19" tabindex="-1"></a><span class="co">#&gt; 2     4.50      18         0</span></span>
-<span id="cb15-20"><a href="#cb15-20" tabindex="-1"></a><span class="co">#&gt; 3     3.25      13         0</span></span>
-<span id="cb15-21"><a href="#cb15-21" tabindex="-1"></a><span class="co">#&gt; 4     3.00      12         0</span></span>
-<span id="cb15-22"><a href="#cb15-22" tabindex="-1"></a><span class="co">#&gt; 5     4.25      17         0</span></span>
-<span id="cb15-23"><a href="#cb15-23" tabindex="-1"></a><span class="co">#&gt; 6     4.50      18         0</span></span></code></pre></div>
+columns, with explicit control over missing values. By default, a row
+mean or sum requires every selected value to be valid;
+<code>min_valid</code> relaxes this to a minimum count (or proportion)
+of valid values. The rows selected below include respondents with
+missing satisfaction items so the difference is visible:
+<code>mean_sat</code> (no <code>min_valid</code>) turns <code>NA</code>
+as soon as one item is missing, <code>sum_sat</code> is computed from
+the valid items as long as at least three are present (and turns
+<code>NA</code> in the last row, which has only two), and
+<code>count_n(special = &quot;NA&quot;)</code> counts the missing items
+themselves:</p>
+<div class="sourceCode" id="cb16"><pre class="sourceCode r"><code class="sourceCode r"><span id="cb16-1"><a href="#cb16-1" tabindex="-1"></a>sochealth <span class="sc">|&gt;</span></span>
+<span id="cb16-2"><a href="#cb16-2" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">mutate</span>(</span>
+<span id="cb16-3"><a href="#cb16-3" tabindex="-1"></a>    <span class="at">mean_sat  =</span> <span class="fu">mean_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>)),</span>
+<span id="cb16-4"><a href="#cb16-4" tabindex="-1"></a>    <span class="at">sum_sat   =</span> <span class="fu">sum_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">min_valid =</span> <span class="dv">3</span>),</span>
+<span id="cb16-5"><a href="#cb16-5" tabindex="-1"></a>    <span class="at">n_missing =</span> <span class="fu">count_n</span>(<span class="at">select =</span> <span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), <span class="at">special =</span> <span class="st">&quot;NA&quot;</span>)</span>
+<span id="cb16-6"><a href="#cb16-6" tabindex="-1"></a>  ) <span class="sc">|&gt;</span></span>
+<span id="cb16-7"><a href="#cb16-7" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">select</span>(<span class="fu">starts_with</span>(<span class="st">&quot;life_sat&quot;</span>), mean_sat, sum_sat, n_missing) <span class="sc">|&gt;</span></span>
+<span id="cb16-8"><a href="#cb16-8" tabindex="-1"></a>  dplyr<span class="sc">::</span><span class="fu">slice</span>(<span class="fu">c</span>(<span class="dv">1</span>, <span class="dv">2</span>, <span class="dv">43</span>, <span class="dv">82</span>, <span class="dv">455</span>)) <span class="sc">|&gt;</span></span>
+<span id="cb16-9"><a href="#cb16-9" tabindex="-1"></a>  <span class="fu">as.data.frame</span>()</span>
+<span id="cb16-10"><a href="#cb16-10" tabindex="-1"></a><span class="co">#&gt;   life_sat_health life_sat_work life_sat_relationships life_sat_standard</span></span>
+<span id="cb16-11"><a href="#cb16-11" tabindex="-1"></a><span class="co">#&gt; 1               5             3                      5                 5</span></span>
+<span id="cb16-12"><a href="#cb16-12" tabindex="-1"></a><span class="co">#&gt; 2               4             4                      5                 5</span></span>
+<span id="cb16-13"><a href="#cb16-13" tabindex="-1"></a><span class="co">#&gt; 3               2            NA                      3                 4</span></span>
+<span id="cb16-14"><a href="#cb16-14" tabindex="-1"></a><span class="co">#&gt; 4               1            NA                      2                 2</span></span>
+<span id="cb16-15"><a href="#cb16-15" tabindex="-1"></a><span class="co">#&gt; 5               5            NA                      4                NA</span></span>
+<span id="cb16-16"><a href="#cb16-16" tabindex="-1"></a><span class="co">#&gt;   mean_sat sum_sat n_missing</span></span>
+<span id="cb16-17"><a href="#cb16-17" tabindex="-1"></a><span class="co">#&gt; 1      4.5      18         0</span></span>
+<span id="cb16-18"><a href="#cb16-18" tabindex="-1"></a><span class="co">#&gt; 2      4.5      18         0</span></span>
+<span id="cb16-19"><a href="#cb16-19" tabindex="-1"></a><span class="co">#&gt; 3       NA       9         1</span></span>
+<span id="cb16-20"><a href="#cb16-20" tabindex="-1"></a><span class="co">#&gt; 4       NA       5         1</span></span>
+<span id="cb16-21"><a href="#cb16-21" tabindex="-1"></a><span class="co">#&gt; 5       NA      NA         2</span></span></code></pre></div>
 </div>
 <div id="learn-more" class="section level2">
 <h2>Learn more</h2>
+<p>This is the vignette the package ships. Every walk-through below is
+an article on the <a href="https://amaltawfik.github.io/spicy/">spicy
+website</a>, kept alongside the reference pages and rebuilt with each
+release.</p>
+<p><strong>Explore and tabulate</strong></p>
 <ul>
-<li>See <code>?varlist</code> to inspect variables, labels, values, and
-missing data.</li>
-<li>See <code>?freq</code> for one-way frequency tables (weights,
-sorting, custom missing values, labelled-data display modes).</li>
-<li>See <code>?cross_tab</code> for the full list of arguments (weights,
-simulation, association measures).</li>
-<li>See <code>?assoc_measures</code> for the complete list of
-association statistics; <code>?cramer_v</code> for the canonical entry
-point.</li>
-<li>See <code>?table_categorical</code> for grouped or one-way
-categorical tables.</li>
-<li>See <code>?table_continuous</code> for continuous summaries and
-group comparisons.</li>
-<li>See <code>?table_continuous_lm</code> for model-based
-mean-comparison tables with robust / cluster-robust / bootstrap /
-jackknife SE, case weights, or additive covariate adjustment.</li>
-<li>See <code>?mean_n</code>, <code>?sum_n</code>, <code>?count_n</code>
-for row-wise summaries with optional minimum-valid-values rules.</li>
-<li>See <code>?code_book</code> to generate an interactive HTML
-codebook; <code>?label_from_names</code> to derive variable labels from
-<code>&quot;code. label&quot;</code>-style column names (e.g., LimeSurvey
-exports).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/variable-exploration.html">Explore
+variables and build codebooks</a> — inspect variables, labels and
+missingness (<code>varlist()</code>, <code>code_book()</code>,
+<code>label_from_names()</code>).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/frequency-tables.html">Frequency
+tables and cross-tabulations</a> — <code>freq()</code> and
+<code>cross_tab()</code> in depth (weights, simulation, labelled
+data).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/association-measures.html">Cramer’s
+V, Phi, and association measures</a> — choosing the right effect size
+for a contingency table.</li>
+</ul>
+<p><strong>Summary tables</strong></p>
+<ul>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-categorical.html">Categorical
+summary tables</a> and <a href="https://amaltawfik.github.io/spicy/articles/table-continuous.html">Continuous
+summary tables</a> — the Table 1 / 2 builders (APA by default, other
+journal styles via <code>style =</code>).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-outcome.html">One
+outcome across several groupings</a> — one continuous outcome across
+several groupings, one block of rows per grouping.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html">Model-based
+continuous summary tables</a> — model-based group comparisons (robust
+SE, weights, covariate adjustment).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/survey-tables.html">Summary
+tables from a survey design</a> — the same two tables from a
+<code>survey</code> design: design-based standard errors, degrees of
+freedom and tests (<code>table_continuous_svy()</code>,
+<code>table_categorical_svy()</code>).</li>
+</ul>
+<p><strong>Regression tables</strong></p>
+<ul>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression.html">Publication-ready
+regression tables</a> — the core guide, including the univariable screen
+(<code>table_regression_uv()</code>).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-supported-models.html">Supported
+models</a> — the class-by-class capability map (more than thirty model
+classes).</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/as-structured.html">The
+structured view</a> — the typed view behind every regression table:
+filter, aggregate, or build a custom renderer.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-mixed.html">Mixed-effects
+regression tables</a> — mixed-effects (multilevel) models, random
+effects as table rows, ICC.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-gee.html">GEE
+regression tables</a> — GEE (population-averaged) models,
+working-correlation choice via QIC, sandwich inference.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-counts.html">Count
+and two-part regression tables</a> — Poisson, negative-binomial,
+zero-inflated and hurdle models.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-survival.html">Survival
+regression tables</a> — Cox hazard ratios and accelerated failure time
+models.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-ordinal.html">Ordinal
+regression tables</a> — proportional-odds models, thresholds,
+per-category marginal effects.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-multinomial.html">Multinomial
+regression tables</a> — multinomial logit with outcome categories as
+columns.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/table-regression-bayesian.html">Bayesian
+regression tables</a> — posterior medians, credible intervals,
+convergence checks.</li>
+<li><a href="https://amaltawfik.github.io/spicy/articles/categorical-predictors.html">Categorical
+predictors</a> — reference levels, joint tests, contrasts — across all
+of the above.</li>
+</ul>
+<p><strong>Putting it together</strong></p>
+<ul>
+<li><a href="https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html">Summary
+tables for reporting</a> — the end-to-end reporting sequence tying the
+four <code>table_*</code> helpers together.</li>
+<li><code>?mean_n</code>, <code>?sum_n</code>, <code>?count_n</code> —
+row-wise summaries with minimum-valid-values rules.</li>
 </ul>
 </div>
 

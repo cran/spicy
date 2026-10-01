@@ -1,16 +1,16 @@
-# Rendering layer for table_regression() \u2014 Layer 3.
+# Rendering layer for table_regression() \u2013 Layer 3.
 #
 # Per dev/table_regression_design.md Layer 3:
 #   "Pivot wide on (term, statistic) \u2192 m1, m2, m3...
 #    Apply show_columns, digits, decimal alignment, APA formatting."
 #
-# Takes an aligned long extract (output of align_extracts()) plus
+# Takes an aligned long table (output of align_frames()) plus
 # user-facing display knobs and returns a character data.frame
 # ready for the output-dispatch layer (Step 11). Each row is one
 # displayed line in the final table:
 #   * factor header rows (when group_factor_levels = TRUE)
 #   * coefficient rows (one per term, indented under their factor)
-#   * reference rows (em-dashed when reference_style = "row")
+#   * reference rows (en-dashed when reference_style = "row")
 #
 # The column structure is:
 #   Variable | <Model 1 token1> | <Model 1 token2> | ... | <Model k token_n>
@@ -32,30 +32,55 @@
 #   partial_eta2\u2192 ("partial_eta2", ...)
 #   partial_omega2\u2192 ("partial_omega2", ...)
 
+# One outcome (bare response-variable name) per model_id, read from
+# the aligned fit stats with a coefs fallback. Shared by the
+# spanner-lift decision and the Outcome body row below -- the two
+# used to carry near-identical inline copies of this lookup.
+.aligned_model_outcomes <- function(aligned, model_ids) {
+  vapply(
+    model_ids,
+    function(m_id) {
+      fs <- aligned$fit_stats_aligned
+      out <- fs$outcome[fs$model_id == m_id][1]
+      if (length(out) == 0L || is.na(out)) {
+        cf <- aligned$coefs_aligned
+        cf_m <- cf[cf$model_id == m_id, , drop = FALSE]
+        if (nrow(cf_m) > 0L) cf_m$outcome[1] else NA_character_
+      } else {
+        out
+      }
+    },
+    character(1)
+  )
+}
+
 
 # ---- Public-internal entry point -----------------------------------------
 
 render_regression_table <- function(
-    aligned,
-    show_columns = c("b", "se", "ci", "p"),
-    show_fit_stats = c("nobs", "r2", "adj_r2"),
-    model_labels = NULL,
-    reference_label = "(ref.)",
-    reference_style = c("row", "annotation", "footer", "none"),
-    factor_layout = c("grouped", "flat"),
-    stars = FALSE,
-    ci_level = 0.95,
-    digits = 2L,
-    p_digits = 3L,
-    effect_size_digits = 2L,
-    fit_digits = 2L,
-    ic_digits = 1L,
-    decimal_mark = ".",
-    align = c("decimal", "center", "right", "auto"),
-    labels = NULL,
-    outcome_labels = NULL,
-    title = NULL,
-    note = NULL) {
+  aligned,
+  show_columns = c("b", "se", "ci", "p"),
+  show_fit_stats = c("nobs", "r2", "adj_r2"),
+  model_labels = NULL,
+  reference_label = "(ref.)",
+  reference_style = c("row", "annotation", "footer", "none"),
+  factor_layout = c("grouped", "flat"),
+  stars = FALSE,
+  ci_level = 0.95,
+  ci_label = spicy_str("header_ci_label_confidence"),
+  digits = 2L,
+  p_digits = 3L,
+  effect_size_digits = 2L,
+  fit_digits = 2L,
+  ic_digits = 1L,
+  decimal_mark = ".",
+  align = c("decimal", "center", "right"),
+  labels = NULL,
+  outcome_labels = NULL,
+  title = NULL,
+  note = NULL,
+  re_columns = c("est", "se", "ci")
+) {
   align <- match.arg(align)
   reference_style <- match.arg(reference_style)
   factor_layout <- match.arg(factor_layout)
@@ -77,7 +102,7 @@ render_regression_table <- function(
   model_ids <- aligned$model_ids %||% unique(coefs$model_id)
   n_models <- length(model_ids)
 
-  # Smart default \u2014 when the user did NOT supply any spanner-label
+  # Smart default \u2013 when the user did NOT supply any spanner-label
   # source (neither `model_labels` nor `names(models)`), AND no
   # explicit Outcome-row override (`outcome_labels = NULL`), AND the
   # models have all-distinct response variables, lift the auto-
@@ -90,10 +115,10 @@ render_regression_table <- function(
   # Falls back to "Model 1, ..." (and keeps the Outcome row) when:
   #   * DVs are not all distinct (duplicates would yield an
   #     ambiguous spanner like "mpg / mpg / hp");
-  #   * DVs are identical (no extra information to show \u2014 DV is in
+  #   * DVs are identical (no extra information to show \u2013 DV is in
   #     the title);
   #   * the user supplied `outcome_labels = c(...)` (explicit row
-  #     labels \u2014 left as a row override, since `model_labels` is the
+  #     labels \u2013 left as a row override, since `model_labels` is the
   #     dedicated spanner knob);
   #   * `outcome_labels = FALSE` (user explicitly suppressed DV
   #     display entirely).
@@ -103,42 +128,117 @@ render_regression_table <- function(
     # for the spanner -- not `attr("label")`, which can be a long
     # human-readable phrase (e.g. "Wellbeing score (0-100)") that
     # would distort column widths.
-    model_outcomes <- vapply(model_ids, function(m_id) {
-      fs <- aligned$fit_stats_aligned
-      out <- fs$outcome[fs$model_id == m_id][1]
-      if (length(out) == 0L || is.na(out)) NA_character_ else out
-    }, character(1))
-    if (length(unique(model_outcomes)) == n_models &&
-          all(!is.na(model_outcomes)) &&
-          all(nzchar(model_outcomes))) {
+    model_outcomes <- .aligned_model_outcomes(aligned, model_ids)
+    if (
+      length(unique(model_outcomes)) == n_models &&
+        all(!is.na(model_outcomes)) &&
+        all(nzchar(model_outcomes))
+    ) {
       model_labels <- model_outcomes
       labels_from_outcomes <- TRUE
     }
   }
   if (is.null(model_labels)) {
-    model_labels <- if (n_models == 1L) "" else paste0("Model ", seq_len(n_models))
+    model_labels <- if (n_models == 1L) {
+      ""
+    } else {
+      spicy_fmt("label_model_name", seq_len(n_models))
+    }
   }
   if (length(model_labels) != n_models) {
     spicy_abort(
       sprintf(
         "`model_labels` length (%d) must equal number of models (%d).",
-        length(model_labels), n_models
+        length(model_labels),
+        n_models
       ),
       class = "spicy_invalid_input"
     )
   }
   label_map <- setNames(model_labels, model_ids)
   stars_map <- resolve_stars_thresholds(stars)
+
+  # Per-category AME (ordinal / multinomial): collect each model's outcome
+  # categories (in appearance order = response-factor order) so the AME tokens
+  # expand into one column per category. Empty for single-outcome models
+  # (binary glm, lm, mixed, ...) -> AME stays a single column. Data-driven:
+  # the renderer never switches on the model class, only on whether the frame
+  # carries per-category AME rows.
+  ame_cats_by_model <- setNames(
+    lapply(model_ids, function(m) {
+      if (!"outcome_level" %in% names(coefs)) {
+        return(character(0))
+      }
+      mb <- coefs[coefs$model_id == m, , drop = FALSE]
+      # Multinomial: the COEFFICIENTS are already per-outcome (B rows carry an
+      # outcome_level), so the AME aligns to those rows and is NOT pivoted into
+      # category columns. Only single-block coefficients (ordinal) trigger the
+      # per-category column pivot.
+      if (any(mb$estimate_type == "B" & !is.na(mb$outcome_level))) {
+        return(character(0))
+      }
+      unique(mb$outcome_level[
+        mb$estimate_type == "ame" & !is.na(mb$outcome_level)
+      ])
+    }),
+    model_ids
+  )
+
+  # Per-model N availability: the "n" column renders only for models
+  # whose frame carries per-row N data (univariable-screen bundles).
+  # The reference layouts (gtsummary tbl_merge, EpiRHandbook) have no
+  # N column on the multivariable side -- its single n is a fit-stat
+  # row -- so an all-empty N column is dropped per model group.
+  models_with_n <- model_ids[vapply(
+    model_ids,
+    function(m) {
+      "n_obs" %in% names(coefs) && any(!is.na(coefs$n_obs[coefs$model_id == m]))
+    },
+    logical(1)
+  )]
+
+  # Same rule for the per-fit R^2 columns: a model whose frame carries
+  # no per-row variance explained (any single fit) drops them for its
+  # group -- its R^2 is a model-level statistic and belongs to the
+  # fit-statistics rows (`show_fit_stats`), not to a column repeated
+  # down the coefficients.
+  models_with_r2 <- model_ids[vapply(
+    model_ids,
+    function(m) {
+      rows <- coefs$model_id == m
+      any(vapply(
+        c("r2", "adj_r2"),
+        function(f) f %in% names(coefs) && any(!is.na(coefs[[f]][rows])),
+        logical(1)
+      ))
+    },
+    logical(1)
+  )]
+
   col_spec <- build_column_spec(
-    show_columns, model_ids, label_map,
+    show_columns,
+    model_ids,
+    label_map,
     ci_level = ci_level,
-    model_exp_headers = aligned$exp_headers_auto
+    ci_label = ci_label,
+    model_exp_headers = aligned$exp_headers_auto,
+    model_stat_headers = aligned$stat_headers_auto,
+    ame_categories = ame_cats_by_model,
+    models_with_n = models_with_n,
+    models_with_r2 = models_with_r2,
+    estimand_horizons = aligned$estimand_horizons,
+    decimal_mark = decimal_mark
   )
 
   # One render row per unique term (in canonical order).
-  term_meta <- unique(coefs[, c("term", "order_idx", "is_reference",
-                                 "is_intercept", "factor_term",
-                                 "factor_level")])
+  term_meta <- unique(coefs[, c(
+    "term",
+    "order_idx",
+    "is_reference",
+    "is_intercept",
+    "factor_term",
+    "factor_level"
+  )])
   term_meta <- term_meta[order(term_meta$order_idx), , drop = FALSE]
   rownames(term_meta) <- NULL
 
@@ -146,55 +246,104 @@ render_regression_table <- function(
     setNames(character(0), character(0))
 
   rows <- list()
+  # Body-row index of the "Thresholds" block header (ordinal cut-points) so the
+  # ASCII printer can rule it off from the predictors above -- exposed via the
+  # section_sep_rows attr, read only by print.spicy_regression_table().
+  # integer(0) = no Thresholds block.
+  thr_sep <- integer(0)
   current_factor <- NA_character_
+  # Set of factor_term values that have already received the
+  # ` [vs <ref_level>]` annotation in flat layout. Used instead of
+  # the previous "first row of factor group" heuristic so the
+  # annotation lands on the FIRST row that is actually a contrast
+  # vs the reference (treatment-coded level dummy or AME contrast),
+  # never on a polynomial-trend row (.L / .Q / .C / ^k) which has
+  # no per-level reference semantics.
+  annotation_lifted_for <- character(0)
   for (i in seq_len(nrow(term_meta))) {
     rt <- term_meta[i, , drop = FALSE]
     # Insert factor header row at the start of each factor group
-    if (isTRUE(group_factor_levels) &&
+    if (
+      isTRUE(group_factor_levels) &&
         !is.na(rt$factor_term) &&
-        !identical(rt$factor_term, current_factor)) {
+        !identical(rt$factor_term, current_factor)
+    ) {
       ref_lvl <- if (rt$factor_term %in% names(ref_level_map)) {
         ref_level_map[[rt$factor_term]]
       } else {
         NA_character_
       }
+      # Rule off each subordinate block (ordinal `Thresholds`, partial-PO
+      # `Non-proportional effects`) from the rows above, mirroring the
+      # coefficients / fit-stats divide.
+      if (.reg_is_block(rt$factor_term)) {
+        thr_sep <- c(thr_sep, length(rows) + 1L)
+      }
       rows[[length(rows) + 1L]] <- build_factor_header_row(
-        rt$factor_term, col_spec, labels,
+        rt$factor_term,
+        col_spec,
+        labels,
         reference_style = reference_style,
         ref_level = ref_lvl
       )
       current_factor <- rt$factor_term
     }
-    new_factor_row <- !is.na(rt$factor_term) &&
-                        !identical(rt$factor_term, current_factor)
-    if (is.na(rt$factor_term)) current_factor <- NA_character_
+    if (is.na(rt$factor_term)) {
+      current_factor <- NA_character_
+    }
 
     new_row <- build_body_row(
-      rt, coefs, col_spec, model_ids, label_map, show_columns,
+      rt,
+      coefs,
+      col_spec,
+      model_ids,
+      label_map,
+      show_columns,
       reference_label = reference_label,
       reference_style = reference_style,
       group_factor_levels = group_factor_levels,
       stars_map = stars_map,
-      digits = digits, p_digits = p_digits,
+      digits = digits,
+      p_digits = p_digits,
       effect_size_digits = effect_size_digits,
+      fit_digits = fit_digits,
       decimal_mark = decimal_mark,
-      labels = labels
+      labels = labels,
+      re_columns = re_columns
     )
     # `reference_style = "annotation"` in flat layout: attach
-    # ` [vs <ref_level>]` to the FIRST non-reference dummy of each
-    # factor. Subsequent dummies of the same factor inherit the
+    # ` [vs <ref_level>]` to the FIRST contrast-vs-reference row of
+    # each factor. Subsequent rows of the same factor inherit the
     # same reference -- repeating the annotation would just be
     # noise. The grouped layout already gets `[ref: <level>]` in
     # the factor header above (via build_factor_header_row).
-    if (identical(reference_style, "annotation") &&
-          !isTRUE(group_factor_levels) &&
-          isTRUE(new_factor_row) &&
-          rt$factor_term %in% names(ref_level_map)) {
+    #
+    # Skip polynomial-trend rows (factor_level == ".L" / ".Q" /
+    # ".C" / "^k"): they are orthogonal trends, NOT comparisons
+    # against a baseline level, so a `[vs Lower secondary]` tag on
+    # them would mislead the reader. The annotation will fall
+    # through to the next non-poly row of the same factor (the
+    # first level-named row when AME columns are requested).
+    is_poly_suffix <- !is.na(rt$factor_level) &&
+      (startsWith(rt$factor_level, ".") ||
+        startsWith(rt$factor_level, "^"))
+    if (
+      identical(reference_style, "annotation") &&
+        !isTRUE(group_factor_levels) &&
+        !is.na(rt$factor_term) &&
+        !isTRUE(rt$is_reference) &&
+        !is_poly_suffix &&
+        !(rt$factor_term %in% annotation_lifted_for) &&
+        rt$factor_term %in% names(ref_level_map)
+    ) {
       ref_lvl_flat <- ref_level_map[[rt$factor_term]]
       if (!is.na(ref_lvl_flat) && nzchar(ref_lvl_flat)) {
-        new_row$Variable <- paste0(new_row$Variable,
-                                    " [vs ", ref_lvl_flat, "]")
-        current_factor <- rt$factor_term   # mark factor seen
+        new_row$Variable <- spicy_fmt(
+          "label_vs_annotation",
+          new_row$Variable,
+          ref_lvl_flat
+        )
+        annotation_lifted_for <- c(annotation_lifted_for, rt$factor_term)
       }
     }
     rows[[length(rows) + 1L]] <- new_row
@@ -202,29 +351,21 @@ render_regression_table <- function(
 
   body <- do.call(rbind, rows)
 
-  # Prepend outcome row when applicable (Q11b \u2014 multi-DV display).
+  # Prepend outcome row when applicable (Q11b \u2013 multi-DV display).
   #
   # Two vectors per model:
-  #   * `model_outcomes`        \u2014 variable name from formula(fit)[[2]],
+  #   * `model_outcomes`        \u2013 variable name from formula(fit)[[2]],
   #                               used for the identical-DV decision
-  #   * `model_outcome_labels`  \u2014 display string: attr("label") if
+  #   * `model_outcome_labels`  \u2013 display string: attr("label") if
   #                               set on the response (labelled,
   #                               haven, SPSS), else the variable name
   #
-  # Both come from align_extracts(); fallback if absent.
-  model_outcomes <- vapply(model_ids, function(m_id) {
-    fs <- aligned$fit_stats_aligned
-    out <- fs$outcome[fs$model_id == m_id][1]
-    if (length(out) == 0L || is.na(out)) {
-      coefs_for_model <- coefs[coefs$model_id == m_id, , drop = FALSE]
-      if (nrow(coefs_for_model) > 0L) coefs_for_model$outcome[1] else NA_character_
-    } else {
-      out
-    }
-  }, character(1))
-  model_outcome_labels <- if (!is.null(aligned$outcome_labels_auto) &&
-                               length(aligned$outcome_labels_auto) ==
-                                 length(model_ids)) {
+  # Both come from align_frames(); fallback if absent.
+  model_outcomes <- .aligned_model_outcomes(aligned, model_ids)
+  model_outcome_labels <- if (
+    !is.null(aligned$outcome_labels_auto) &&
+      length(aligned$outcome_labels_auto) == length(model_ids)
+  ) {
     aligned$outcome_labels_auto
   } else {
     model_outcomes
@@ -237,8 +378,6 @@ render_regression_table <- function(
     outcome_labels
   }
   outcome_row <- build_outcome_row(
-    model_outcomes = model_outcomes,
-    model_outcome_labels = model_outcome_labels,
     outcome_labels = effective_outcome_labels,
     model_ids = model_ids,
     label_map = label_map,
@@ -246,6 +385,7 @@ render_regression_table <- function(
   )
   if (!is.null(outcome_row)) {
     body <- rbind(outcome_row, body)
+    if (length(thr_sep)) thr_sep <- thr_sep + 1L
   }
 
   # Append fit-stats rows below the body (one per requested token).
@@ -254,14 +394,23 @@ render_regression_table <- function(
   # the body so its index is folded in via nrow(body).
   fit_stats <- aligned$fit_stats_aligned
   group_sep <- integer(0)
-  if (length(show_fit_stats) > 0L && !is.null(fit_stats) &&
-      nrow(fit_stats) > 0L) {
+  if (
+    length(show_fit_stats) > 0L && !is.null(fit_stats) && nrow(fit_stats) > 0L
+  ) {
     fit_rows <- build_fit_stats_rows(
-      fit_stats, show_fit_stats, model_ids, label_map,
+      fit_stats,
+      show_fit_stats,
+      model_ids,
+      label_map,
       col_spec = col_spec,
-      digits = digits, fit_digits = fit_digits,
-      ic_digits = ic_digits, p_digits = p_digits,
-      decimal_mark = decimal_mark
+      digits = digits,
+      fit_digits = fit_digits,
+      ic_digits = ic_digits,
+      p_digits = p_digits,
+      decimal_mark = decimal_mark,
+      n_groups_by_model = aligned$n_groups_by_model,
+      fixef_by_model = aligned$fixef_by_model,
+      blank_models = aligned$blank_fit_stats_models
     )
     if (length(fit_rows) > 0L) {
       group_sep <- nrow(body) + 1L
@@ -279,22 +428,29 @@ render_regression_table <- function(
   # the print engine via the `align` attribute and applied at
   # output-dispatch time.
   if (identical(align, "decimal")) {
-    data_cols <- setdiff(names(body), "Variable")
+    data_cols <- setdiff(names(body), .REG_KEY_VARIABLE)
     # Detect CI-only columns by inspecting the col_spec: a CI col
     # has fields == c("ci_low", "ci_high"). Map col_name -> field-set
     # for the per-column dispatch.
-    ci_cols <- vapply(col_spec, function(cs) {
-      identical(cs$fields, c("ci_low", "ci_high"))
-    }, logical(1))
-    ci_col_names <- vapply(col_spec[ci_cols], `[[`, character(1),
-                            "col_name")
+    ci_cols <- vapply(
+      col_spec,
+      function(cs) {
+        identical(cs$fields, c("ci_low", "ci_high"))
+      },
+      logical(1)
+    )
+    ci_col_names <- vapply(col_spec[ci_cols], `[[`, character(1), "col_name")
     for (col in data_cols) {
       if (col %in% ci_col_names) {
-        body[[col]] <- align_ci_strings(body[[col]],
-                                          decimal_mark = decimal_mark)
+        body[[col]] <- align_ci_strings(
+          body[[col]],
+          decimal_mark = decimal_mark
+        )
       } else {
-        body[[col]] <- decimal_align_strings(body[[col]],
-                                              decimal_mark = decimal_mark)
+        body[[col]] <- decimal_align_strings(
+          body[[col]],
+          decimal_mark = decimal_mark
+        )
       }
     }
   }
@@ -303,6 +459,7 @@ render_regression_table <- function(
   attr(body, "note") <- note
   attr(body, "col_spec") <- col_spec
   attr(body, "group_sep_rows") <- group_sep
+  attr(body, "section_sep_rows") <- thr_sep
   attr(body, "align") <- align
   attr(body, "decimal_mark") <- decimal_mark
   attr(body, "spanners") <- build_model_spanners(body, col_spec, label_map)
@@ -311,7 +468,7 @@ render_regression_table <- function(
   # Engines (Excel, gt, tinytable, flextable, clipboard) consume this
   # directly instead of re-parsing the character body. The character
   # body above is the primary return value (display representation:
-  # stars suffixes, em-dash for reference rows, "[L, U]" bracketed CI,
+  # stars suffixes, en-dash for reference rows, "[L, U]" bracketed CI,
   # APA-padded p-values). Programmatic access to raw numerics + per-cell
   # markers is via `attr(body, "structured")` (or the user-facing
   # accessor `as_structured()`, exported separately).
@@ -335,8 +492,11 @@ render_regression_table <- function(
     label_map = label_map,
     col_spec = col_spec,
     labels = labels,
+    ci_label = ci_label,
     model_outcomes = model_outcomes,
-    model_outcome_labels = model_outcome_labels
+    model_outcome_labels = model_outcome_labels,
+    stars_map = stars_map,
+    re_columns = re_columns
   )
 
   body
@@ -344,6 +504,52 @@ render_regression_table <- function(
 
 
 # ---- Multi-model column spanners -----------------------------------------
+
+# The column groups of a multi-model table, keyed on `model_id` and
+# built by POSITION. A model owns the columns whose model_id it is; the
+# label is only ever written on top, once the range is fixed. Two models
+# can therefore never end up sharing a range, whatever their labels say.
+#
+# This is the shared body of the two spanner builders -- the char body's
+# (below) and the typed view's (`.build_structured_spanners()`). They
+# used to carry a loop each, keyed on the LABEL, and disagreed the
+# moment two labels coincided: one assigned `out[[label]]` twice and
+# kept the last model, the other unioned both models into one
+# non-contiguous set. `validate_resolved_model_labels()` now makes that
+# input unreachable; this makes the divergence unrepresentable.
+#
+# `model_id_at_col`: one entry per OUTPUT column, in output order,
+# naming the model that column belongs to -- NA for the columns that
+# belong to none (the leading "Variable" column, and anything the
+# caller could not place). The returned indices index that vector, so
+# each caller passes the shape its own consumer reads.
+#
+# Result order is column order, which is model order: gt numbers its
+# spanner ids `model_span_<k>` and flextable keys `model<k>` off this
+# position.
+.model_spanner_ranges <- function(model_id_at_col, label_map) {
+  placed <- !is.na(model_id_at_col)
+  out <- list()
+  labs <- character(0)
+  for (m_id in unique(model_id_at_col[placed])) {
+    lbl <- label_map[[m_id]]
+    if (!nzchar(lbl)) {
+      next
+    }
+    idx <- which(placed & model_id_at_col == m_id)
+    # Spanners must be contiguous; build_column_spec emits columns in
+    # model order so this holds by construction. Defensive check kept
+    # so a future reordering surfaces loudly rather than handing an
+    # engine a set it will improvise over.
+    if (any(diff(idx) != 1L)) {
+      next
+    }
+    out[[length(out) + 1L]] <- as.integer(idx)
+    labs <- c(labs, lbl)
+  }
+  names(out) <- labs
+  out
+}
 
 # Compute the column-group spanner spec consumed by the print method
 # and the rich-output dispatchers. Returns NULL when there is nothing
@@ -354,33 +560,30 @@ render_regression_table <- function(
 # position 1, which is excluded from every spanner).
 build_model_spanners <- function(body, col_spec, label_map) {
   # nocov start - defensive: empty col_spec is rejected upstream by
-  # validate_show_columns(); empty / single-element label_map yields
-  # the early-return on lines 322-324 anyway.
-  if (length(col_spec) == 0L) return(NULL)
+  # validate_show_columns(); a single-model label_map is handled by
+  # the `<= 1` distinct-label early return below.
+  if (length(col_spec) == 0L) {
+    return(NULL)
+  }
   # nocov end
   labels <- unique(unname(label_map))
-  if (length(labels) <= 1L) return(NULL)
-  if (!any(nzchar(labels))) return(NULL)   # nocov - single-model has labels = ""; multi-model always has nzchar names via auto-fill
+  if (length(labels) <= 1L) {
+    return(NULL)
+  }
+  if (!any(nzchar(labels))) {
+    return(NULL) # nocov - single-model has labels = ""; multi-model always has nzchar names via auto-fill
+  }
 
-  body_names <- names(body)
+  # One model_id per body column, in body order: the spec's columns
+  # placed where the body actually put them, everything else (the
+  # "Variable" column, any spec column the body dropped) left NA.
   spec_names <- vapply(col_spec, `[[`, character(1), "col_name")
   spec_model <- vapply(col_spec, `[[`, character(1), "model_id")
+  pos <- match(spec_names, names(body))
+  model_id_at_col <- rep(NA_character_, ncol(body))
+  model_id_at_col[pos[!is.na(pos)]] <- spec_model[!is.na(pos)]
 
-  out <- list()
-  for (m_id in unique(spec_model)) {
-    m_lbl <- label_map[[m_id]]
-    if (!nzchar(m_lbl)) next  # nocov - same as line 324 guard
-    cols_in_model <- spec_names[spec_model == m_id]
-    idx <- match(cols_in_model, body_names)
-    idx <- idx[!is.na(idx)]
-    if (!length(idx)) next    # nocov - cols_in_model always survive in body_names by construction
-    idx <- sort(idx)
-    # Spanners must be contiguous; build_column_spec emits columns in
-    # model order so this holds by construction. Defensive check kept
-    # so a future reordering surfaces loudly.
-    if (any(diff(idx) != 1L)) next   # nocov
-    out[[m_lbl]] <- as.integer(idx)
-  }
+  out <- .model_spanner_ranges(model_id_at_col, label_map)
   if (!length(out)) NULL else out
 }
 
@@ -391,38 +594,131 @@ build_model_spanners <- function(body, col_spec, label_map) {
 #   list(token, estimate_type, fields, header_short, header_with_model)
 # `model_ids`     : vector of model IDs (long format keys)
 # `label_map`     : named character vector mapping model_id \u2192 label
-build_column_spec <- function(show_columns, model_ids, label_map,
-                              ci_level = 0.95,
-                              model_exp_headers = NULL) {
-  ci_pct <- formatC(ci_level * 100, format = "g")
+build_column_spec <- function(
+  show_columns,
+  model_ids,
+  label_map,
+  ci_level = 0.95,
+  ci_label = spicy_str("header_ci_label_confidence"),
+  model_exp_headers = NULL,
+  model_stat_headers = NULL,
+  ame_categories = NULL,
+  models_with_n = NULL,
+  models_with_r2 = NULL,
+  estimand_horizons = NULL,
+  decimal_mark = "."
+) {
+  # NULL (direct/legacy callers): keep the "n" column for every model.
+  if (is.null(models_with_n)) {
+    models_with_n <- model_ids
+  }
+  if (is.null(models_with_r2)) {
+    models_with_r2 <- model_ids
+  }
+  if (is.null(estimand_horizons)) {
+    estimand_horizons <- list()
+  }
+  # The coverage percentage follows `decimal_mark` (decision 27). In
+  # this family the interval header IS the column's programmatic name
+  # (`col_name` = deduplicated header text, and the structured
+  # sub-columns derive from it), so the whole composition moves
+  # together -- there is no frozen-key twin here, unlike the
+  # descriptive families.
+  ci_pct <- .ci_pct_display(ci_level, decimal_mark)
   if (is.null(model_exp_headers)) {
     model_exp_headers <- setNames(
       rep(NA_character_, length(model_ids)),
       model_ids
     )
   }
-  ci_hdr <- paste0(ci_pct, "% CI")
+  if (is.null(model_stat_headers)) {
+    model_stat_headers <- setNames(
+      rep(NA_character_, length(model_ids)),
+      model_ids
+    )
+  }
+  ci_hdr <- spicy_fmt("header_ci_spanner", ci_pct, ci_label)
   base <- list(
-    # B-coefficient family \u2014 atomic, one cell = one component.
-    b      = list(estimate_type = "B",
-                  fields = "estimate",
-                  header_short = "B"),
-    se     = list(estimate_type = "B",
-                  fields = "se",
-                  header_short = "SE"),
-    ci     = list(estimate_type = "B",
-                  fields = c("ci_low", "ci_high"),
-                  header_short = ci_hdr),
-    t      = list(estimate_type = "B",
-                  fields = "statistic",
-                  header_short = "t"),
-    p      = list(estimate_type = "B",
-                  fields = "p_value",
-                  header_short = "p"),
-    beta   = list(estimate_type = "beta",
-                  fields = "estimate",
-                  header_short = "\u03B2"),
-    # AME family \u2014 split (was bundled "value [CI]" in <= 0.11).
+    # B-coefficient family \u2013 atomic, one cell = one component.
+    # Per-row N: the fit sample size, shown on the first row of a
+    # predictor block by univariable-screening frames. Models without
+    # per-row N data (n_obs all NA) drop the column for their group
+    # (models_with_n): their single n is a fit-stat row instead.
+    n = list(
+      estimate_type = "B",
+      fields = "n_obs",
+      header_short = spicy_str("header_n_upper")
+    ),
+    # Outcome event counts "events/N" per factor level (reference row
+    # included), model totals on continuous rows. Binomial outcomes
+    # only -- the orchestrator gate errors otherwise.
+    n_events = list(
+      estimate_type = "B",
+      fields = c("events", "events_n"),
+      header_short = spicy_str("header_events_n")
+    ),
+    b = list(
+      estimate_type = "B",
+      fields = "estimate",
+      header_short = spicy_str("header_b")
+    ),
+    se = list(
+      estimate_type = "B",
+      fields = "se",
+      header_short = spicy_str("header_se")
+    ),
+    ci = list(
+      estimate_type = "B",
+      fields = c("ci_low", "ci_high"),
+      header_short = ci_hdr
+    ),
+    t = list(
+      estimate_type = "B",
+      fields = "statistic",
+      header_short = spicy_str("symbol_t")
+    ),
+    p = list(
+      estimate_type = "B",
+      fields = "p_value",
+      header_short = spicy_str("header_p")
+    ),
+    # Probability of direction (Bayesian fits): share of posterior
+    # draws on the dominant side of zero, range [0.5, 1].
+    pd = list(
+      estimate_type = "B",
+      fields = "pd",
+      header_short = spicy_str("header_pd")
+    ),
+    # Per-parameter sampler diagnostics (BARG steps 2.B / 2.C:
+    # convergence and resolution for every parameter).
+    rhat = list(
+      estimate_type = "B",
+      fields = "rhat",
+      header_short = spicy_str("header_rhat")
+    ),
+    ess_bulk = list(
+      estimate_type = "B",
+      fields = "ess_bulk",
+      header_short = spicy_str("header_ess_bulk")
+    ),
+    ess_tail = list(
+      estimate_type = "B",
+      fields = "ess_tail",
+      header_short = spicy_str("header_ess_tail")
+    ),
+    # MCSE of the displayed posterior median (Bayesian Workflow
+    # sec. 11.6: the criterion for how many digits are honest).
+    mcse = list(
+      estimate_type = "B",
+      fields = "mcse",
+      header_short = spicy_str("header_mcse")
+    ),
+    beta = list(
+      estimate_type = "beta",
+      fields = "estimate",
+      header_short = spicy_str("symbol_beta")
+    ),
+    # AME family \u2013 split (was bundled "value [CI]" in <= 0.11).
     # Convention: only the estimate column itself ("AME") carries the
     # estimate-type label; SE / CI / p sub-columns are LEFT NAKED
     # ("SE", "95% CI", "p"). Adjacency to the "AME" anchor disambiguates
@@ -435,79 +731,236 @@ build_column_spec <- function(show_columns, model_ids, label_map,
     # guarantees canonical intra-block order
     # (estimate -> SE -> 95% CI -> p) for the standard column groups
     # (`all_b`, `all_ame`).
-    ame    = list(estimate_type = "AME",
-                  fields = "estimate",
-                  header_short = "AME"),
-    ame_se = list(estimate_type = "AME",
-                  fields = "se",
-                  header_short = "SE"),
-    ame_ci = list(estimate_type = "AME",
-                  fields = c("ci_low", "ci_high"),
-                  header_short = ci_hdr),
-    ame_p  = list(estimate_type = "AME",
-                  fields = "p_value",
-                  header_short = "p"),
-    # Partial-variance-explained \u2014 split (was bundled too).
-    partial_f2        = list(estimate_type = "partial_f2",
-                              fields = "estimate",
-                              header_short = "f\u00B2"),
-    partial_f2_ci     = list(estimate_type = "partial_f2",
-                              fields = c("ci_low", "ci_high"),
-                              header_short = paste0("f\u00B2 ", ci_hdr)),
-    partial_eta2      = list(estimate_type = "partial_eta2",
-                              fields = "estimate",
-                              header_short = "\u03B7\u00B2"),
-    partial_eta2_ci   = list(estimate_type = "partial_eta2",
-                              fields = c("ci_low", "ci_high"),
-                              header_short = paste0("\u03B7\u00B2 ", ci_hdr)),
-    partial_omega2    = list(estimate_type = "partial_omega2",
-                              fields = "estimate",
-                              header_short = "\u03C9\u00B2"),
-    partial_omega2_ci = list(estimate_type = "partial_omega2",
-                              fields = c("ci_low", "ci_high"),
-                              header_short = paste0("\u03C9\u00B2 ", ci_hdr)),
-    # Partial chi-square (glm) \u2014 kept BUNDLED as "value (df)".
+    # Survival estimands: the anchor headers carry the horizon
+    # (`estimand_horizons`), the sub-columns stay naked like AME's.
+    #
+    # The horizon is written with `.estimand_horizon_str()`: this header
+    # is a FROZEN KEY -- verbatim the name of the column in
+    # `as.data.frame()`, in `output = "data.frame"`, in the structured
+    # `body`, and in `col_meta` -- so it follows `.ci_pct_str()`'s
+    # doctrine and stays at the point whatever the session or the table
+    # asks for.
+    rmst = list(
+      estimate_type = "rmst",
+      fields = "estimate",
+      header_short = if (!is.null(estimand_horizons$tau)) {
+        spicy_fmt("header_rmst", .estimand_horizon_str(estimand_horizons$tau))
+      } else {
+        spicy_str("header_rmst_no_horizon") # nocov
+      }
+    ),
+    rmst_se = list(
+      estimate_type = "rmst",
+      fields = "se",
+      header_short = spicy_str("header_se")
+    ),
+    rmst_ci = list(
+      estimate_type = "rmst",
+      fields = c("ci_low", "ci_high"),
+      header_short = ci_hdr
+    ),
+    rmst_p = list(
+      estimate_type = "rmst",
+      fields = "p_value",
+      header_short = spicy_str("header_p")
+    ),
+    risk_diff = list(
+      estimate_type = "risk_diff",
+      fields = "estimate",
+      header_short = if (!is.null(estimand_horizons$at_time)) {
+        spicy_fmt(
+          "header_risk_diff",
+          .estimand_horizon_str(estimand_horizons$at_time)
+        )
+      } else {
+        spicy_str("header_risk_diff_no_horizon") # nocov
+      }
+    ),
+    risk_diff_se = list(
+      estimate_type = "risk_diff",
+      fields = "se",
+      header_short = spicy_str("header_se")
+    ),
+    risk_diff_ci = list(
+      estimate_type = "risk_diff",
+      fields = c("ci_low", "ci_high"),
+      header_short = ci_hdr
+    ),
+    risk_diff_p = list(
+      estimate_type = "risk_diff",
+      fields = "p_value",
+      header_short = spicy_str("header_p")
+    ),
+    ame = list(
+      estimate_type = "ame",
+      fields = "estimate",
+      header_short = spicy_str("header_ame")
+    ),
+    ame_se = list(
+      estimate_type = "ame",
+      fields = "se",
+      header_short = spicy_str("header_se")
+    ),
+    ame_ci = list(
+      estimate_type = "ame",
+      fields = c("ci_low", "ci_high"),
+      header_short = ci_hdr
+    ),
+    ame_p = list(
+      estimate_type = "ame",
+      fields = "p_value",
+      header_short = spicy_str("header_p")
+    ),
+    # Model-level variance explained, per fit. Populated by the
+    # univariable screen (one fit per predictor block), where the
+    # question "how much of the outcome does this predictor explain on
+    # its own" has one answer per block; dropped for models whose R^2
+    # is a single model-level number (fit-statistics rows instead).
+    r2 = list(
+      estimate_type = "B",
+      fields = "r2",
+      header_short = fit_stat_label("r2")
+    ),
+    adj_r2 = list(
+      estimate_type = "B",
+      fields = "adj_r2",
+      header_short = fit_stat_label("adj_r2")
+    ),
+    # Partial-variance-explained \u2013 split (was bundled too).
+    partial_f2 = list(
+      estimate_type = "partial_f2",
+      fields = "estimate",
+      header_short = spicy_str("symbol_f2_partial")
+    ),
+    partial_f2_ci = list(
+      estimate_type = "partial_f2",
+      fields = c("ci_low", "ci_high"),
+      header_short = spicy_fmt(
+        "header_with_ci_suffix",
+        spicy_str("symbol_f2_partial"),
+        ci_hdr
+      )
+    ),
+    partial_eta2 = list(
+      estimate_type = "partial_eta2",
+      fields = "estimate",
+      header_short = spicy_str("symbol_eta_sq_partial")
+    ),
+    partial_eta2_ci = list(
+      estimate_type = "partial_eta2",
+      fields = c("ci_low", "ci_high"),
+      header_short = spicy_fmt(
+        "header_with_ci_suffix",
+        spicy_str("symbol_eta_sq_partial"),
+        ci_hdr
+      )
+    ),
+    partial_omega2 = list(
+      estimate_type = "partial_omega2",
+      fields = "estimate",
+      header_short = spicy_str("symbol_omega_sq_partial")
+    ),
+    partial_omega2_ci = list(
+      estimate_type = "partial_omega2",
+      fields = c("ci_low", "ci_high"),
+      header_short = spicy_fmt(
+        "header_with_ci_suffix",
+        spicy_str("symbol_omega_sq_partial"),
+        ci_hdr
+      )
+    ),
+    # Partial chi-square (glm) \u2013 kept BUNDLED as "value (df)".
     # That's the universal reporting convention "chi2(df) = value".
-    partial_chi2      = list(estimate_type = "partial_chi2",
-                              fields = c("estimate", "df"),
-                              header_short = "\u03C7\u00B2")
+    partial_chi2 = list(
+      estimate_type = "partial_chi2",
+      fields = c("estimate", "df"),
+      header_short = spicy_str("symbol_chi_sq")
+    )
   )
 
   out <- list()
   for (m_id in model_ids) {
     m_lbl <- label_map[[m_id]]
     exp_hdr <- model_exp_headers[[m_id]]
+    stat_hdr <- model_stat_headers[[m_id]]
     for (tk in show_columns) {
       desc <- base[[tk]]
-      if (is.null(desc)) next
+      if (is.null(desc)) {
+        next
+      }
+      # All-empty per-model N column: drop it for this model group
+      # (see the models_with_n comment at the call site).
+      if (identical(tk, "n") && !(m_id %in% models_with_n)) {
+        next
+      }
+      # Same treatment for the per-fit R^2 columns (see models_with_r2).
+      if (tk %in% c("r2", "adj_r2") && !(m_id %in% models_with_r2)) {
+        next
+      }
       # Per-model B-header rebrand under exponentiate (Step 2 / glm).
-      header_short <- if (identical(tk, "b") &&
-                            !is.na(exp_hdr) &&
-                            nzchar(exp_hdr)) {
+      # Per-model statistic header: the "t" token displays the model's
+      # actual reference distribution ("z" for z-asymptotic classes).
+      header_short <- if (
+        identical(tk, "b") &&
+          !is.na(exp_hdr) &&
+          nzchar(exp_hdr)
+      ) {
         exp_hdr
+      } else if (
+        identical(tk, "t") &&
+          !is.na(stat_hdr) &&
+          nzchar(stat_hdr)
+      ) {
+        stat_hdr
       } else {
         desc$header_short
       }
-      header <- if (nzchar(m_lbl)) {
-        paste0(m_lbl, ": ", header_short)
+
+      # Per-category AME pivot: when this model carries per-category AME rows
+      # (ordinal / multinomial), an AME-family token expands into ONE column
+      # per outcome category (predictors stay rows, categories become columns
+      # -- the field-standard matrix layout). Each column is tagged with its
+      # `outcome_level` so build_body_row() pulls the right cell. Single-outcome
+      # models (cats empty) keep the original single AME column.
+      cats <- if (identical(desc$estimate_type, "ame")) {
+        ame_categories[[m_id]] %||% character(0)
       } else {
-        header_short
+        character(0)
       }
-      out[[length(out) + 1L]] <- list(
-        col_name = make_unique_col_name(out, header),
-        # `display_label` is the bare header text BEFORE dedup
-        # suffix (`.2`, `.3` ...). It's what engines should show in
-        # spanner labels; `col_name` is the internal data-frame key
-        # and may end in `.N` when the same `header_short` (e.g.
-        # "SE", "p") is requested across two blocks (B + AME). The
-        # multi-model `Model X: ` prefix is also dropped -- the
-        # prefix is reattached separately by the model-spanner row.
-        display_label = header_short,
-        token = tk,
-        model_id = m_id,
-        estimate_type = desc$estimate_type,
-        fields = desc$fields
-      )
+      col_variants <- if (length(cats) > 0L) {
+        lapply(cats, function(ct) {
+          list(
+            hs = spicy_fmt("header_ame_by_category", header_short, ct),
+            outcome_level = ct
+          )
+        })
+      } else {
+        list(list(hs = header_short, outcome_level = NA_character_))
+      }
+
+      for (cv in col_variants) {
+        header <- if (nzchar(m_lbl)) {
+          spicy_fmt("header_model_prefixed", m_lbl, cv$hs)
+        } else {
+          cv$hs
+        }
+        out[[length(out) + 1L]] <- list(
+          col_name = make_unique_col_name(out, header),
+          # `display_label` is the bare header text BEFORE dedup
+          # suffix (`.2`, `.3` ...). It's what engines should show in
+          # spanner labels; `col_name` is the internal data-frame key
+          # and may end in `.N` when the same `header_short` (e.g.
+          # "SE", "p") is requested across two blocks (B + AME). The
+          # multi-model `Model X: ` prefix is also dropped -- the
+          # prefix is reattached separately by the model-spanner row.
+          display_label = cv$hs,
+          token = tk,
+          model_id = m_id,
+          estimate_type = desc$estimate_type,
+          fields = desc$fields,
+          outcome_level = cv$outcome_level
+        )
+      }
     }
   }
   out
@@ -515,11 +968,15 @@ build_column_spec <- function(show_columns, model_ids, label_map,
 
 make_unique_col_name <- function(spec_so_far, candidate) {
   used <- vapply(spec_so_far, `[[`, character(1), "col_name")
-  if (!candidate %in% used) return(candidate)
+  if (!candidate %in% used) {
+    return(candidate)
+  }
   k <- 2L
   repeat {
     new_name <- paste0(candidate, ".", k)
-    if (!new_name %in% used) return(new_name)
+    if (!new_name %in% used) {
+      return(new_name)
+    }
     k <- k + 1L
   }
 }
@@ -527,34 +984,112 @@ make_unique_col_name <- function(spec_so_far, candidate) {
 
 # ---- Body row builder ----------------------------------------------------
 
-build_body_row <- function(term_row, coefs, col_spec, model_ids,
-                            label_map, show_columns,
-                            reference_label, reference_style,
-                            group_factor_levels,
-                            stars_map,
-                            digits, p_digits, effect_size_digits,
-                            decimal_mark, labels) {
-  cells <- list(Variable = format_term_label(
-    term_row, reference_label, reference_style, group_factor_levels, labels
-  ))
+build_body_row <- function(
+  term_row,
+  coefs,
+  col_spec,
+  model_ids,
+  label_map,
+  show_columns,
+  reference_label,
+  reference_style,
+  group_factor_levels,
+  stars_map,
+  digits,
+  p_digits,
+  effect_size_digits,
+  fit_digits = 2L,
+  decimal_mark,
+  labels,
+  re_columns = c("est", "se", "ci")
+) {
+  cells <- list(
+    Variable = format_term_label(
+      term_row,
+      reference_label,
+      reference_style,
+      group_factor_levels,
+      labels
+    )
+  )
 
   for (cs in col_spec) {
-    if (isTRUE(term_row$is_reference)) {
-      cells[[cs$col_name]] <- "\u2014"   # em-dash
-      next
+    # Random-effect variance rows (estimate_type = "vc") render in the primary
+    # B (estimate / SE / CI) columns: a variance component is not a coefficient
+    # (kept as its own token so exp / standardize skip it) but it displays on
+    # the same estimate/SE/CI axis. Alias "vc" to the "B" column here.
+    et_match <- if (identical(cs$estimate_type, "B")) {
+      c("B", "vc")
+    } else {
+      cs$estimate_type
     }
-    long_row <- coefs[coefs$model_id == cs$model_id &
-                       coefs$term == term_row$term &
-                       coefs$estimate_type == cs$estimate_type, ,
-                       drop = FALSE]
+    long_row <- coefs[
+      coefs$model_id == cs$model_id &
+        coefs$term == term_row$term &
+        coefs$estimate_type %in% et_match,
+      ,
+      drop = FALSE
+    ]
+    # Per-category AME columns are tagged with an `outcome_level`; narrow to
+    # that category so each column pulls its own cell. A NULL/NA tag (B columns,
+    # single-outcome AME) leaves the match untouched.
+    if (
+      !is.null(cs$outcome_level) &&
+        !is.na(cs$outcome_level) &&
+        "outcome_level" %in% names(long_row) &&
+        nrow(long_row) > 0L
+    ) {
+      long_row <- long_row[
+        long_row$outcome_level %in% cs$outcome_level,
+        ,
+        drop = FALSE
+      ]
+    }
+    # When the row's term does NOT exist in this model's coefs,
+    # leave the cell BLANK -- regardless of whether the term is a
+    # reference level for some other model. Previously the en-dash
+    # was applied globally on `term_row$is_reference`, which produced
+    # an inconsistent multi-model display: a factor missing from a
+    # given model showed en-dashes on its reference row but blanks
+    # on its non-reference rows. The convention now matches
+    # modelsummary / gtsummary / parameters / Stata `esttab`: when
+    # the factor is absent from a model, ALL its rows (ref + non-ref)
+    # are blank in that model's columns.
     if (nrow(long_row) == 0L) {
       cells[[cs$col_name]] <- ""
       next
     }
+    # Per-model reference check. The factor IS in this model and
+    # this row is its reference level here -- en-dash conveys
+    # "reference, no estimate by design". Event counts are exempt:
+    # they are DATA about the level, not an estimate, and the
+    # reference category's events/N is exactly what STROBE item 16
+    # asks readers to see (gtsummary's add_nevent shows it too).
+    if (
+      isTRUE(long_row$is_reference[1L]) &&
+        !identical(cs$token, "n_events")
+    ) {
+      cells[[cs$col_name]] <- spicy_str("cell_undefined")
+      next
+    }
+    # Variance-component cells no number expresses (see
+    # `.vc_cell_undefined()`): the deselected `re_columns`, the t/z a
+    # variance component has none of, and the SE / CI / estimate that is
+    # simply not computable for this component. The SAME predicate feeds
+    # build_structured_body(), so the character body and the typed body
+    # can no longer disagree about where the dash goes.
+    if (.vc_cell_undefined(long_row, cs, re_columns)) {
+      cells[[cs$col_name]] <- spicy_str("cell_undefined")
+      next
+    }
     cells[[cs$col_name]] <- format_cell_value(
-      long_row, cs, stars_map = stars_map,
-      digits = digits, p_digits = p_digits,
+      long_row,
+      cs,
+      stars_map = stars_map,
+      digits = digits,
+      p_digits = p_digits,
       effect_size_digits = effect_size_digits,
+      fit_digits = fit_digits,
       decimal_mark = decimal_mark,
       show_columns = show_columns
     )
@@ -564,50 +1099,240 @@ build_body_row <- function(term_row, coefs, col_spec, model_ids,
 }
 
 
+# ---- Undefined variance-component cells (shared predicate) ---------------
+
+# Fields whose console rendering of an NA is a BLANK, not an en-dash: an
+# NA there means "same fit as the block's first row", "this diagnostic
+# does not apply", or "there is no count for this row" -- never "the
+# number exists but could not be computed". Kept beside the branches of
+# format_cell_value() that implement them.
+.blank_on_na_fields <- function() {
+  c(
+    "n_obs",
+    "r2",
+    "adj_r2",
+    "pd",
+    "ess_bulk",
+    "ess_tail",
+    "rhat",
+    "mcse",
+    "events",
+    "events_n"
+  )
+}
+
+# TRUE when the console renders an en-dash on a variance-component cell
+# because the statistic APPLIES to the row but no number expresses it.
+# Two causes, both display-relevant and neither visible in the typed
+# value alone:
+#
+#   * the user deselected the column for random effects (`re_columns`),
+#     or asked for a t/z a variance component has none of -- the value
+#     may well exist, and stays in the typed body and in
+#     `broom::tidy()`;
+#   * the value is not computable for this component (profile / Wald SE
+#     unavailable, CI bounds missing).
+#
+# Shared by build_body_row() (character body) and
+# build_structured_body() (typed body): the console used to draw the
+# dash while every structured-driven engine left the cell blank, because
+# each side owned its own copy of the rule.
+.vc_cell_undefined <- function(
+  long_row,
+  cs,
+  re_columns = c("est", "se", "ci")
+) {
+  # An empty match yields NA here, which is not "vc": a cell whose term
+  # is absent from the model is blank, never a dash.
+  if (!identical(long_row$estimate_type[1L], "vc")) {
+    return(FALSE)
+  }
+  tk <- cs$token
+  if (identical(tk, "t")) {
+    return(TRUE)
+  }
+  if (identical(tk, "se") && !"se" %in% re_columns) {
+    return(TRUE)
+  }
+  if (identical(tk, "ci") && !"ci" %in% re_columns) {
+    return(TRUE)
+  }
+  flds <- cs$fields
+  if (identical(flds, c("ci_low", "ci_high"))) {
+    return(is.na(long_row$ci_low[1L]) || is.na(long_row$ci_high[1L]))
+  }
+  fld <- flds[1L]
+  fld %in%
+    names(long_row) &&
+    !fld %in% .blank_on_na_fields() &&
+    is.na(long_row[[fld]][1L])
+}
+
+
 # ---- Cell formatter ------------------------------------------------------
 
-format_cell_value <- function(long_row, cs, stars_map,
-                               digits, p_digits, effect_size_digits,
-                               decimal_mark, show_columns) {
+format_cell_value <- function(
+  long_row,
+  cs,
+  stars_map,
+  digits,
+  p_digits,
+  effect_size_digits,
+  fit_digits = 2L,
+  decimal_mark,
+  show_columns
+) {
   tk <- cs$token
-  is_es <- tk %in% c("partial_f2", "partial_f2_ci",
-                     "partial_eta2", "partial_eta2_ci",
-                     "partial_omega2", "partial_omega2_ci",
-                     "partial_chi2")
-  digits_to_use <- if (is_es) effect_size_digits else digits
+  is_es <- tk %in% .PARTIAL_ES_TOKENS
+  digits_to_use <- if (is_es) {
+    effect_size_digits
+  } else if (tk %in% c("r2", "adj_r2")) {
+    # Same knob as the R^2 fit-statistics ROW of the multivariable
+    # model beside it (`fit_digits`, default 2): one statistic, one
+    # precision, whichever layout it lands in.
+    fit_digits
+  } else {
+    digits
+  }
 
-  # Compact "value (df)" rendering for partial_chi2 (Phase 3 Step 3) \u2014
-  # SAS PROC LOGISTIC TYPE3 / car::Anova(type = 3) convention. Df sits
-  # in parens to disambiguate factor terms (k-1 df) from numeric terms
-  # (1 df) without burning an extra column.
-  if (length(cs$fields) == 2L &&
-      identical(cs$fields, c("estimate", "df"))) {
+  # Compact "value (df)" rendering for partial_chi2 (Phase 3 Step 3) \u2013
+  # the `car::Anova` display convention. Df sits in parens to
+  # disambiguate factor terms (k-1 df) from numeric terms (1 df)
+  # without burning an extra column.
+  if (
+    length(cs$fields) == 2L &&
+      identical(cs$fields, c("estimate", "df"))
+  ) {
     est <- long_row$estimate[1]
     df_val <- long_row$df[1]
-    if (is.na(est)) return("\u2014")
+    if (is.na(est)) {
+      return(spicy_str("cell_undefined"))
+    }
     val_str <- format_number(est, digits_to_use, decimal_mark)
     df_str <- if (is.na(df_val)) "" else paste0(" (", as.integer(df_val), ")")
     return(paste0(val_str, df_str))
   }
 
+  # Outcome event counts: "events/N" (STROBE item 16 / NEJM
+  # "no. of events/total no." style). Both integers; blank (not
+  # en-dash) when the frame carries no event data for the row.
+  if (
+    length(cs$fields) == 2L &&
+      identical(cs$fields, c("events", "events_n"))
+  ) {
+    ev <- long_row$events[1]
+    nn <- long_row$events_n[1]
+    if (is.na(ev) || is.na(nn)) {
+      return("")
+    }
+    return(paste0(format(as.integer(ev)), "/", format(as.integer(nn))))
+  }
+
   # CI-only rendering: "[lo, hi]" -- shared by `ci`, `ame_ci`,
   # `partial_f2_ci`, `partial_eta2_ci`, `partial_omega2_ci`.
-  if (length(cs$fields) == 2L &&
-      identical(cs$fields, c("ci_low", "ci_high"))) {
+  if (
+    length(cs$fields) == 2L &&
+      identical(cs$fields, c("ci_low", "ci_high"))
+  ) {
     lo <- long_row$ci_low[1]
     hi <- long_row$ci_high[1]
-    if (is.na(lo) || is.na(hi)) return("\u2014")
+    if (is.na(lo) || is.na(hi)) {
+      return(spicy_str("cell_undefined"))
+    }
     ci_sep <- ci_bracket_separator(decimal_mark)
-    return(paste0("[",
-                  format_number(lo, digits_to_use, decimal_mark), ci_sep,
-                  format_number(hi, digits_to_use, decimal_mark),
-                  "]"))
+    ci_brackets <- .style_ci_brackets()
+    return(paste0(
+      ci_brackets[[1L]],
+      format_number(lo, digits_to_use, decimal_mark),
+      ci_sep,
+      format_number(hi, digits_to_use, decimal_mark),
+      ci_brackets[[2L]]
+    ))
   }
 
   # Single-field cells
   field <- cs$fields
   val <- long_row[[field]][1]
-  if (is.na(val)) return("\u2014")
+  # Per-row N: integer, and BLANK (not en-dash) when absent -- an NA
+  # here means "same fit as the block first row", not "no value
+  # exists for this cell".
+  # Sampler-diagnostic fields: ESS renders as an integer (a sample
+  # size), R-hat with 3 decimals (the 1.01 target needs them).
+  # pd is a posterior probability: p-column style (p_digits decimals,
+  # and the p column's leading-zero rule -- dropped under a point, kept
+  # under a comma, unless a style says otherwise) -- its information
+  # lives between .95 and 1, where the generic 2-decimal cell is blind
+  # (".998" vs "1.00").
+  if (field == "pd") {
+    val <- long_row[[field]][1]
+    if (!is.finite(val)) {
+      return("")
+    }
+    out <- formatC(
+      val,
+      format = "f",
+      digits = p_digits,
+      decimal.mark = decimal_mark
+    )
+    return(.strip_leading_zero(
+      out,
+      decimal_mark,
+      .style_p_leading_zero(decimal_mark)
+    ))
+  }
+  if (field %in% c("ess_bulk", "ess_tail")) {
+    val <- long_row[[field]][1]
+    if (!is.finite(val)) {
+      return("")
+    }
+    return(format(as.integer(round(val))))
+  }
+  if (field == "rhat") {
+    val <- long_row[[field]][1]
+    if (!is.finite(val)) {
+      return("")
+    }
+    return(formatC(val, format = "f", digits = 3, decimal.mark = decimal_mark))
+  }
+  # MCSE spans orders of magnitude across coefficient scales (a
+  # log-odds MCSE ~0.01, a reaction-time one ~1.5), so a fixed
+  # decimal count misleads: render 2 significant digits, plain
+  # notation.
+  if (field == "mcse") {
+    val <- long_row[[field]][1]
+    if (!is.finite(val)) {
+      return("")
+    }
+    # Two significant digits with trailing zeros kept ("0.10", not
+    # "0.1"), plain notation; strip the bare trailing point that
+    # flag = "#" leaves on integer-valued output.
+    out <- sub(
+      "\\.$",
+      "",
+      formatC(val, digits = 2, format = "g", flag = "#", decimal.mark = ".")
+    )
+    if (!identical(decimal_mark, ".")) {
+      out <- sub(".", decimal_mark, out, fixed = TRUE) # nocov
+    }
+    return(out)
+  }
+  if (field == "n_obs") {
+    if (is.na(val)) {
+      return("")
+    }
+    return(format(as.integer(val)))
+  }
+  # Per-fit R^2: like the N cell, an NA means "same fit as the block's
+  # first row", not "no value exists" -- blank, never an en-dash.
+  if (field %in% c("r2", "adj_r2")) {
+    if (is.na(val)) {
+      return("")
+    }
+    return(format_number(val, digits_to_use, decimal_mark))
+  }
+  if (is.na(val)) {
+    return(spicy_str("cell_undefined"))
+  }
 
   if (field == "p_value") {
     out <- format_p_value(val, decimal_mark = decimal_mark, digits = p_digits)
@@ -617,11 +1342,45 @@ format_cell_value <- function(long_row, cs, stars_map,
 
   out <- format_number(val, digits_to_use, decimal_mark)
 
-  # Stars suffix on B (or \u03b2 if standardized && beta requested instead of B)
-  apply_stars <- !is.null(stars_map) && (
-    (tk == "b" && !"beta" %in% show_columns) ||
-    (tk == "beta")
-  )
+  # Stars suffix the displayed estimate. The token determines whose
+  # p-value to use:
+  #   * `b`    -> stars on B (always when B is shown). B is the
+  #               raw coefficient on which the test is performed;
+  #               this matches the dominant convention in published
+  #               regression tables from SPSS, Stata (esttab) and
+  #               SAS user workflows, and in the R ecosystem
+  #               (modelsummary, gtsummary, parameters all star B
+  #               by default).
+  #   * `beta` -> stars on beta ONLY when B is not also shown. The
+  #               standardised coefficient is a deterministic
+  #               rescaling of B; its p-value is identical to B's
+  #               (test statistic is invariant under linear
+  #               rescaling). Adding stars on both B and beta cells
+  #               of the same coefficient row is redundant; the
+  #               convention is to anchor the significance signal
+  #               on the raw coefficient and leave beta as the
+  #               magnitude-comparison column without stars.
+  #   * `ame`  -> stars on AME (uses AME's p_value via the upstream
+  #               estimate_type filter). Stars on AME convey
+  #               significance of the marginal effect -- the
+  #               user-substantive quantity for `glm` and any model
+  #               with interactions (Mood 2010; Long & Freese 2014
+  #               sec 5.3).
+  #
+  # Stars are independent of whether the corresponding p column is
+  # displayed in `show_columns`; their purpose is precisely to
+  # convey significance compactly without spending a column on the
+  # p-value.
+  apply_stars <- !is.null(stars_map) &&
+    ((tk == "b") ||
+      (tk == "beta" && !"b" %in% show_columns) ||
+      (tk == "ame"))
+  # Never star a variance-component row: its optional p (re_test) is a
+  # model-comparison chi-bar-squared test, not a coefficient test, and no
+  # convention stars the random part.
+  if (identical(long_row$estimate_type[1L], "vc")) {
+    apply_stars <- FALSE
+  }
   if (apply_stars) {
     p_val <- long_row$p_value[1]
     out <- paste0(out, format_stars(p_val, stars_map))
@@ -632,8 +1391,13 @@ format_cell_value <- function(long_row, cs, stars_map,
 
 # ---- Term label formatter ------------------------------------------------
 
-format_term_label <- function(term_row, reference_label, reference_style,
-                               group_factor_levels, labels) {
+format_term_label <- function(
+  term_row,
+  reference_label,
+  reference_style,
+  group_factor_levels,
+  labels
+) {
   term <- term_row$term
 
   if (isTRUE(term_row$is_intercept)) {
@@ -641,14 +1405,18 @@ format_term_label <- function(term_row, reference_label, reference_style,
   }
   if (isTRUE(term_row$is_reference)) {
     lvl <- term_row$factor_level
-    if (is.na(lvl) || !nzchar(lvl)) lvl <- term
+    if (is.na(lvl) || !nzchar(lvl)) {
+      lvl <- term
+    }
     if (isTRUE(group_factor_levels)) {
       # Grouped: factor header carries var name \u2192 indent + bare level.
       # Label lookup tries the coef-style key (e.g. "cyl4") first so
       # users can relabel individual reference rows; falls back to
       # the bare factor_level string.
       lbl <- resolve_label(term, labels)
-      if (identical(lbl, term)) lbl <- lvl
+      if (identical(lbl, term)) {
+        lbl <- lvl
+      }
       return(paste0("  ", lbl, " ", reference_label))
     }
     # Flat: no factor header \u2192 render as <var><level> (matching the
@@ -658,13 +1426,28 @@ format_term_label <- function(term_row, reference_label, reference_style,
     flat_lbl <- resolve_label(flat_key, labels)
     return(paste0(flat_lbl, " ", reference_label))
   }
+  # Subordinate-block rows (ordinal thresholds, PPO non-proportional
+  # effects, random-effect variance components) always render their display
+  # label, even in the flat layout: their `term` is an internal key (e.g.
+  # "re::Subject::Days") or a bare cut-point, not a coefficient name.
+  if (.reg_is_block(term_row$factor_term)) {
+    lvl <- term_row$factor_level
+    if (is.na(lvl) || !nzchar(lvl)) {
+      lvl <- term
+    }
+    return(paste0(if (isTRUE(group_factor_levels)) "  " else "", lvl))
+  }
   if (!is.na(term_row$factor_term) && isTRUE(group_factor_levels)) {
     lvl <- term_row$factor_level
-    if (is.na(lvl) || !nzchar(lvl)) lvl <- term
+    if (is.na(lvl) || !nzchar(lvl)) {
+      lvl <- term
+    }
     # Coef-style key first ("cyl6" \u2192 "6 cylinders"); otherwise the
     # bare factor level.
     lbl <- resolve_label(term, labels)
-    if (identical(lbl, term)) lbl <- lvl
+    if (identical(lbl, term)) {
+      lbl <- lvl
+    }
     return(paste0("  ", lbl))
   }
   resolve_label(term, labels)
@@ -682,59 +1465,58 @@ resolve_label <- function(term, labels) {
 
 # ---- Outcome row (Q11b) --------------------------------------------------
 
-# Smart auto + explicit + suppress logic per Q11b.
+# Smart auto + explicit + suppress logic per Q11b. (The "are DVs
+# identical?" / auto-label smart-default now lives in
+# render_regression_table(); this builder only emits the explicit row.)
 #
-# `model_outcomes` \u2014 variable names from formula(fit)[[2]] per model;
-#                    used ONLY for the "are DVs identical?" decision.
-# `model_outcome_labels` \u2014 auto-display strings: attr("label") if set,
-#                    else the variable name; used as the default
-#                    auto-shown labels when outcome_labels = NULL.
-# `outcome_labels` \u2014 user-supplied: NULL (auto), FALSE (suppress),
+# `outcome_labels` \u2013 user-supplied: NULL (auto), FALSE (suppress),
 #                    or a character vector of length n_models
 #                    (explicit override).
 #
 # Returns a single-row data.frame to prepend to the body, or NULL
 # when the outcome row should not be displayed.
-build_outcome_row <- function(model_outcomes,
-                                outcome_labels,
-                                model_ids,
-                                label_map,
-                                col_spec,
-                                model_outcome_labels = NULL) {
+build_outcome_row <- function(outcome_labels, model_ids, label_map, col_spec) {
   n_models <- length(model_ids)
-  if (is.null(model_outcome_labels)) {
-    model_outcome_labels <- model_outcomes
-  }
 
   if (isFALSE(outcome_labels)) {
-    return(NULL)                              # suppress entirely
+    return(NULL) # suppress entirely
   }
   if (n_models <= 1L) {
-    return(NULL)                              # DV is in title for single model
+    return(NULL) # DV is in title for single model
   }
   # Default (NULL) = hide. With the multi-model spanner now showing
   # the model label (or the DV name, via the smart-default in
   # render_regression_table), the Outcome body row would just repeat
   # information already in the header. The row appears only when the
   # user explicitly passes `outcome_labels = c(...)`.
-  if (is.null(outcome_labels)) return(NULL)
+  if (is.null(outcome_labels)) {
+    return(NULL)
+  }
 
   # Place each outcome label in the FIRST sub-column of its model
   # (mirrors the fit-stats footer convention).
-  first_col_per_model <- vapply(model_ids, function(m_id) {
-    for (cs in col_spec) {
-      if (identical(cs$model_id, m_id)) return(cs$col_name)
-    }
-    NA_character_
-  }, character(1))
+  first_col_per_model <- vapply(
+    model_ids,
+    function(m_id) {
+      for (cs in col_spec) {
+        if (identical(cs$model_id, m_id)) return(cs$col_name)
+      }
+      NA_character_
+    },
+    character(1)
+  )
   names(first_col_per_model) <- model_ids
   all_data_cols <- vapply(col_spec, `[[`, character(1), "col_name")
 
-  cells <- list(Variable = "Outcome")
-  for (col in all_data_cols) cells[[col]] <- ""
+  cells <- list(Variable = spicy_str("row_outcome"))
+  for (col in all_data_cols) {
+    cells[[col]] <- ""
+  }
   for (i in seq_along(model_ids)) {
     target_col <- first_col_per_model[[model_ids[i]]]
-    if (is.na(target_col)) next
+    if (is.na(target_col)) {
+      next
+    }
     cells[[target_col]] <- outcome_labels[i]
   }
   as.data.frame(cells, stringsAsFactors = FALSE, check.names = FALSE)
@@ -749,79 +1531,294 @@ build_outcome_row <- function(model_outcomes,
 # matching modelsummary / gtsummary convention. group_sep_rows attr
 # on the parent table marks the divider so the print method draws a
 # horizontal rule between the body and the fit-stats block.
-build_fit_stats_rows <- function(fit_stats, show_fit_stats, model_ids,
-                                  label_map, col_spec,
-                                  digits, fit_digits, ic_digits,
-                                  decimal_mark, p_digits = 3L) {
+build_fit_stats_rows <- function(
+  fit_stats,
+  show_fit_stats,
+  model_ids,
+  label_map,
+  col_spec,
+  digits,
+  fit_digits,
+  ic_digits,
+  decimal_mark,
+  p_digits = 3L,
+  n_groups_by_model = NULL,
+  fixef_by_model = NULL,
+  blank_models = NULL
+) {
   if (length(show_fit_stats) == 0L || length(col_spec) == 0L) {
     return(list())
   }
 
   # First sub-column per model (where the fit-stat value will land)
-  first_col_per_model <- vapply(model_ids, function(m_id) {
-    for (cs in col_spec) {
-      if (identical(cs$model_id, m_id)) return(cs$col_name)
-    }
-    NA_character_
-  }, character(1))
+  first_col_per_model <- vapply(
+    model_ids,
+    function(m_id) {
+      for (cs in col_spec) {
+        if (identical(cs$model_id, m_id)) return(cs$col_name)
+      }
+      NA_character_
+    },
+    character(1)
+  )
   names(first_col_per_model) <- model_ids
   all_data_cols <- vapply(col_spec, `[[`, character(1), "col_name")
 
+  blank_cells <- function(lab) {
+    cells <- list(Variable = lab)
+    for (col in all_data_cols) {
+      cells[[col]] <- ""
+    }
+    cells
+  }
+  push_row <- function(rows, cells) {
+    rows[[length(rows) + 1L]] <- as.data.frame(
+      cells,
+      stringsAsFactors = FALSE,
+      check.names = FALSE
+    )
+    rows
+  }
+
   rows <- list()
   for (tk in show_fit_stats) {
-    if (!tk %in% names(fit_stats)) next   # token absent from fit_stats schema
-    cells <- list(Variable = fit_stat_label(tk))
-    for (col in all_data_cols) cells[[col]] <- ""
+    # "fixed_effects" is a one-token-to-many-rows disclosure BLOCK,
+    # not a fit_stats column: grouped header + one Yes/No row per
+    # absorbed factor (etable / esttab text standard; blank cell =
+    # non-fixest model, where the concept is undefined). Handled
+    # BEFORE the schema guard below. Dropped entirely when no model
+    # absorbs anything (etable prints no section either).
+    if (identical(tk, "fixed_effects")) {
+      fe <- .fixed_effects_cells(fixef_by_model, model_ids)
+      if (is.null(fe)) {
+        next
+      }
+      rows <- push_row(rows, blank_cells(.reg_fe_block_header()))
+      for (fct in fe$factors) {
+        cells <- blank_cells(paste0("  ", fct))
+        for (m_id in model_ids) {
+          target_col <- first_col_per_model[[m_id]]
+          if (is.na(target_col)) {
+            next
+          }
+          cells[[target_col]] <- .reg_fe_cell_label(fe$cells[fct, m_id])
+        }
+        rows <- push_row(rows, cells)
+      }
+      next
+    }
+    # `n_groups` renders one "N (<factor>)" row PER grouping factor
+    # (union across models, first-appearance order) -- fixest absorbed
+    # factors and crossed / nested random effects alike. The single
+    # shared-factor table keeps its historical "N (Subject) | 18"
+    # look as the union-of-one special case.
+    if (identical(tk, "n_groups")) {
+      ngl_all <- n_groups_by_model %||% list()
+      fct_union <- character(0)
+      for (m_id in model_ids) {
+        ng <- ngl_all[[m_id]]
+        if (!is.null(ng) && length(ng) > 0L) {
+          fct_union <- union(fct_union, names(ng))
+        }
+      }
+      if (length(fct_union) == 0L) {
+        next
+      }
+      for (fct in fct_union) {
+        cells <- blank_cells(spicy_fmt("fitstat_n_groups", fct))
+        for (m_id in model_ids) {
+          target_col <- first_col_per_model[[m_id]]
+          if (is.na(target_col)) {
+            next
+          }
+          ng <- ngl_all[[m_id]]
+          if (!is.null(ng) && fct %in% names(ng)) {
+            cells[[target_col]] <- sprintf("%d", as.integer(ng[[fct]]))
+          }
+        }
+        rows <- push_row(rows, cells)
+      }
+      next
+    }
+    if (!tk %in% names(fit_stats)) {
+      next
+    } # token absent from fit_stats schema
+    # A fit-stat row where NO model has a value informs nobody: drop
+    # it instead of rendering an empty row. Historically this skip was
+    # limited to the mixed-only structure stats (icc / n_groups) and
+    # n_events; generalised 2026-07-09 for the univariable-screen
+    # frames, whose model-level stats are all NA by construction --
+    # any class-appropriate token still shows because at least one
+    # model carries a value.
+    if (all(is.na(fit_stats[[tk]]))) {
+      next
+    }
+    cells <- blank_cells(fit_stat_label(tk))
     for (m_id in model_ids) {
+      # Display-blank models (multinom category pseudo-columns, the
+      # univariable-screen bundle): their NA means "value printed
+      # elsewhere by design", so the cell stays empty, not en-dashed.
+      if (m_id %in% blank_models) {
+        next
+      }
       target_col <- first_col_per_model[[m_id]]
-      if (is.na(target_col)) next
+      if (is.na(target_col)) {
+        next
+      }
       sub <- fit_stats[fit_stats$model_id == m_id, , drop = FALSE]
-      if (nrow(sub) == 0L) next
+      if (nrow(sub) == 0L) {
+        next
+      }
       val <- sub[[tk]][1]
       cells[[target_col]] <- format_fit_stat_value(
-        tk, val,
-        digits = digits, fit_digits = fit_digits,
-        ic_digits = ic_digits, p_digits = p_digits,
+        tk,
+        val,
+        digits = digits,
+        fit_digits = fit_digits,
+        ic_digits = ic_digits,
+        p_digits = p_digits,
         decimal_mark = decimal_mark
       )
     }
-    rows[[length(rows) + 1L]] <- as.data.frame(
-      cells, stringsAsFactors = FALSE, check.names = FALSE
-    )
+    rows <- push_row(rows, cells)
   }
   rows
+}
+
+
+# The two presence TOKENS of the fixed-effects disclosure. Frozen: the
+# typed body re-reads them to encode 1 / 0, so they are a wire format
+# between the two bodies, not text. `.reg_fe_cell_label()` below is what
+# a reader sees.
+.REG_FE_YES <- "Yes"
+.REG_FE_NO <- "No"
+
+# Caption of the fixed-effects disclosure block, for both bodies. The
+# block renders with the `factor_header` role, so it takes the same
+# punctuation template as every other block header.
+.reg_fe_block_header <- function() {
+  spicy_fmt("label_block_header", spicy_str("label_block_fixed_effects"))
+}
+
+# The displayed cell for one presence token. The empty token (a
+# non-fixest model, where the concept is undefined) passes through
+# untouched, so a blank cell stays blank.
+#
+# This is the ONE place either body turns a token into text. Translating
+# `.fixed_effects_cells()` instead would look right and break the typed
+# body in silence: its encoder matches on the token, would fall to its
+# NA default, and every FE cell in all six rich engines would come out
+# empty without a single condition raised.
+.reg_fe_cell_label <- function(tok) {
+  if (identical(tok, .REG_FE_YES)) {
+    return(spicy_str("cell_yes"))
+  }
+  if (identical(tok, .REG_FE_NO)) {
+    return(spicy_str("cell_no"))
+  }
+  tok
+}
+
+# Union of absorbed-intercept factors across models (first-appearance
+# order over the model order) and the per-model presence cells:
+# "Yes" (absorbed), "No" (fixest model without this factor -- incl. a
+# no-FE feols in a mixed-FE table), "" (non-fixest model: concept
+# undefined, like a blank R-squared cell for a glm column). NULL when
+# the union is empty. fixef_by_model carries character(0) for a no-FE
+# fixest fit and NULL for non-fixest models -- that distinction drives
+# No vs blank.
+#
+# The cells are TOKENS, never captions: `build_structured_fit_stats_rows()`
+# reads them back to encode 1 / 0 for the typed body.
+.fixed_effects_cells <- function(fixef_by_model, model_ids) {
+  fl <- fixef_by_model %||% list()
+  fe_union <- character(0)
+  for (m_id in model_ids) {
+    fv <- fl[[m_id]]
+    if (!is.null(fv) && length(fv) > 0L) fe_union <- union(fe_union, fv)
+  }
+  if (length(fe_union) == 0L) {
+    return(NULL)
+  }
+  cells <- matrix(
+    "",
+    nrow = length(fe_union),
+    ncol = length(model_ids),
+    dimnames = list(fe_union, model_ids)
+  )
+  for (m_id in model_ids) {
+    fv <- fl[[m_id]]
+    if (is.null(fv)) {
+      next
+    }
+    cells[, m_id] <- ifelse(fe_union %in% fv, .REG_FE_YES, .REG_FE_NO)
+  }
+  list(factors = fe_union, cells = cells)
 }
 
 # Display label for each show_fit_stats token. Greek symbols and
 # typographic conventions per APA / modelsummary.
 fit_stat_label <- function(token) {
-  switch(token,
-    nobs                  = "n",
-    weighted_nobs         = "Weighted n",
-    r2                    = "R\u00B2",
-    adj_r2                = "Adj.R\u00B2",
-    omega2                = "\u03C9\u00B2",
-    pseudo_r2_mcfadden    = "R\u00B2 (McFadden)",
-    pseudo_r2_nagelkerke  = "R\u00B2 (Nagelkerke)",
-    pseudo_r2_tjur        = "R\u00B2 (Tjur)",
-    sigma                 = "\u03C3\u0302",
-    rmse                  = "RMSE",
-    f2                    = "f\u00B2",
-    AIC                   = "AIC",
-    AICc                  = "AICc",
-    BIC                   = "BIC",
-    deviance              = "Deviance",
+  # A change token displays the delta prefix over its base label, so the
+  # two can never disagree.
+  delta <- function(base) spicy_fmt("fitstat_change_prefix", base)
+  switch(
+    token,
+    nobs = spicy_str("header_n_lower"),
+    n_events = spicy_str("fitstat_n_events"),
+    weighted_nobs = spicy_str("label_weighted_n"),
+    r2 = spicy_str("symbol_r2"),
+    adj_r2 = spicy_str("fitstat_adj_r2"),
+    omega2 = spicy_str("symbol_omega_sq_global"),
+    pseudo_r2_mcfadden = spicy_fmt("fitstat_pseudo_r2", "McFadden"),
+    pseudo_r2_nagelkerke = spicy_fmt("fitstat_pseudo_r2", "Nagelkerke"),
+    pseudo_r2_tjur = spicy_fmt("fitstat_pseudo_r2", "Tjur"),
+    theta = spicy_str("fitstat_theta"),
+    alpha = spicy_str("fitstat_alpha"),
+    within_r2 = spicy_fmt(
+      "fitstat_r2_qualified",
+      spicy_str("label_r2_within")
+    ),
+    phi = spicy_str("fitstat_phi"),
+    qic = spicy_str("fitstat_qic"),
+    qicu = spicy_str("fitstat_qicu"),
+    scale = spicy_str("fitstat_scale"),
+    max_cluster_size = spicy_str("fitstat_max_cluster_size"),
+    r2_bayes = spicy_fmt("fitstat_pseudo_r2", "Bayes"),
+    elpd_loo = spicy_str("fitstat_elpd_loo"),
+    looic = spicy_str("fitstat_looic"),
+    waic = spicy_str("fitstat_waic"),
+    r2_marginal = spicy_fmt(
+      "fitstat_r2_qualified",
+      spicy_str("label_r2_marginal")
+    ),
+    r2_conditional = spicy_fmt(
+      "fitstat_r2_qualified",
+      spicy_str("label_r2_conditional")
+    ),
+    icc = spicy_str("fitstat_icc"),
+    # (no n_groups entry: the token expands to per-factor
+    # "N (<factor>)" rows inside both fit-stat builders and never
+    # reaches this label map)
+    sigma = spicy_str("symbol_sigma_hat"),
+    rmse = spicy_str("fitstat_rmse"),
+    f2 = spicy_str("symbol_f2_global"),
+    aic = spicy_str("fitstat_aic"),
+    aicc = spicy_str("fitstat_aicc"),
+    bic = spicy_str("fitstat_bic"),
+    deviance = spicy_str("fitstat_deviance"),
+    eff_p = spicy_str("fitstat_eff_p"),
     # Nested-comparison change tokens (APA Table 7.13)
-    r2_change             = "\u0394R\u00B2",
-    adj_r2_change         = "\u0394Adj.R\u00B2",
-    f_change              = "F-change",
-    f2_change             = "\u0394f\u00B2",
-    lrt_change            = "\u0394\u03C7\u00B2",
-    aic_change            = "\u0394AIC",
-    aicc_change           = "\u0394AICc",
-    bic_change            = "\u0394BIC",
-    deviance_change       = "\u0394Deviance",
-    p_change              = "p (change)",
+    r2_change = delta(spicy_str("symbol_r2")),
+    adj_r2_change = delta(spicy_str("fitstat_adj_r2")),
+    f_change = spicy_str("fitstat_f_change"),
+    f2_change = delta(spicy_str("symbol_f2_global")),
+    lrt_change = delta(spicy_str("symbol_chi_sq")),
+    aic_change = delta(spicy_str("fitstat_aic")),
+    aicc_change = delta(spicy_str("fitstat_aicc")),
+    bic_change = delta(spicy_str("fitstat_bic")),
+    deviance_change = delta(spicy_str("fitstat_deviance")),
+    p_change = spicy_str("fitstat_p_change"),
     token
   )
 }
@@ -832,59 +1829,102 @@ fit_stat_label <- function(token) {
 #   sigma / rmse               \u2192 fit_digits
 #   AIC / AICc / BIC           \u2192 ic_digits
 #   deviance                   \u2192 digits
-format_fit_stat_value <- function(token, val,
-                                    digits, fit_digits, ic_digits,
-                                    p_digits = 3L,
-                                    decimal_mark = ".") {
-  # Change tokens render an em-dash on NA -- typically the first
-  # model's column (no previous to compare to). Absolute fit stats
-  # render an empty string (e.g. R\u00b2 is NA for a glm row in a mixed
-  # table, which the user reads as "not applicable").
-  is_change <- token %in% c("r2_change", "adj_r2_change",
-                             "f_change", "f2_change", "lrt_change",
-                             "aic_change", "aicc_change", "bic_change",
-                             "deviance_change", "p_change")
+format_fit_stat_value <- function(
+  token,
+  val,
+  digits,
+  fit_digits,
+  ic_digits,
+  p_digits = 3L,
+  decimal_mark = "."
+) {
+  # NA renders an en-dash: for change tokens that is typically the
+  # first model's column (no previous to compare to); for absolute fit
+  # stats it marks a stat not defined for that model's class in a
+  # mixed table (e.g. R\u00b2 on a glm column), per the documented
+  # "en-dashes per cell" contract of `show_fit_stats`.
+  is_change <- token %in%
+    c(
+      "r2_change",
+      "adj_r2_change",
+      "f_change",
+      "f2_change",
+      "lrt_change",
+      "aic_change",
+      "aicc_change",
+      "bic_change",
+      "deviance_change",
+      "p_change"
+    )
   if (is.null(val) || is.na(val)) {
-    return(if (is_change) "\u2014" else "")
+    # Structural per-class counts keep the blank convention of the
+    # n_groups / fixed_effects block family: an em-dashed "N events"
+    # would read as a missing value on a class where the count is
+    # simply not a concept (documented Cox-only row).
+    if (identical(token, "n_events")) {
+      return("")
+    }
+    return(spicy_str("cell_undefined"))
   }
   # p-value of the change-test: APA-style p formatting.
   if (identical(token, "p_change")) {
-    return(format_p_value(val, decimal_mark = decimal_mark,
-                          digits = p_digits))
+    return(format_p_value(val, decimal_mark = decimal_mark, digits = p_digits))
   }
-  prec <- switch(token,
-    nobs                  = 0L,
-    weighted_nobs         = 0L,
-    r2                    = fit_digits,
-    adj_r2                = fit_digits,
-    omega2                = fit_digits,
-    pseudo_r2_mcfadden    = fit_digits,
-    pseudo_r2_nagelkerke  = fit_digits,
-    pseudo_r2_tjur        = fit_digits,
-    sigma                 = fit_digits,
-    rmse                  = fit_digits,
-    f2                    = fit_digits,
-    AIC                   = ic_digits,
-    AICc                  = ic_digits,
-    BIC                   = ic_digits,
-    deviance              = digits,
+  prec <- switch(
+    token,
+    nobs = 0L,
+    n_events = 0L,
+    weighted_nobs = 0L,
+    r2 = fit_digits,
+    adj_r2 = fit_digits,
+    omega2 = fit_digits,
+    pseudo_r2_mcfadden = fit_digits,
+    theta = fit_digits,
+    alpha = fit_digits,
+    within_r2 = fit_digits,
+    phi = fit_digits,
+    scale = fit_digits,
+    max_cluster_size = 0L,
+    r2_bayes = fit_digits,
+    elpd_loo = ic_digits,
+    looic = ic_digits,
+    waic = ic_digits,
+    qic = ic_digits,
+    qicu = ic_digits,
+    pseudo_r2_nagelkerke = fit_digits,
+    pseudo_r2_tjur = fit_digits,
+    r2_marginal = fit_digits,
+    r2_conditional = fit_digits,
+    icc = fit_digits,
+    sigma = fit_digits,
+    rmse = fit_digits,
+    f2 = fit_digits,
+    aic = ic_digits,
+    aicc = ic_digits,
+    bic = ic_digits,
+    # Phase 7c22 (item b): deviance is on the same likelihood scale as
+    # AIC / BIC / AICc (large values, IC family). The default
+    # `ic_digits = 1L` matches Stata `estat ic` and SAS PROC LOGISTIC
+    # convention; the previous `digits` (= 2L by default) over-
+    # specified the precision for values typically in the hundreds.
+    deviance = ic_digits,
     # Change tokens: precision matches the absolute version
-    r2_change             = fit_digits,
-    adj_r2_change         = fit_digits,
-    f2_change             = fit_digits,
-    f_change              = digits,
-    lrt_change            = digits,
-    aic_change            = ic_digits,
-    aicc_change           = ic_digits,
-    bic_change            = ic_digits,
-    deviance_change       = digits,
+    r2_change = fit_digits,
+    adj_r2_change = fit_digits,
+    f2_change = fit_digits,
+    f_change = digits,
+    lrt_change = digits,
+    aic_change = ic_digits,
+    aicc_change = ic_digits,
+    bic_change = ic_digits,
+    deviance_change = ic_digits,
     digits
   )
   if (is_change) {
     # Explicit "+" prefix on positive change values (signals
     # improvement on R\u00b2 / \u0394\u03c7\u00b2 / \u0394f\u00b2, worsening on \u0394deviance / \u0394AIC
     # depending on direction). Same convention as APA / modelsummary.
-    return(format_signed(val, prec))
+    return(format_signed(val, prec, decimal_mark))
   }
   format_number(val, prec, decimal_mark)
 }
@@ -892,22 +1932,58 @@ format_fit_stat_value <- function(token, val,
 
 # ---- Factor header row ---------------------------------------------------
 
-build_factor_header_row <- function(factor_term, col_spec, labels,
-                                      reference_style = "row",
-                                      ref_level = NA_character_) {
+# THE producer of a factor / block header's Variable cell.
+#
+# Two bodies print this string: the character body the console renders
+# (build_factor_header_row(), just below) and the typed body the six rich
+# engines read (.resolve_factor_header_label(), regression_structured.R).
+# They used to build it independently -- the comment on the second one
+# said "Mirrors build_factor_header_row()'s Variable cell content", which
+# is the whole problem: a mirror is a copy that nothing keeps true. They
+# agree by construction now.
+#
+# Resolution order, the package-wide rule for a display label: a user
+# override for this key, then the registry, then the key itself. The
+# `%` in a user label or in a reference level is safe -- both travel as
+# sprintf ARGUMENTS, never as the template.
+.reg_factor_header_text <- function(
+  factor_term,
+  labels,
+  reference_style = "row",
+  ref_level = NA_character_
+) {
   display <- if (!is.null(labels) && factor_term %in% names(labels)) {
     labels[[factor_term]]
   } else {
-    factor_term
+    .reg_block_label(factor_term)
   }
-  header <- paste0(display, ":")
-  # Q5 \u2014 annotation mode bakes "[ref: <level>]" into the factor
+  header <- spicy_fmt("label_block_header", display)
+  # Q5 \u2013 annotation mode bakes "[ref: <level>]" into the factor
   # header so the reference level remains readable even though the
   # ref ROW was dropped during alignment.
-  if (identical(reference_style, "annotation") &&
-      !is.na(ref_level) && nzchar(ref_level)) {
-    header <- paste0(header, " [ref: ", ref_level, "]")
+  if (
+    identical(reference_style, "annotation") &&
+      !is.na(ref_level) &&
+      nzchar(ref_level)
+  ) {
+    return(spicy_fmt("label_ref_annotation", header, ref_level))
   }
+  header
+}
+
+build_factor_header_row <- function(
+  factor_term,
+  col_spec,
+  labels,
+  reference_style = "row",
+  ref_level = NA_character_
+) {
+  header <- .reg_factor_header_text(
+    factor_term,
+    labels,
+    reference_style,
+    ref_level
+  )
   cells <- list(Variable = header)
   for (cs in col_spec) {
     cells[[cs$col_name]] <- ""
@@ -922,16 +1998,29 @@ build_factor_header_row <- function(factor_term, col_spec, labels,
 # Sorted strictest first \u2192 applied with cumulative "lowest threshold met"
 # semantics in format_stars().
 resolve_stars_thresholds <- function(stars) {
-  if (isFALSE(stars) || is.null(stars)) return(NULL)
-  if (isTRUE(stars)) {
-    return(c("***" = 0.001, "**" = 0.01, "*" = 0.05))
+  if (isFALSE(stars) || is.null(stars)) {
+    return(NULL)
   }
-  if (!is.numeric(stars) || is.null(names(stars))) return(NULL)
+  if (isTRUE(stars)) {
+    return(stats::setNames(
+      c(0.001, 0.01, 0.05),
+      c(
+        spicy_str("symbol_star_001"),
+        spicy_str("symbol_star_01"),
+        spicy_str("symbol_star_05")
+      )
+    ))
+  }
+  if (!is.numeric(stars) || is.null(names(stars))) {
+    return(NULL)
+  }
   stars[order(stars)]
 }
 
 format_stars <- function(p, stars_map) {
-  if (is.null(stars_map) || is.na(p)) return("")
+  if (is.null(stars_map) || is.na(p)) {
+    return("")
+  }
   for (sym in names(stars_map)) {
     if (p < stars_map[[sym]]) return(sym)
   }

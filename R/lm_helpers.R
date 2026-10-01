@@ -48,6 +48,14 @@ detect_weights_column_name <- function(quo, data) {
 # df) only supports a single cluster vector, while sandwich::vcovCL
 # supports multi-way but only at CR0/CR1. A future release may add a
 # dedicated `multiway` argument that routes to sandwich::vcovCL.
+#
+# NOT a duplicate of resolve_cluster() (R/abort.R), despite the name:
+# that one resolves against a FITTED MODEL's model.frame (formula /
+# string / vector forms, per model in multi-model tables), while this
+# one tidy-evaluates a quosure against the raw DATA of the
+# descriptive-table functions. The contracts (inputs, error surface,
+# lookup scope) differ enough that merging them would couple the two
+# call families for no shared logic beyond "return a vector".
 resolve_cluster_argument <- function(quo, data, arg = "cluster") {
   if (rlang::quo_is_null(quo)) {
     return(NULL)
@@ -71,7 +79,9 @@ resolve_cluster_argument <- function(quo, data, arg = "cluster") {
           "name in `data`."
         ),
         arg
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
 
   if (is.null(val)) {
@@ -89,7 +99,9 @@ resolve_cluster_argument <- function(quo, data, arg = "cluster") {
           "`lm()`."
         ),
         arg
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
 
   if (is.character(val) && length(val) == 1L && val %in% names(data)) {
@@ -104,7 +116,7 @@ resolve_cluster_argument <- function(quo, data, arg = "cluster") {
       sprintf(
         "Cluster column `%s` not found in `data`: %s.",
         arg,
-        shQuote(val)
+        .quote_val(val)
       ),
       class = "spicy_missing_column"
     )
@@ -118,7 +130,9 @@ resolve_cluster_argument <- function(quo, data, arg = "cluster") {
           "name in `data`."
         ),
         arg
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
 
   if (length(val) != nrow(data)) {
@@ -128,7 +142,9 @@ resolve_cluster_argument <- function(quo, data, arg = "cluster") {
         arg,
         length(val),
         nrow(data)
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
 
   val
@@ -186,7 +202,7 @@ resolve_covariates_argument <- function(
     spicy_abort(
       c(
         sprintf(
-          "Formula syntax for `%s` is not yet supported in spicy 0.12.",
+          "Formula syntax for `%s` is not yet supported.",
           arg
         ),
         "i" = sprintf(
@@ -194,7 +210,8 @@ resolve_covariates_argument <- function(
             "Use a tidyselect expression instead, e.g. ",
             "`%s = c(age, sex)` or `%s = all_of(c(\"age\", \"sex\"))`."
           ),
-          arg, arg
+          arg,
+          arg
         ),
         "i" = "Interactions, polynomials and other formula-based covariates are planned for a future release."
       ),
@@ -258,7 +275,7 @@ resolve_covariates_argument <- function(
       sprintf(
         "`%s` not found in `data`: %s.",
         arg,
-        paste(shQuote(missing_cols), collapse = ", ")
+        paste(.quote_val(missing_cols), collapse = ", ")
       ),
       class = "spicy_missing_column"
     )
@@ -280,7 +297,7 @@ resolve_covariates_argument <- function(
           "numeric, integer, logical, factor, or character."
         ),
         arg,
-        paste(shQuote(cov_names[bad_class]), collapse = ", ")
+        paste(.quote_val(cov_names[bad_class]), collapse = ", ")
       ),
       class = "spicy_invalid_input"
     )
@@ -302,7 +319,8 @@ resolve_covariates_argument <- function(
           "`%s` overlaps with `by` (`%s`): a variable cannot be ",
           "both predictor and covariate."
         ),
-        arg, by_name
+        arg,
+        by_name
       ),
       class = "spicy_invalid_input"
     )
@@ -323,7 +341,7 @@ resolve_covariates_argument <- function(
         sprintf(
           "`%s` cannot use column name(s) reserved by the internal model fit: %s.",
           arg,
-          paste(shQuote(reserved), collapse = ", ")
+          paste(.quote_val(reserved), collapse = ", ")
         ),
         "i" = "Rename the column in `data` (e.g. via `dplyr::rename()`) before passing it as a covariate."
       ),

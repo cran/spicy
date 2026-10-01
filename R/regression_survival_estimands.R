@@ -1,0 +1,959 @@
+# Absolute survival estimands for coxph fits: RMST difference over
+# [0, tau] and risk (cumulative incidence) difference at a landmark
+# time, by regression standardization (g-computation) from the fitted
+# model -- the survival analog of the AME column (AME itself is
+# deliberately disabled for Cox: a hazard ratio has no marginal effect
+# on the probability scale without a time horizon).
+#
+# Spec: dev/survival_estimands_spec.md (validated 2026-07-09).
+# Engine (native, no runtime dependency):
+#   1. H0(t) from survival::basehaz(fit, centered = FALSE);
+#   2. per-subject counterfactual curves
+#      S_i^a(t) = exp(-H0(t) * exp(lp_i^a)), lp on the reference =
+#      "zero" scale so it matches the uncentered baseline;
+#   3. standardized curve S^a(t) = mean_i S_i^a(t);
+#   4. RMST^a = the exact step-function integral of S^a over [0, tau];
+#      risk^a(t) = 1 - S^a(t).
+# Contrasts: factor predictors get one row per non-reference level
+# (level vs reference, the whole data pushed through both); numeric
+# predictors get the +1-unit contrast (the AME convention).
+# Inference: nonparametric bootstrap over subjects (refit + recompute
+# per replicate); SE = sd of replicates, Wald z / CI / p -- the
+# package's bootstrap layering.
+
+# ---- Data recovery ---------------------------------------------------------
+
+# The counterfactual push needs the fit's ORIGINAL data (raw columns,
+# so factor()/log()/interaction terms re-evaluate through predict());
+# the model frame's columns are named by expression and cannot be
+# modified by variable. Recover from the call, then keep the rows the
+# fit actually used.
+.coxph_estimand_data <- function(fit) {
+  data <- tryCatch(
+    eval(fit$call$data, environment(stats::formula(fit))),
+    error = function(e) NULL
+  )
+  if (!is.data.frame(data)) {
+    spicy_abort(
+      c(
+        paste0(
+          "RMST / risk-difference columns need the fit's original ",
+          "data, and it could not be recovered from the model call."
+        ),
+        "i" = paste0(
+          "Fit the model with a `data` argument that is ",
+          "still available (a data frame in scope)."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  fvars <- all.vars(stats::formula(fit))
+  missing_vars <- setdiff(fvars, names(data))
+  if (length(missing_vars) > 0L) {
+    spicy_abort(
+      sprintf(
+        "Column(s) %s of the model formula are not in the recovered data.",
+        paste(.quote_val(missing_vars), collapse = ", ")
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  data <- data[
+    stats::complete.cases(data[, fvars, drop = FALSE]),
+    ,
+    drop = FALSE
+  ]
+  # Guard against a silent mismatch between the recovered rows and the
+  # fit (e.g. the data frame changed since fitting).
+  if (nrow(data) != as.integer(fit$n[length(fit$n)])) {
+    spicy_abort(
+      c(
+        "The recovered data does not match the fitted sample.",
+        "i" = sprintf(
+          "Recovered %d complete rows; the fit used %d.",
+          nrow(data),
+          as.integer(fit$n[length(fit$n)])
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  data
+}
+
+
+# ---- Structural gates ------------------------------------------------------
+
+.coxph_estimand_gates <- function(fit, model_id) {
+  specials <- attr(fit$terms, "specials")
+  if (!is.null(specials$tt)) {
+    spicy_abort(
+      sprintf(
+        "RMST / risk-difference columns are not available with time-transform `tt()` terms (%s).",
+        model_id
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  y <- stats::model.response(stats::model.frame(fit))
+  if (!inherits(y, "Surv") || ncol(y) != 2L) {
+    spicy_abort(
+      c(
+        sprintf(
+          "RMST / risk-difference columns need right-censored single-record data (%s).",
+          model_id
+        ),
+        "i" = "Counting-process (start-stop) responses have no per-subject curve."
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  invisible(NULL)
+}
+
+
+# ---- Core curves -----------------------------------------------------------
+
+# Baseline cumulative hazard of the fit, on a common time grid, one
+# column per stratum (a single column for unstratified fits). For a
+# stratified Cox model the standardization keeps each subject's OWN
+# stratum baseline -- only the exposure is set counterfactually, the
+# design (strata) is not -- so the helper also returns each subject's
+# stratum column index (`s_idx`, NULL when unstratified). Cross-
+# validated against adjustedCurves::adjusted_rmst (direct method) on
+# a stratified lung fit: exact.
+.coxph_baseline <- function(fit) {
+  bh <- survival::basehaz(fit, centered = FALSE)
+  if (is.null(bh$strata)) {
+    return(list(
+      times = bh$time,
+      H0 = matrix(bh$hazard, ncol = 1L),
+      s_idx = NULL
+    ))
+  }
+  grid <- sort(unique(bh$time))
+  lv <- levels(bh$strata)
+  H0 <- vapply(
+    lv,
+    function(sl) {
+      b <- bh[bh$strata == sl, , drop = FALSE]
+      # Right-continuous step interpolation; 0 before the stratum's
+      # first event time.
+      c(0, b$hazard)[findInterval(grid, b$time) + 1L]
+    },
+    numeric(length(grid))
+  )
+  H0 <- matrix(H0, nrow = length(grid), dimnames = list(NULL, lv))
+  mf <- stats::model.frame(fit)
+  sp <- survival::untangle.specials(stats::terms(fit), "strata")
+  s_subj <- if (length(sp$vars) == 1L) {
+    mf[[sp$vars]]
+  } else {
+    survival::strata(mf[, sp$vars, drop = FALSE], shortlabel = FALSE)
+  }
+  s_chr <- as.character(s_subj)
+  if (!all(s_chr %in% lv)) {
+    # Reachable with several separate strata() terms: survfit's basehaz
+    # labels ("sex=male, agegrp=old") differ from the labels
+    # survival::strata() builds from the model-frame special columns.
+    spicy_abort(
+      c(
+        "The fit's strata labels do not match basehaz().",
+        "i" = paste0(
+          "Combine multiple stratification variables into a ",
+          "single `strata(a, b)` term and refit."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  list(times = grid, H0 = H0, s_idx = match(s_chr, lv))
+}
+
+
+# Standardized survival probabilities of `newdata` pushed through the
+# fit, evaluated at the baseline grid. `H0` is the per-stratum matrix
+# from .coxph_baseline(); `s_idx` maps each row of `newdata` to its
+# stratum column (NULL = unstratified). Returns a vector S(times).
+#
+# `w` are the weights of the standardization POPULATION -- the mix the
+# per-subject curves are averaged over, not the weights of the fit.
+# NULL is the unweighted average, and takes the same two expressions it
+# always did: a sampling design changes which population the estimand
+# is standardized to, and that is a separate argument from the one the
+# fit already carries.
+.coxph_standardized_survival <- function(
+  fit,
+  newdata,
+  H0,
+  s_idx = NULL,
+  w = NULL
+) {
+  lp <- stats::predict(fit, newdata = newdata, type = "lp", reference = "zero")
+  elp <- exp(lp)
+  if (is.null(s_idx)) {
+    # S matrix would be length(times) x n; average over subjects
+    # without materializing it.
+    if (is.null(w)) {
+      return(vapply(H0[, 1L], function(h) mean(exp(-h * elp)), numeric(1)))
+    }
+    sw <- sum(w)
+    return(vapply(
+      H0[, 1L],
+      function(h) sum(w * exp(-h * elp)) / sw,
+      numeric(1)
+    ))
+  }
+  # Stratified: each subject's curve uses their own stratum baseline.
+  M <- H0[, s_idx, drop = FALSE]
+  S <- exp(-sweep(M, 2L, elp, "*"))
+  if (is.null(w)) {
+    return(rowMeans(S))
+  }
+  as.vector(S %*% w) / sum(w)
+}
+
+
+# Exact integral over [0, tau] of the right-continuous step function
+# that equals `surv[k]` on [times[k], times[k+1]) and 1 on
+# [0, times[1]).
+.step_rmst <- function(times, surv, tau) {
+  keep <- times <= tau
+  t_k <- c(0, times[keep])
+  s_k <- c(1, surv[keep])
+  widths <- diff(c(t_k, tau))
+  sum(widths * s_k)
+}
+
+
+# Standardized survival at a single landmark time t (step function:
+# the value at the last event time <= t).
+.step_surv_at <- function(times, surv, t) {
+  idx <- findInterval(t, times)
+  if (idx == 0L) {
+    return(1)
+  }
+  surv[idx]
+}
+
+
+# ---- Point estimates -------------------------------------------------------
+
+# One fit -> the estimand contrasts for every predictor variable.
+# Returns a data.frame: term, parent_var, label, factor_level_pos,
+# estimand ("rmst" / "risk_diff"), estimate.
+# Callers must request at least one estimand: with both `want_*`
+# FALSE the internal `max()` would warn on an empty vector. The sole
+# caller today guards this in `.survival_estimand_rows()`; a second
+# caller (volet 0.14) must keep that guard on its own side.
+.coxph_estimand_points <- function(
+  fit,
+  data,
+  want_rmst,
+  want_risk,
+  tau,
+  at_time
+) {
+  bl <- .coxph_baseline(fit)
+  # The baseline grid runs to the last event time, but nothing beyond
+  # max(tau, at_time) can reach a result: .step_rmst() opens with
+  # `keep <- times <= tau` and .step_surv_at() is a findInterval() at
+  # `at_time`. Truncating here removes grid points that are provably
+  # discarded downstream, so the estimands are unchanged EXACTLY
+  # (max|d| = 0, not "small") -- a simplification, not an optimisation.
+  # What it saves is the fraction of the grid past the horizon, and
+  # nothing more: a third of it on the vignette's own lung fit at
+  # tau = 365, three quarters when tau sits at the lower quartile of
+  # follow-up. Never an order of magnitude, so no speed is promised.
+  #
+  # `H0` is a grid x n_strata MATRIX, so the truncation subsets ROWS,
+  # with `drop = FALSE`. `s_idx` maps each subject to a stratum COLUMN
+  # and must not be touched.
+  horizon <- max(c(if (want_rmst) tau, if (want_risk) at_time))
+  keep <- bl$times <= horizon
+  times <- bl$times[keep]
+  H0 <- bl$H0[keep, , drop = FALSE]
+
+  curve_stats <- function(newdata) {
+    s <- .coxph_standardized_survival(fit, newdata, H0, bl$s_idx)
+    c(
+      rmst = if (want_rmst) .step_rmst(times, s, tau) else NA_real_,
+      risk = if (want_risk) {
+        1 - .step_surv_at(times, s, at_time)
+      } else {
+        NA_real_
+      }
+    )
+  }
+
+  rhs_vars <- setdiff(
+    all.vars(stats::formula(fit)),
+    all.vars(stats::formula(fit)[[2L]])
+  )
+  # Strata variables get no contrast row: they carry no coefficient
+  # (the table has no HR row for them either), and standardization
+  # deliberately holds each subject's stratum fixed.
+  rhs_vars <- setdiff(rhs_vars, .coxph_strata_vars(fit))
+  bv <- .estimand_bare_vars(fit, rhs_vars)
+  rows <- .estimand_contrast_rows(data, bv$keep, curve_stats)
+  if (is.null(rows)) {
+    rows <- data.frame()
+  }
+  attr(rows, "skipped_terms") <- bv$skipped
+  rows
+}
+
+
+# Estimand contrasts are defined per RAW variable (+1 unit, or level
+# vs reference), so a variable entering the formula ONLY inside a
+# transformed term (I(age/10), log(x), poly(x, 2), a bare a:b) has no
+# coefficient row for its contrast to sit next to. The old behaviour
+# appended an ORPHAN row (term = the raw variable) whose +1-unit
+# contrast silently mismatched the displayed transformed coefficient
+# (wave-2 vignette review, dev/registre_rendu_estimands_spec.md).
+# Restrict to variables present as a bare term label; the transformed
+# term labels are reported for the footer note. A variable that is
+# both bare AND inside an interaction keeps its row: the g-computation
+# contrast is the total effect, which is the estimand.
+.estimand_bare_vars <- function(fit, rhs_vars) {
+  tl <- attr(stats::terms(fit), "term.labels")
+  keep <- intersect(rhs_vars, tl)
+  dropped <- setdiff(rhs_vars, keep)
+  skipped <- tl[vapply(
+    tl,
+    function(t) {
+      any(all.vars(str2lang(t)) %in% dropped)
+    },
+    logical(1)
+  )]
+  if (length(dropped) > 0L && length(keep) == 0L) {
+    spicy_warn(
+      c(
+        paste0(
+          "RMST / risk-difference columns: no untransformed ",
+          "predictor to contrast."
+        ),
+        "i" = sprintf(
+          "Transformed terms (%s) get no absolute-effect row; rescale the variable in the data instead of the formula.",
+          paste(skipped, collapse = ", ")
+        )
+      ),
+      class = "spicy_caveat"
+    )
+  }
+  list(keep = keep, skipped = skipped)
+}
+
+
+# The counterfactual contrast loop shared by the coxph and survreg
+# engines: factor levels contrast against the reference, numeric
+# predictors take the +1-unit contrast (the AME convention).
+.estimand_contrast_rows <- function(data, rhs_vars, curve_stats) {
+  rows <- list()
+  for (v in rhs_vars) {
+    col <- data[[v]]
+    if (is.factor(col) || is.character(col)) {
+      lvls <- if (is.factor(col)) levels(col) else sort(unique(col))
+      base <- data
+      base[[v]] <- .replace_level(col, lvls[1L])
+      ref_stats <- curve_stats(base)
+      for (j in seq_along(lvls)[-1L]) {
+        alt <- data
+        alt[[v]] <- .replace_level(col, lvls[j])
+        d <- curve_stats(alt) - ref_stats
+        rows[[length(rows) + 1L]] <- data.frame(
+          term = paste0(v, lvls[j]),
+          parent_var = v,
+          label = lvls[j],
+          factor_level_pos = as.integer(j),
+          rmst = unname(d["rmst"]),
+          risk = unname(d["risk"]),
+          stringsAsFactors = FALSE
+        )
+      }
+    } else if (is.numeric(col)) {
+      plus <- data
+      plus[[v]] <- col + 1
+      d <- curve_stats(plus) - curve_stats(data)
+      rows[[length(rows) + 1L]] <- data.frame(
+        term = v,
+        parent_var = v,
+        label = v,
+        factor_level_pos = NA_integer_,
+        rmst = unname(d["rmst"]),
+        risk = unname(d["risk"]),
+        stringsAsFactors = FALSE
+      )
+    }
+    # Other column types (logical enters as numeric contrast via the
+    # model matrix but cannot take +1): skipped -- no estimand row.
+  }
+  do.call(rbind, rows)
+}
+
+
+# ---- survreg engine --------------------------------------------------------
+
+# Parametric (AFT) g-computation: survreg curves are closed-form, so
+# the standardized survival is smooth -- S(t) = mean_i(1 - psurvreg(t;
+# lp_i, scale)) -- integrated numerically to tau. Cross-validated
+# against flexsurv::standsurv (type = "rmst", contrast = "difference")
+# on the same Weibull fit: exact; and against the closed-form
+# exponential RMST: machine precision.
+.survreg_estimand_gates <- function(fit, model_id) {
+  if (
+    length(fit$scale) > 1L ||
+      !is.null(attr(fit$terms, "specials")$strata)
+  ) {
+    spicy_abort(
+      c(
+        sprintf(
+          "RMST / risk-difference columns are not available for a stratified survreg fit (%s).",
+          model_id
+        ),
+        "i" = "Per-stratum scale parameters are not standardized; refit without `strata()`."
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  if (!is.character(fit$dist)) {
+    spicy_abort(
+      sprintf(
+        "RMST / risk-difference columns need a named survreg distribution (%s).",
+        model_id
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  invisible(NULL)
+}
+
+
+.survreg_estimand_data <- function(fit) {
+  data <- tryCatch(
+    eval(fit$call$data, environment(stats::formula(fit))),
+    error = function(e) NULL
+  )
+  if (!is.data.frame(data)) {
+    spicy_abort(
+      c(
+        paste0(
+          "RMST / risk-difference columns need the fit's original ",
+          "data, and it could not be recovered from the model call."
+        ),
+        "i" = paste0(
+          "Fit the model with a `data` argument that is ",
+          "still available (a data frame in scope)."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  fvars <- all.vars(stats::formula(fit))
+  data <- data[
+    stats::complete.cases(data[, intersect(fvars, names(data)), drop = FALSE]),
+    ,
+    drop = FALSE
+  ]
+  if (nrow(data) != length(fit$linear.predictors)) {
+    spicy_abort(
+      c(
+        "The recovered data does not match the fitted sample.",
+        "i" = sprintf(
+          "Recovered %d complete rows; the fit used %d.",
+          nrow(data),
+          length(fit$linear.predictors)
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  data
+}
+
+
+.survreg_estimand_points <- function(
+  fit,
+  data,
+  want_rmst,
+  want_risk,
+  tau,
+  at_time
+) {
+  std_surv <- function(newdata) {
+    lp <- stats::predict(fit, newdata = newdata, type = "lp")
+    function(tt) {
+      vapply(
+        tt,
+        function(t1) {
+          mean(
+            1 -
+              survival::psurvreg(
+                t1,
+                mean = lp,
+                scale = fit$scale,
+                distribution = fit$dist,
+                parms = fit$parms
+              )
+          )
+        },
+        numeric(1)
+      )
+    }
+  }
+  curve_stats <- function(newdata) {
+    S <- std_surv(newdata)
+    c(
+      rmst = if (want_rmst) {
+        stats::integrate(S, 0, tau, rel.tol = 1e-8, subdivisions = 400L)$value
+      } else {
+        NA_real_
+      },
+      risk = if (want_risk) 1 - S(at_time) else NA_real_
+    )
+  }
+  rhs_vars <- setdiff(
+    all.vars(stats::formula(fit)),
+    all.vars(stats::formula(fit)[[2L]])
+  )
+  bv <- .estimand_bare_vars(fit, rhs_vars)
+  rows <- .estimand_contrast_rows(data, bv$keep, curve_stats)
+  if (is.null(rows)) {
+    rows <- data.frame()
+  }
+  attr(rows, "skipped_terms") <- bv$skipped
+  rows
+}
+
+
+.survreg_refit_on <- function(fit, dboot) {
+  survival::survreg(stats::formula(fit), data = dboot, dist = fit$dist)
+}
+
+
+# Variables absorbed by strata() terms (empty for unstratified fits).
+.coxph_strata_vars <- function(fit) {
+  sp <- survival::untangle.specials(stats::terms(fit), "strata")
+  if (length(sp$vars) == 0L) {
+    return(character(0))
+  }
+  all.vars(stats::reformulate(sp$vars))
+}
+
+
+# Counterfactual level assignment that preserves the factor structure.
+.replace_level <- function(col, level) {
+  if (is.factor(col)) {
+    factor(rep(level, length(col)), levels = levels(col))
+  } else {
+    rep(level, length(col))
+  }
+}
+
+
+# Refit the Cox model on a bootstrap resample so that DOWNSTREAM
+# lookups still work: survival::basehaz() re-evaluates the fit's
+# `call$data` in the formula environment, so the resampled data must
+# live in an environment attached to the formula -- a plain
+# `coxph(f, data = data[idx, ])` leaves every replicate's basehaz()
+# unable to find `data` / `idx` and fails silently.
+#
+# `wboot` takes the same route, and it has to: replacing the formula's
+# environment is the whole mechanism here, so EVERYTHING the call
+# refers to must live in the replacement. coxph() resolves `weights`
+# through model.frame(), which evaluates the extra arguments in
+# `environment(formula)` -- a weights vector left in the caller's frame
+# is simply not there, and the replicate dies at the FIT step with
+# "object '<name>' not found" (measured), before any baseline is
+# computed. Two slots in the one environment, or neither: passing NULL
+# reproduces the unweighted call exactly, down to the call object the
+# fit records.
+.coxph_refit_on <- function(f, dboot, wboot = NULL) {
+  env <- new.env(parent = environment(f) %||% baseenv())
+  env$.spicy_boot_data. <- dboot
+  f2 <- f
+  environment(f2) <- env
+  if (is.null(wboot)) {
+    return(eval(
+      substitute(survival::coxph(FF, data = .spicy_boot_data.), list(FF = f2)),
+      env
+    ))
+  }
+  env$.spicy_boot_w. <- wboot
+  eval(
+    substitute(
+      survival::coxph(FF, data = .spicy_boot_data., weights = .spicy_boot_w.),
+      list(FF = f2)
+    ),
+    env
+  )
+}
+
+
+# ---- Bootstrap inference ---------------------------------------------------
+
+.coxph_estimand_rows <- function(
+  fit,
+  model_id,
+  outcome,
+  show_columns,
+  tau = NULL,
+  at_time = NULL,
+  ci_level = 0.95,
+  boot_n = 1000L
+) {
+  .survival_estimand_rows(
+    fit,
+    model_id,
+    show_columns,
+    tau,
+    at_time,
+    ci_level,
+    boot_n,
+    gates_fn = .coxph_estimand_gates,
+    data_fn = .coxph_estimand_data,
+    points_fn = .coxph_estimand_points,
+    refit_fn = function(fit, dboot) .coxph_refit_on(stats::formula(fit), dboot)
+  )
+}
+
+
+.survreg_estimand_rows <- function(
+  fit,
+  model_id,
+  outcome,
+  show_columns,
+  tau = NULL,
+  at_time = NULL,
+  ci_level = 0.95,
+  boot_n = 1000L
+) {
+  .survival_estimand_rows(
+    fit,
+    model_id,
+    show_columns,
+    tau,
+    at_time,
+    ci_level,
+    boot_n,
+    gates_fn = .survreg_estimand_gates,
+    data_fn = .survreg_estimand_data,
+    points_fn = .survreg_estimand_points,
+    refit_fn = .survreg_refit_on
+  )
+}
+
+
+# Engine-agnostic bootstrap harness shared by the coxph and survreg
+# estimand paths: gates, data recovery, point estimates, and the
+# resample-refit-recompute loop are identical; only the four hooks
+# differ per class.
+#
+# `df` are the degrees of freedom of the estimand rows' own test. The
+# default Inf is the normal-approximation layering the iid bootstrap
+# uses: `qt(p, Inf)` and `pt(q, Inf)` are `qnorm(p)` and `pnorm(q)` to
+# the last bit, so the parameterisation costs nothing at the default
+# (pinned by a witness, since it is arithmetic and not an API promise).
+# A finite value gives a Wald-t instead, and the rows say so through
+# `test_type`.
+.survival_estimand_rows <- function(
+  fit,
+  model_id,
+  show_columns,
+  tau = NULL,
+  at_time = NULL,
+  ci_level = 0.95,
+  boot_n = 1000L,
+  df = Inf,
+  gates_fn,
+  data_fn,
+  points_fn,
+  refit_fn
+) {
+  want_rmst <- any(
+    c("rmst", "rmst_se", "rmst_ci", "rmst_p") %in%
+      show_columns
+  )
+  want_risk <- any(
+    c("risk_diff", "risk_diff_se", "risk_diff_ci", "risk_diff_p") %in%
+      show_columns
+  )
+  if (!want_rmst && !want_risk) {
+    return(NULL)
+  }
+  gates_fn(fit, model_id)
+  data <- data_fn(fit)
+
+  # tau = "minmax": the smallest, across the levels of every factor
+  # predictor, of that level's largest observed time -- so the RMST
+  # integral never extrapolates beyond a compared group's follow-up.
+  # No factor predictor: the largest observed time.
+  tau_resolved <- tau
+  if (want_rmst && identical(tau, "minmax")) {
+    y <- stats::model.response(stats::model.frame(fit))
+    obs_time <- as.numeric(y[, 1L])
+    rhs_vars <- setdiff(
+      all.vars(stats::formula(fit)),
+      all.vars(stats::formula(fit)[[2L]])
+    )
+    rhs_vars <- setdiff(rhs_vars, .coxph_strata_vars(fit))
+    level_max <- numeric(0)
+    for (v in rhs_vars) {
+      col <- data[[v]]
+      if (is.factor(col) || is.character(col)) {
+        level_max <- c(level_max, tapply(obs_time, as.character(col), max))
+      }
+    }
+    tau_resolved <- if (length(level_max)) {
+      min(level_max)
+    } else {
+      max(obs_time)
+    }
+  }
+
+  pts <- points_fn(fit, data, want_rmst, want_risk, tau_resolved, at_time)
+  skipped_terms <- attr(pts, "skipped_terms") %||% character(0)
+  if (is.null(pts) || nrow(pts) == 0L) {
+    # Supported class, but every predictor was transformed-only: no
+    # contrast row exists. Return a marker (not bare NULL) so the
+    # orchestrator's availability gate can tell this apart from an
+    # unsupported class; .estimand_bare_vars() already warned.
+    if (length(skipped_terms) > 0L) {
+      return(list(
+        rows = NULL,
+        tau = NULL,
+        at_time = NULL,
+        boot_n = boot_n,
+        boot_valid = 0L,
+        stratified = FALSE,
+        skipped_terms = skipped_terms
+      ))
+    }
+    return(NULL)
+  }
+
+  # Bootstrap: resample subjects, refit, recompute every contrast.
+  n <- nrow(data)
+  boot_est <- array(
+    NA_real_,
+    dim = c(boot_n, nrow(pts), 2L),
+    dimnames = list(NULL, pts$term, c("rmst", "risk"))
+  )
+  for (b in seq_len(boot_n)) {
+    idx <- sample.int(n, n, replace = TRUE)
+    rep_fit <- tryCatch(
+      suppressWarnings(
+        refit_fn(fit, data[idx, , drop = FALSE])
+      ),
+      error = function(e) NULL
+    )
+    # A replicate whose design lost a level (or is otherwise singular)
+    # carries NA coefficients that predict() would silently treat as
+    # zero -- a phantom null contrast. Count it as failed instead.
+    if (is.null(rep_fit) || anyNA(stats::coef(rep_fit))) {
+      next
+    }
+    rep_pts <- tryCatch(
+      suppressWarnings(points_fn(
+        rep_fit,
+        data[idx, , drop = FALSE],
+        want_rmst,
+        want_risk,
+        tau_resolved,
+        at_time
+      )),
+      error = function(e) NULL
+    )
+    if (is.null(rep_pts)) {
+      next
+    }
+    m <- match(pts$term, rep_pts$term)
+    boot_est[b, , "rmst"] <- rep_pts$rmst[m]
+    boot_est[b, , "risk"] <- rep_pts$risk[m]
+  }
+
+  # Spelling follows the AME precedent (regression_ame.R): the same two
+  # calls, so the two families' intervals cannot drift apart.
+  crit <- stats::qt(1 - (1 - ci_level) / 2, df = df)
+  test_type <- if (is.finite(df)) "t" else "z"
+  build <- function(estimand_key, estimate_type) {
+    est <- pts[[estimand_key]]
+    reps <- matrix(boot_est[,, estimand_key], nrow = boot_n)
+    se <- apply(reps, 2L, stats::sd, na.rm = TRUE)
+    n_valid <- apply(reps, 2L, function(x) sum(is.finite(x)))
+    if (any(n_valid < boot_n * 0.5)) {
+      spicy_abort(
+        sprintf(
+          "More than half of the %d bootstrap replicates failed for the %s column.",
+          boot_n,
+          estimate_type
+        ),
+        class = "spicy_resampling_failed"
+      )
+    }
+    stat <- est / se
+    data.frame(
+      term = pts$term,
+      parent_var = pts$parent_var,
+      label = pts$label,
+      factor_level_pos = pts$factor_level_pos,
+      is_ref = FALSE,
+      estimate_type = estimate_type,
+      estimate = est,
+      std_error = unname(se),
+      df = df,
+      statistic = unname(stat),
+      p_value = 2 *
+        stats::pt(abs(unname(stat)), df = df, lower.tail = FALSE),
+      ci_lower = est - crit * unname(se),
+      ci_upper = est + crit * unname(se),
+      test_type = test_type,
+      stringsAsFactors = FALSE
+    )
+  }
+
+  out <- list()
+  if (want_rmst) {
+    out$rmst <- build("rmst", "rmst")
+  }
+  if (want_risk) {
+    out$risk <- build("risk", "risk_diff")
+  }
+  keys <- c(if (want_rmst) "rmst", if (want_risk) "risk")
+  boot_valid <- min(vapply(
+    keys,
+    function(k) {
+      min(colSums(is.finite(matrix(boot_est[,, k], nrow = boot_n))))
+    },
+    numeric(1)
+  ))
+  list(
+    rows = do.call(rbind, out),
+    tau = if (want_rmst) tau_resolved else NULL,
+    at_time = if (want_risk) at_time else NULL,
+    boot_n = boot_n,
+    boot_valid = as.integer(boot_valid),
+    stratified = !is.null(attr(fit$terms, "specials")$strata),
+    skipped_terms = skipped_terms
+  )
+}
+
+
+# ---- Horizon rendering -----------------------------------------------------
+
+# Internal: the estimand horizon (`tau`, `at_time`) as it is written into
+# a column header -- and therefore into a NAME.
+#
+# "dRMST (365.5)" is not decoration: it is verbatim the column name of
+# `as.data.frame()`, of `output = "data.frame"`, of the structured
+# `body`, and the key of `col_meta`. That makes it a frozen key, and the
+# package's rule for those is `.ci_pct_str()`'s: a user's
+# `options(OutDec)` must never leak into a programmatic name, and neither
+# must the table's `decimal_mark` -- the same call would otherwise return
+# a data frame whose columns are named differently depending on a
+# typographic argument. So the horizon is pinned at the point, both ways,
+# for good.
+#
+# `format(decimal.mark = ".")` rather than `formatC()`: it is
+# byte-identical to the bare `format()` it replaces on every value
+# (`formatC(format = "fg")` would re-round 730.25 to "730.2" and expand
+# 1e+05), so nothing but the OutDec leak changes.
+#
+# The footer note below quotes the same string, so header and gloss stay
+# spelled alike.
+.estimand_horizon_str <- function(x) {
+  format(x, decimal.mark = ".")
+}
+
+
+# ---- Footer ----------------------------------------------------------------
+
+# Table note for the estimand columns, read from
+# extras$survival_estimands (set by the coxph frame builder).
+#
+# The sentences come from the display-string registry (R/i18n.R): a
+# table footnote is a string a reader of the table sees, which is what
+# the registry is for, and the estimand column HEADERS are keyed there
+# already. The method clause is two whole templates rather than one
+# template with a "(within-stratum baselines)" hole, because a hole is
+# for data and that parenthesis is words.
+build_survival_estimand_footer_block_from_frames <- function(frames) {
+  if (!is.list(frames) || length(frames) == 0L) {
+    return(NULL)
+  }
+  notes <- vapply(
+    frames,
+    function(f) {
+      es <- f$info$extras$survival_estimands
+      if (is.null(es)) {
+        return(NA_character_)
+      }
+      parts <- character(0)
+      if (!is.null(es$tau)) {
+        parts <- c(
+          parts,
+          spicy_fmt("note_estimand_rmst", .estimand_horizon_str(es$tau))
+        )
+      }
+      if (!is.null(es$at_time)) {
+        parts <- c(
+          parts,
+          spicy_fmt(
+            "note_estimand_risk_diff",
+            .estimand_horizon_str(es$at_time)
+          )
+        )
+      }
+      skipped_note <- if (length(es$skipped_terms %||% character(0)) > 0L) {
+        spicy_fmt(
+          "note_estimand_skipped_terms",
+          paste(es$skipped_terms, collapse = ", ")
+        )
+      } else {
+        ""
+      }
+      if (length(parts) == 0L) {
+        return(
+          if (nzchar(skipped_note)) trimws(skipped_note) else NA_character_
+        )
+      }
+      replicates <- if (es$boot_valid < es$boot_n) {
+        spicy_fmt("note_estimand_boot_range", es$boot_valid, es$boot_n)
+      } else {
+        format(es$boot_n)
+      }
+      paste0(
+        paste(parts, collapse = "; "),
+        spicy_fmt(
+          if (isTRUE(es$stratified)) {
+            "note_estimand_method_stratified"
+          } else {
+            "note_estimand_method"
+          },
+          replicates
+        ),
+        skipped_note
+      )
+    },
+    character(1)
+  )
+  if (all(is.na(notes))) {
+    return(NULL)
+  }
+  affected <- which(!is.na(notes))
+  if (length(unique(notes[affected])) == 1L) {
+    return(notes[affected][1L])
+  }
+  paste(
+    vapply(
+      affected,
+      function(k) {
+        # nocov start
+        .model_line(frames, k, notes[k])
+      },
+      character(1)
+    ),
+    collapse = "\n"
+  ) # nocov end
+}

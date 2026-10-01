@@ -9,7 +9,6 @@ build_ascii_table(
   padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
-  column_total_line = TRUE,
   bottom_line = FALSE,
   lines_color = "darkgrey",
   align_left_cols = c(1L, 2L),
@@ -42,8 +41,8 @@ instead. Passing a string raises an actionable error.}
 \item{first_column_line}{Logical. If \code{TRUE} (the default), a vertical separator
 is drawn after the first column (useful for separating categories from data).}
 
-\item{row_total_line, column_total_line}{Logical. Control horizontal rules
-before total rows or columns. Both default to \code{TRUE}.}
+\item{row_total_line}{Logical. Controls the horizontal rule drawn
+before a total row. Defaults to \code{TRUE}.}
 
 \item{bottom_line}{Logical. If \code{FALSE} (the default), no closing line is drawn.
 If \code{TRUE}, draws a closing line at the bottom of the table.}
@@ -121,18 +120,6 @@ which add titles, notes, and table-type-aware alignment defaults.
 Reach for \code{build_ascii_table()} only when you need to render an
 arbitrary \code{data.frame} to a string with the same look as
 spicy's tables.
-}
-\examples{
-# Internal usage example (for developers)
-df <- data.frame(
-  Category = c("Valid", "", "Missing", "Total"),
-  Values = c("Yes", "No", "NA", ""),
-  Freq. = c(12, 8, 1, 21),
-  Percent = c(57.1, 38.1, 4.8, 100.0)
-)
-
-cat(build_ascii_table(df, padding = 0L))
-
 }
 \seealso{
 \code{\link[=spicy_print_table]{spicy_print_table()}} for a user-facing wrapper that adds titles and notes.

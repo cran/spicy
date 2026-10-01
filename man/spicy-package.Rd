@@ -4,16 +4,21 @@
 \name{spicy-package}
 \alias{spicy}
 \alias{spicy-package}
-\title{spicy: descriptive statistics, summary tables, and data management}
+\title{spicy: publication-ready tables for descriptive statistics and
+regression models}
 \description{
-spicy provides tools for descriptive data analysis, variable
-inspection, and tabulation workflows: frequency tables,
-cross-tabulations with chi-squared tests and effect sizes,
-association measures for contingency tables, categorical and
-continuous summary tables, model-based linear-regression tables
-with optional additive covariate adjustment, row-wise
-descriptive summaries, interactive codebooks, variable-label
-extraction, and clipboard export.
+spicy provides publication-ready tables for descriptive statistics
+and regression models: frequency tables and cross-tabulations with
+association measures, categorical and continuous summary tables (by
+group or from a complex survey design), and regression tables for
+one or more models side by side, across more than thirty model
+classes, with robust standard errors, average marginal effects, and
+univariable screening. Tables follow APA conventions by default, can
+switch to named journal styles, and render identically in the
+console and the rich outputs. Declared missing values in labelled
+data are honored and disclosed throughout the descriptive tables;
+helpers cover codebooks, variable inspection, and row-wise
+summaries.
 }
 \section{API stability}{
 
@@ -44,23 +49,40 @@ before 1.0 with a \code{NEWS.md} entry, but no silent behavioural
 changes):
 \itemize{
 \item Summary table builders: \code{\link[=table_categorical]{table_categorical()}},
-\code{\link[=table_continuous]{table_continuous()}}, \code{\link[=table_continuous_lm]{table_continuous_lm()}}
+\code{\link[=table_continuous]{table_continuous()}}, \code{\link[=table_continuous_lm]{table_continuous_lm()}},
+\code{\link[=table_outcome]{table_outcome()}}
+\item Survey-design summary tables:
+\code{\link[=table_continuous_svy]{table_continuous_svy()}}, \code{\link[=table_categorical_svy]{table_categorical_svy()}}
+\item Regression tables: \code{\link[=table_regression]{table_regression()}},
+\code{\link[=table_regression_uv]{table_regression_uv()}}, \code{\link[=table_regression_models]{table_regression_models()}},
+\code{\link[=as_structured]{as_structured()}}
+\item Inline citation: \code{\link[=inline]{inline()}}
+\item Table styles: \code{\link[=spicy_style]{spicy_style()}}, \code{\link[=spicy_style_names]{spicy_style_names()}}
 \item Omnibus association overview: \code{\link[=assoc_measures]{assoc_measures()}}
+}
+
+\strong{Experimental} (new in this cycle; the shape of the output and
+the argument names may still move, with a \code{NEWS.md} entry, on their
+OWN clock rather than the parent family's):
+\itemize{
+\item Display language and label overrides: \code{\link[=spicy_labels]{spicy_labels()}}
+(with \code{options(spicy.language)} / \code{options(spicy.labels)})
 }
 
 \strong{Internal API} (not part of the public surface; can change
 without notice -- avoid calling directly from downstream code):
 \itemize{
-\item ASCII rendering primitives: \code{\link[=build_ascii_table]{build_ascii_table()}},
-\code{\link[=spicy_print_table]{spicy_print_table()}}
+\item ASCII rendering primitive: \code{\link[=spicy_print_table]{spicy_print_table()}}
+(\code{build_ascii_table()} is no longer exported)
 }
 }
 
 \section{broom output shape}{
 
 The \code{broom::tidy()} and \code{broom::glance()} methods on
-\code{spicy_freq_table}, \code{spicy_categorical_table},
-\code{spicy_continuous_table}, and \code{spicy_continuous_lm_table} follow
+\code{spicy_categorical_table}, \code{spicy_continuous_table},
+\code{spicy_continuous_lm_table}, \code{spicy_continuous_svy_table},
+\code{spicy_categorical_svy_table}, and \code{spicy_regression_table} follow
 the standard broom column conventions (\code{outcome}, \code{term},
 \code{estimate}, \code{std.error}, \code{conf.low}, \code{conf.high}, \code{statistic},
 \code{p.value}, \code{df}, \code{df.residual}, \code{r.squared}, \code{adj.r.squared},
@@ -69,11 +91,16 @@ considered \strong{stabilising}: existing columns will not be silently
 renamed or have their semantics changed within \verb{0.y.z}, and any
 breaking change is announced in \code{NEWS.md}. Adding optional new
 columns (e.g. covariate-adjustment metadata) is not a breaking
-change. Numeric columns are always returned with the type
-downstream broom-consumers expect: \code{df} integer, \code{df.residual}
-numeric (so Satterthwaite-corrected degrees of freedom from
-cluster-robust variance modes are preserved verbatim, matching
-\code{lmerTest::glance()} and the \code{afex} output convention).
+change. Numeric columns keep the types downstream
+broom-consumers expect: test degrees of freedom that are integer
+by construction (chi-squared, factor-comparison F tests) stay
+integer, while every degrees-of-freedom column that can be
+fractional -- \code{df.residual}, the regression method's
+per-coefficient \code{df}, and Welch-corrected test \code{df} -- is
+numeric double, so Satterthwaite-corrected degrees of freedom
+from cluster-robust variance modes are preserved verbatim
+(matching \code{lmerTest::glance()} and the \code{afex} output
+convention).
 }
 
 \section{Classed conditions}{
@@ -90,8 +117,9 @@ specific cause:
 raised by spicy. Leaves:
 \itemize{
 \item \code{spicy_invalid_input} -- bad argument value or type.
-\item \code{spicy_invalid_data} -- bad data shape (not a
-data.frame, NA cells where forbidden, length mismatch).
+\item \code{spicy_invalid_data} -- bad data shape or content
+(not a data.frame, length mismatch, \code{bit64::integer64}
+columns, degenerate grouping).
 \item \code{spicy_missing_pkg} -- a Suggests dependency
 is required by the requested operation but not installed.
 \item \code{spicy_missing_column} -- a referenced column
@@ -99,6 +127,34 @@ is not in \code{data}.
 \item \code{spicy_unsupported} -- the operation is not
 applicable to this input (e.g., Phi requested on a
 non-2x2 table).
+\item \code{spicy_ame_satt_unsupported_formula} -- signaled
+together with \code{spicy_unsupported} when AME
+Satterthwaite degrees of freedom are unavailable for the
+model's formula structure; normally caught internally and
+surfaced as a \code{spicy_fallback} warning.
+\item \code{spicy_unsupported_class} -- the model class has
+no regression-frame method, so \code{\link[=table_regression]{table_regression()}}
+cannot render it.
+\item \code{spicy_unsupported_vcov} -- the requested \code{vcov}
+mode is not available for this model class.
+\item \code{spicy_unsupported_standardized} -- the requested
+\code{standardized} mode is not available for this model class.
+\item \code{spicy_invalid_frame} -- an object failed the
+structural validation of the internal regression-frame
+contract behind \code{\link[=table_regression]{table_regression()}}.
+\item \code{spicy_resampling_failed} -- bootstrap /
+jackknife resampling produced too few valid replicates to
+estimate the requested statistic.
+\item \code{spicy_defunct} -- an argument removed in a
+pre-1.0 hard break; the message names the replacement.
+Signaled together with \code{spicy_invalid_input} so
+generic input handlers still catch it.
+\item \code{spicy_internal} -- an internal precondition
+failed; this is a bug in spicy, please report it.
+\item \code{spicy_internal_invariant} -- an internal
+consistency check on a spicy-built object failed and the
+result cannot be trusted (see the warning leaf of the
+same name for the renderable case).
 }
 }
 \item{\code{spicy_warning}}{Catch-all parent for every warning.
@@ -107,6 +163,12 @@ Leaves:
 \item \code{spicy_undefined_stat} -- the requested
 statistic is undefined for this input; result is \code{NA}
 (e.g., Tau-b on a table with all-zero marginals).
+\item \code{spicy_negative_weights_no_test} -- signaled
+together with \code{spicy_undefined_stat} when
+\code{\link[=table_continuous_svy]{table_continuous_svy()}} or \code{\link[=table_categorical_svy]{table_categorical_svy()}}
+withholds a group comparison because the analytic sample
+carries negatively weighted rows; the estimates are still
+reported and the table note says so.
 \item \code{spicy_dropped_na} -- \code{NA} observations were
 silently excluded from the computation (e.g., \code{NA}
 weights).
@@ -118,13 +180,47 @@ produced an empty set; an empty result is returned
 rather than erroring.
 \item \code{spicy_fallback} -- the requested computation
 failed; a simpler estimator was used instead.
+\item \code{spicy_caveat} -- the computation succeeded but
+its interpretation carries a non-trivial methodological
+caveat (e.g., standardized coefficients on non-additive
+terms).
+\item \code{spicy_bayes_diagnostics} -- signaled together
+with \code{spicy_caveat} when a Bayesian fit's sampler or
+predictive-accuracy diagnostics miss their targets
+(R-hat, ESS, divergences, E-BFMI, Pareto k, p_waic).
+\item \code{spicy_nonconvergence} -- signaled together with
+\code{spicy_caveat} when the fitting engine reports that
+its optimizer did not converge. The table still shows the
+numbers the model object holds, and a footer note says
+what they are worth.
+\item \code{spicy_model_choice} -- a defaulted modeling
+choice was made on the user's behalf and is disclosed
+(e.g., the linear probability model
+\code{\link[=table_regression_uv]{table_regression_uv()}} fits to a binary outcome under
+the default \code{method}).
+\item \code{spicy_passthrough} -- a third-party warning
+captured during an operation (e.g., the clipboard copy)
+and re-emitted under the spicy taxonomy.
 \item \code{spicy_summary_failed} -- \code{\link[=varlist]{varlist()}} could not
 summarise one column; the rest of the table is fine.
 \item \code{spicy_renamed_column} -- a user data column or
 factor level collided with a spicy-internal name and was
 auto-renamed to preserve the data (emitted by
 \code{\link[=cross_tab]{cross_tab()}}).
+\item \code{spicy_internal_invariant} -- an internal
+consistency check on a spicy-built object failed but the
+output still renders, so the user sees both the table and
+the diagnostic.
 }
+}
+\item{\code{spicy_info}}{Parent for informational messages
+(emitted via \code{rlang::inform()}; muffle with
+\code{withCallingHandlers(spicy_info = ...)}). Leaf:
+\code{spicy_silent_reference} -- reference levels are
+displayed nowhere under \code{reference_style = "none"} with
+\code{factor_layout = "flat"}. The once-per-session hint on
+ordered-factor polynomial contrasts carries its own class,
+\code{spicy_polynomial_contrasts_info}.
 }
 }
 }
@@ -132,8 +228,8 @@ auto-renamed to preserve the data (emitted by
 \seealso{
 Useful links:
 \itemize{
-  \item \url{https://github.com/amaltawfik/spicy/}
   \item \url{https://amaltawfik.github.io/spicy/}
+  \item \url{https://github.com/amaltawfik/spicy}
   \item Report bugs at \url{https://github.com/amaltawfik/spicy/issues}
 }
 

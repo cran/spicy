@@ -17,7 +17,8 @@
 #'   unset (use [freq()] for one-way tables).
 #' @param by Optional grouping variable or expression. Can be a single variable
 #'   or a combination of multiple variables (e.g. `interaction(vs, am)`).
-#' @param weights Optional numeric weights.
+#' @param weights Optional numeric weights. A logical vector is also
+#'   accepted and coerced to 1/0 (include / exclude).
 #' @param rescale Logical. If `FALSE` (the default), weights are used as-is.
 #'   If `TRUE`, rescales weights so total weighted N matches raw N.
 #' @param percent One of `"none"` (the default), `"column"`, or `"row"`.
@@ -37,40 +38,75 @@
 #'   If `TRUE`, uses Monte Carlo simulation.
 #' @param simulate_B Integer. Number of replicates for Monte Carlo simulation.
 #'   Defaults to `2000`.
-#' @param digits Number of decimals for cell values. Defaults to
-#'   `NULL`, which is resolved to `1` when `percent != "none"` and
-#'   `0` when `percent = "none"` (counts are always integers).
-#' @param styled Logical. If `TRUE` (the default), returns a `spicy_cross_table` object
-#'   (for formatted printing). If `FALSE`, returns a plain `data.frame`.
+#' @param digits Number of decimals for cell values: a single
+#'   non-negative integer. Defaults to `NULL`, which is resolved to
+#'   `1` when `percent != "none"` and `0` when `percent = "none"`
+#'   (counts are integers unless fractional weights are used; raise
+#'   `digits` to display fractional weighted counts exactly). Same
+#'   role as `digits` in [freq()], which formats percentages only and
+#'   therefore uses a fixed default of `1`. Displayed values round
+#'   ties half to even (the R / IEC 60559 convention, shared with
+#'   Stata), so an exact tie like 6.25 prints as `6.2` where SPSS
+#'   would print `6.3`.
+#' @param output Output format. `"default"` (the default) returns a
+#'   `spicy_cross_table` object (for formatted printing);
+#'   `"data.frame"` returns a plain `data.frame`. The values match the
+#'   `output` argument of the `table_*()` family; the rendered engines
+#'   that family also accepts (`"tinytable"`, `"gt"`, `"flextable"`,
+#'   ...) are not available in `cross_tab()`.
+#' @param styled Defunct. `styled = TRUE` is now `output = "default"`
+#'   (the default) and `styled = FALSE` is now `output = "data.frame"`;
+#'   supplying `styled` is an error.
 #' @param show_n Logical. If `TRUE` (the default), adds marginal N totals when
 #'   `percent != "none"`.
 #' @param decimal_mark Character used as the decimal mark in printed
 #'   numeric values (cells, chi-squared, association estimate, CI
-#'   bounds, p-value). Defaults to `"."`. Set to `","` for European
-#'   formatting; matches the `decimal_mark` argument of the
-#'   `table_*()` family.
+#'   bounds, p-value, table note). Either `"."` or `","`. The default
+#'   follows the language: `options(spicy.language = "fr")` gives the
+#'   comma here and in [freq()], exactly as it does in the reporting
+#'   `table_*()` family. An argument you type wins, so
+#'   `decimal_mark = "."` under a French language gives French words
+#'   and a decimal point. Under a comma the p-value keeps its leading
+#'   zero (`p = 0,659`), the form French typography requires. The
+#'   resolved mark is frozen on the object when it is built, like every
+#'   other formatting argument: a table built under a French language
+#'   still prints its commas when it is printed later with the language
+#'   option cleared.
 #' @param p_digits Integer number of decimals used to format the
 #'   p-value (and to determine the small-`p` threshold below which
 #'   `< .001` notation is used). Defaults to `3` (the APA standard);
 #'   matches the `p_digits` argument of the `table_*()` family.
+#' @param user_na Logical. If `TRUE` (the default), declared missing
+#'   values in `x`, `y`, or `by` are treated as missing: they are
+#'   excluded from the table and its statistics like `NA`, and the
+#'   exclusion is disclosed in the table note (`Declared missing
+#'   values removed: ...`). If `FALSE`, the declared codes tabulate
+#'   as categories (and, in `by`, define groups). See the "Declared
+#'   missing values" section of [freq()].
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @return
-#' Depends on `styled` and `by`:
+#' Depends on `output` and `by`:
 #' \itemize{
-#'   \item `styled = TRUE`, no `by`: a `spicy_cross_table` object
+#'   \item `output = "default"`, no `by`: a `spicy_cross_table` object
 #'     (a `data.frame` carrying rendering metadata as attributes:
 #'     `title`, `digits`, `decimal_mark`, `n_row_idx`, `n_col_name`,
 #'     and the inferential block when `include_stats = TRUE`).
 #'     Printing dispatches to [print.spicy_cross_table()].
-#'   \item `styled = TRUE`, `by` supplied: a `spicy_cross_table_list`,
-#'     i.e. a named list of `spicy_cross_table` objects (one element
-#'     per group level, named by that level). Printing dispatches to
+#'   \item `output = "default"`, `by` supplied: a
+#'     `spicy_cross_table_list`, i.e. a named list of
+#'     `spicy_cross_table` objects (one element per group level, named
+#'     by that level). Printing dispatches to
 #'     [print.spicy_cross_table_list()] which renders each table in
 #'     turn separated by a blank line.
-#'   \item `styled = FALSE`: the same payload returned as a plain
-#'     `data.frame` (or named list of `data.frame`s with `by`),
-#'     stripped of the `spicy_*` classes for downstream programmatic
-#'     use.
+#'   \item `output = "data.frame"`: the same payload returned as a
+#'     plain `data.frame` (or named list of `data.frame`s with `by`),
+#'     stripped of the `spicy_*` classes and of every metadata
+#'     attribute (`title`, `note`, `n_total`, `chi2`, `p_value`,
+#'     `assoc_*`, ...). For programmatic access to the statistics,
+#'     read the attributes of the default object, e.g.
+#'     `attr(cross_tab(...), "p_value")`.
 #' }
 #'
 #' Cell columns are the levels of `y`; rows are the levels of `x`.
@@ -95,9 +131,12 @@
 #' * **`options(spicy.rescale = TRUE)`**
 #'   Automatically rescales weights so that total weighted N equals the raw N.
 #'   Equivalent to setting `rescale = TRUE` in each call.
+#'   Also read by [freq()], so one option governs both tabulators.
 #'
-#' These options are convenient for users who wish to enforce consistent behavior
-#' across multiple calls to `cross_tab()` and other spicy table functions.
+#' These options are convenient for users who wish to enforce consistent
+#' behavior across multiple calls: `spicy.percent` and `spicy.simulate_p`
+#' apply to `cross_tab()`, and `spicy.rescale` applies to both
+#' `cross_tab()` and `freq()`.
 #' They can be disabled or reset by setting them to `NULL`:
 #' `options(spicy.percent = NULL, spicy.simulate_p = NULL, spicy.rescale = NULL)`.
 #'
@@ -157,19 +196,46 @@ cross_tab <- function(
   simulate_p = FALSE,
   simulate_B = 2000,
   digits = NULL,
-  styled = TRUE,
+  output = c("default", "data.frame"),
   show_n = TRUE,
   decimal_mark = ".",
-  p_digits = 3L
+  p_digits = 3L,
+  user_na = TRUE,
+  styled
 ) {
+  # Migration guard first, so old `styled =` calls get the actionable
+  # replacement message before any other validation can fire.
+  if (!missing(styled)) {
+    abort_styled_defunct("cross_tab")
+  }
+  output <- match_tabulation_output(output, "cross_tab")
+  # Internal shorthand: TRUE when the classed console object (margins,
+  # metadata attributes, print method) is requested.
+  console_output <- output == "default"
+
   if (missing(data)) {
     spicy_abort(
       "You must provide a dataset or a vector for `data`.",
       class = "spicy_invalid_input"
     )
   }
-  if (!is.character(decimal_mark) || length(decimal_mark) != 1L ||
-      !decimal_mark %in% c(".", ",")) {
+
+  # The language's typographic locale supplies the DEFAULT decimal
+  # mark, the same way it does in `freq()`: an argument you type > the
+  # locale > `"."`. The validation below then applies to the resolved
+  # value, unchanged.
+  if (missing(decimal_mark)) {
+    loc <- .style_locale_defaults()
+    if (!is.null(loc$decimal_mark)) {
+      decimal_mark <- loc$decimal_mark
+    }
+  }
+
+  if (
+    !is.character(decimal_mark) ||
+      length(decimal_mark) != 1L ||
+      !decimal_mark %in% c(".", ",")
+  ) {
     spicy_abort(
       "`decimal_mark` must be either `\".\"` or `\",\"`.",
       class = "spicy_invalid_input"
@@ -182,14 +248,38 @@ cross_tab <- function(
       class = "spicy_invalid_input"
     )
   }
-  if (!is.numeric(simulate_B) || length(simulate_B) != 1L ||
-      !is.finite(simulate_B) || simulate_B < 1L) {
+  validate_varlist_logical(user_na, "user_na")
+  if (
+    !is.numeric(simulate_B) ||
+      length(simulate_B) != 1L ||
+      !is.finite(simulate_B) ||
+      simulate_B < 1L
+  ) {
     spicy_abort(
       "`simulate_B` must be a positive integer.",
       class = "spicy_invalid_input"
     )
   }
   simulate_B <- as.integer(simulate_B)
+
+  # `NULL` keeps the context-dependent default (resolved below once
+  # `percent` is known); anything else must be a single non-negative
+  # integer, matching freq() and the table_*() family.
+  if (!is.null(digits)) {
+    if (
+      !is.numeric(digits) ||
+        length(digits) != 1L ||
+        !is.finite(digits) ||
+        digits < 0 ||
+        digits != as.integer(digits)
+    ) {
+      spicy_abort(
+        "`digits` must be `NULL` or a single non-negative integer.",
+        class = "spicy_invalid_input"
+      )
+    }
+    digits <- as.integer(digits)
+  }
 
   call_x <- substitute(x)
   call_y <- substitute(y)
@@ -229,6 +319,19 @@ cross_tab <- function(
         class = "spicy_invalid_data"
       )
     }
+    # In vector mode the first two arguments already are the row and
+    # column variables, so a third positional argument would be
+    # dropped. Warn instead of silently ignoring it. `call_y` is the
+    # unevaluated expression: the promise is never forced here.
+    if (!(missing(y) || identical(call_y, quote(NULL)))) {
+      spicy_warn(
+        sprintf(
+          "In vector mode, cross_tab(x_vector, y_vector, ...): the third argument `y` (%s) is ignored. The first two arguments are already the row and column variables.",
+          rlang::as_label(call_y)
+        ),
+        class = "spicy_ignored_arg"
+      )
+    }
   }
 
   # Global options
@@ -242,16 +345,25 @@ cross_tab <- function(
     percent <- getOption("spicy.percent", "none")
   }
 
-  percent <- match.arg(percent)
-  assoc_measure <- match.arg(assoc_measure)
+  percent <- spicy_match_arg(percent)
+  assoc_measure <- spicy_match_arg(assoc_measure)
   if (is.null(digits)) {
     digits <- if (percent == "none") 0 else 1
   }
 
-  # Capture original expressions to retrieve variable names
-  get_var_name <- function(expr) {
+  # Capture original expressions to retrieve variable names.
+  # Structural inspection only: symbols, `$` / `[[` / `[` column
+  # references, and a recursive scan of call arguments (so
+  # `factor(df$x)` yields "x"). When no name can be derived (inline
+  # literal vectors like `factor(c("g1", "g2"))`), `get_var_name()`
+  # falls back to a NEUTRAL placeholder ("x", "y", "weights", "by")
+  # instead of deparsing: the previous terminal deparse could pluck a
+  # DATA VALUE out of the expression and present it as the variable
+  # name in titles and footers.
+  find_var_name <- function(expr) {
     if (is.symbol(expr)) {
-      return(as.character(expr))
+      nm <- as.character(expr)
+      return(if (nzchar(nm)) nm else NULL)
     }
 
     if (is.call(expr)) {
@@ -271,10 +383,19 @@ cross_tab <- function(
         }
       }
 
+      # `df[, "col"]` / `df["col"]`: the last argument names the
+      # column when it is a string literal.
+      if (identical(fn, as.name("[")) && length(expr) >= 3) {
+        idx <- expr[[length(expr)]]
+        if (is.character(idx) && length(idx) == 1L) {
+          return(idx)
+        }
+      }
+
       args <- as.list(expr)[-1]
       if (length(args) > 0) {
         for (arg in rev(args)) {
-          nm <- get_var_name(arg)
+          nm <- find_var_name(arg)
           if (!is.null(nm) && nzchar(nm)) {
             return(nm)
           }
@@ -282,7 +403,11 @@ cross_tab <- function(
       }
     }
 
-    rlang::as_label(expr)
+    NULL
+  }
+
+  get_var_name <- function(expr, fallback = "x") {
+    find_var_name(expr) %||% fallback
   }
 
   parse_by_name <- function(expr_txt, fallback_expr = NULL) {
@@ -294,7 +419,7 @@ cross_tab <- function(
       parts <- trimws(gsub(".*\\$", "", parts))
       paste(parts, collapse = " x ")
     } else if (!is.null(fallback_expr)) {
-      get_var_name(fallback_expr)
+      get_var_name(fallback_expr, "by")
     } else {
       trimws(gsub(".*\\$", "", expr_txt))
     }
@@ -342,9 +467,14 @@ cross_tab <- function(
 
     # Weight
     if (!is.null(weights)) {
+      # Logical weights coerce naturally to 1/0 -- a common shorthand
+      # for "include / exclude" weighting. Matches freq().
+      if (is.logical(weights)) {
+        weights <- as.numeric(weights)
+      }
       if (!is.numeric(weights)) {
         spicy_abort(
-          "When using vector input, `weights` must be a numeric vector.",
+          "When using vector input, `weights` must be a numeric or logical vector.",
           class = "spicy_invalid_input"
         )
       }
@@ -391,8 +521,8 @@ cross_tab <- function(
     }
     w_expr <- rlang::new_quosure(rlang::sym("w_tmp"))
 
-    x_name <- get_var_name(call_data)
-    y_name <- get_var_name(call_x)
+    x_name <- get_var_name(call_data, "x")
+    y_name <- get_var_name(call_x, "y")
 
     if (!missing(by) && !identical(call_by, quote(NULL))) {
       by_name <- parse_by_name(deparse(call_by), fallback_expr = call_by)
@@ -406,10 +536,10 @@ cross_tab <- function(
     w_expr <- rlang::enquo(weights)
 
     x_name <- tryCatch(rlang::as_name(x_expr), error = function(e) {
-      get_var_name(rlang::get_expr(x_expr))
+      get_var_name(rlang::get_expr(x_expr), "x")
     })
     y_name <- tryCatch(rlang::as_name(y_expr), error = function(e) {
-      get_var_name(rlang::get_expr(y_expr))
+      get_var_name(rlang::get_expr(y_expr), "y")
     })
 
     if (!rlang::quo_is_null(by_expr)) {
@@ -421,8 +551,20 @@ cross_tab <- function(
 
   if (!rlang::quo_is_null(w_expr)) {
     w <- rlang::eval_tidy(w_expr, data)
+    # integer64 weights would pass the is.numeric() guard below and
+    # then be bit-reinterpreted by xtabs() into denormal garbage;
+    # reject them before the numeric check. Matches freq().
+    .check_integer64(w, "`weights`")
+    # Logical weights coerce naturally to 1/0 -- a common shorthand
+    # for "include / exclude" weighting. Matches freq().
+    if (is.logical(w)) {
+      w <- as.numeric(w)
+    }
     if (!is.numeric(w)) {
-      spicy_abort("`weights` must be numeric.", class = "spicy_invalid_input")
+      spicy_abort(
+        "`weights` must be a numeric or logical vector.",
+        class = "spicy_invalid_input"
+      )
     }
     if (length(w) != nrow(data)) {
       spicy_abort(
@@ -449,7 +591,9 @@ cross_tab <- function(
           "%d NA value%s in `weights`; those observations are excluded from the table and from rescaling.",
           n_na,
           if (n_na > 1L) "s" else ""
-        ), class = "spicy_dropped_na")
+        ),
+        class = "spicy_dropped_na"
+      )
       # Drop NA-weighted rows up front so they never reach `xtabs()` or
       # `complete.cases()` (where they would otherwise inflate
       # `n_complete` during rescale).
@@ -463,12 +607,58 @@ cross_tab <- function(
 
   if (rescale && rlang::quo_is_null(w_expr)) {
     spicy_warn(
-      "`rescale = TRUE` has no effect since no weights provided.", class = "spicy_ignored_arg")
+      "`rescale = TRUE` has no effect since no weights provided.",
+      class = "spicy_ignored_arg"
+    )
   }
 
   data$`..spicy_w` <- w
-  full_x_levels <- make_levels(rlang::eval_tidy(x_expr, data))
-  full_y_levels <- make_levels(rlang::eval_tidy(y_expr, data))
+
+  # Declared missing values (see the "Declared missing values" section
+  # of ?freq): with `user_na = TRUE` declared codes become regular NA
+  # (so they are excluded from levels, cells, and statistics exactly
+  # like NA and disclosed in the note below); with `user_na = FALSE`
+  # the declaration is dropped and the codes tabulate as categories.
+  resolve_user_na <- function(v) {
+    if (isTRUE(user_na)) .user_na_to_na(v) else .user_na_zap(v)
+  }
+
+  # Explicit NA levels (addNA(), factor(exclude = NULL),
+  # forcats::fct_na_value_to_level()) are declared categories: the
+  # analyst chose to tabulate missing as a level. Rename the NA level
+  # to the literal "NA" label (the display freq() uses for the same
+  # rows) so factor(levels = ...) and xtabs() keep those observations
+  # as a table category instead of silently dropping them. If a
+  # genuine "NA" string level already exists (pathological), pick the
+  # first free "NA_<i>" so no two levels collide.
+  promote_na_level <- function(v) {
+    if (!is.factor(v)) {
+      return(v)
+    }
+    lv <- levels(v)
+    if (!anyNA(lv)) {
+      return(v)
+    }
+    label <- "NA"
+    i <- 0L
+    while (label %in% lv) {
+      i <- i + 1L
+      label <- paste0("NA_", i)
+    }
+    lv[is.na(lv)] <- label
+    levels(v) <- lv
+    v
+  }
+
+  x_all_raw <- rlang::eval_tidy(x_expr, data)
+  y_all_raw <- rlang::eval_tidy(y_expr, data)
+  # bit64::integer64 passes is.numeric() but its payload is raw int64
+  # bit patterns: make_levels() / xtabs() would silently tabulate
+  # garbage. Reject loudly with the conversion named.
+  .check_integer64(x_all_raw, "`x`")
+  .check_integer64(y_all_raw, "`y`")
+  full_x_levels <- make_levels(promote_na_level(resolve_user_na(x_all_raw)))
+  full_y_levels <- make_levels(promote_na_level(resolve_user_na(y_all_raw)))
 
   make_named_row <- function(template_df, values) {
     row <- as.list(rep(NA, ncol(template_df)))
@@ -497,9 +687,29 @@ cross_tab <- function(
     out
   }
 
+  # Rows lost before grouping because `by` is NA (split() drops them
+  # from every group). Filled in the by-branch below; read lazily by
+  # compute_ctab() when it assembles each table's disclosure note.
+  n_by_dropped <- 0L
+
   compute_ctab <- function(df, group_label = NULL) {
-    x_val <- rlang::eval_tidy(x_expr, df)
-    y_val <- rlang::eval_tidy(y_expr, df)
+    x_val_raw <- rlang::eval_tidy(x_expr, df)
+    y_val_raw <- rlang::eval_tidy(y_expr, df)
+    # Declared-missing masks BEFORE the user_na transform (needed for
+    # the disclosure note); all-FALSE when user_na = FALSE, where the
+    # declared codes stay in the table as categories.
+    mask_x <- if (user_na) {
+      .user_na_mask(x_val_raw)
+    } else {
+      logical(length(x_val_raw))
+    }
+    mask_y <- if (user_na) {
+      .user_na_mask(y_val_raw)
+    } else {
+      logical(length(y_val_raw))
+    }
+    x_val <- promote_na_level(resolve_user_na(x_val_raw))
+    y_val <- promote_na_level(resolve_user_na(y_val_raw))
     w_val <- df$`..spicy_w`
 
     df_sub <- data.frame(
@@ -543,9 +753,9 @@ cross_tab <- function(
     # Resolve unique internal column names BEFORE prepending the
     # row-identifier or appending margin columns. Three names are
     # spicy-internal: "Values" (the row-identifier column, always
-    # added), "Total" (the margin column, added when styled and
-    # percent != "none"), and "N" (the sample-size column, added
-    # only when styled, percent = "row" and show_n = TRUE). When a
+    # added), "Total" (the margin column, added to the console object
+    # only), and "N" (the sample-size column, added to the console
+    # object only when percent = "row" and show_n = TRUE). When a
     # y-variable level already occupies one of those names (e.g.
     # "N" from a Y/N answer coding, "Total" from a literal "Total"
     # category, "Values" from an unusual but possible y-level), the
@@ -563,7 +773,7 @@ cross_tab <- function(
       "Total",
       c(y_level_cols, identifier_col)
     )
-    n_col <- if (styled && percent == "row" && show_n) {
+    n_col <- if (console_output && percent == "row" && show_n) {
       make_unique_col_name(
         "N",
         c(y_level_cols, identifier_col, total_col)
@@ -587,14 +797,14 @@ cross_tab <- function(
         sprintf("\"Values\" (row identifier) -> \"%s\"", identifier_col)
       )
     }
-    if (styled && total_col != "Total") {
+    if (console_output && total_col != "Total") {
       renamed <- c(
         renamed,
         sprintf("\"Total\" (margin) -> \"%s\"", total_col)
       )
     }
     if (
-      styled &&
+      console_output &&
         percent == "row" &&
         show_n &&
         n_col != "N"
@@ -617,7 +827,7 @@ cross_tab <- function(
       )
     }
 
-    if (styled) {
+    if (console_output) {
       if (percent == "column") {
         total_values <- colSums(tab_perc, na.rm = TRUE)
         n_values <- colSums(tab_full, na.rm = TRUE)
@@ -674,12 +884,19 @@ cross_tab <- function(
 
         df_out <- append_rows(df_out, total_row)
       } else {
+        # Margins come from the UNROUNDED weighted table and are
+        # rounded once at display time (round-of-sum). Summing the
+        # already-rounded cells instead (sum-of-rounds, the previous
+        # behavior) printed fractional-weight margins that
+        # contradicted both the true totals and the N row the percent
+        # tables derive from the same data.
         df_out[[total_col]] <- as.numeric(rowSums(tab_full, na.rm = TRUE))
         grand_total <- make_named_row(
           df_out,
           c(
             stats::setNames(list("Total"), identifier_col),
-            as.list(colSums(df_out[, -1, drop = FALSE], na.rm = TRUE))
+            as.list(colSums(tab_full, na.rm = TRUE)),
+            stats::setNames(list(sum(tab_full)), total_col)
           )
         )
         df_out <- append_rows(df_out, grand_total)
@@ -703,7 +920,9 @@ cross_tab <- function(
             "`correct = TRUE` ignored: Yates continuity correction only applies to 2x2 tables (this %dx%d table is not).",
             nrow(tab_stats),
             ncol(tab_stats)
-          ), class = "spicy_ignored_arg")
+          ),
+          class = "spicy_ignored_arg"
+        )
       }
       chi <- suppressWarnings(stats::chisq.test(
         tab_stats,
@@ -727,17 +946,30 @@ cross_tab <- function(
       assoc_result <- NULL
       assoc_name <- NULL
       if (assoc_choice != "none") {
+        # One registry key per measure: this note, the
+        # `table_categorical()` column header and the `assoc_measures()`
+        # row label must name the same statistic the same way.
         assoc_labels <- c(
-          cramer_v = "Cramer's V",
-          phi = "Phi",
-          gamma = "Goodman-Kruskal Gamma",
-          tau_b = "Kendall's Tau-b",
-          tau_c = "Kendall's Tau-c",
-          somers_d = "Somers' D",
-          lambda = "Lambda"
+          cramer_v = spicy_str("stat_cramer_v"),
+          phi = spicy_str("stat_phi"),
+          gamma = spicy_str("stat_gamma"),
+          tau_b = spicy_str("stat_tau_b"),
+          tau_c = spicy_str("stat_tau_c"),
+          somers_d = spicy_str("stat_somers_d"),
+          lambda = spicy_str("stat_lambda")
         )
+        # No `suppressWarnings()` blanket here: the measures emit only
+        # classed spicy warnings (chisq.test noise is already muffled
+        # inside them), and those must reach the caller -- same policy
+        # as `assoc_measures()`. Classed spicy errors are the
+        # measures' documented contract (e.g. `phi()` refuses a
+        # non-2x2 table) and must surface too: swallowing them used to
+        # leave a silent all-NA association column (audit phase 2,
+        # finding 31; pre-1.0 doctrine prefers a hard error over a
+        # silent NA). Only unclassed errors degrade to "no
+        # association line".
         assoc_out <- tryCatch(
-          suppressWarnings(switch(
+          switch(
             assoc_choice,
             cramer_v = cramer_v(tab_stats, detail = TRUE),
             phi = phi(tab_stats, detail = TRUE),
@@ -746,8 +978,13 @@ cross_tab <- function(
             tau_c = kendall_tau_c(tab_stats, detail = TRUE),
             somers_d = somers_d(tab_stats, "symmetric", detail = TRUE),
             lambda = lambda_gk(tab_stats, "symmetric", detail = TRUE)
-          )),
-          error = function(e) NULL
+          ),
+          error = function(e) {
+            if (inherits(e, "spicy_error")) {
+              stop(e)
+            }
+            NULL
+          }
         )
         if (!is.null(assoc_out)) {
           assoc_result <- assoc_out
@@ -768,12 +1005,20 @@ cross_tab <- function(
       p_formatted <- format_p_value(
         pval,
         decimal_mark = decimal_mark,
-        digits = p_digits
+        digits = p_digits,
+        # Under a comma the leading zero stays: `p = ,659` is a form
+        # the SI brochure forbids (BIPM, 9th edition, section 5.4.4),
+        # and the reporting families never write it because a French
+        # locale carries `p_style = "standard"` with the mark. The
+        # pair has no style layer to carry it, so the MARK does --
+        # whether it comes from the language or from the argument.
+        # Under a point nothing moves: `.659` is the APA default.
+        leading_zero = if (identical(decimal_mark, ",")) TRUE else NULL
       )
       p_str <- if (substring(p_formatted, 1L, 1L) == "<") {
-        paste0("p ", p_formatted) # "p <.001"
+        spicy_fmt("note_p_prefix_lt", p_formatted) # "p <.001"
       } else {
-        paste0("p = ", p_formatted) # "p = .045"
+        spicy_fmt("note_p_prefix_eq", p_formatted) # "p = .045"
       }
 
       chi2_str <- if (is.nan(chi2) || is.na(chi2)) {
@@ -782,13 +1027,8 @@ cross_tab <- function(
         format_number(chi2, digits = 1L, decimal_mark = decimal_mark)
       }
       note <- paste0(
-        "Chi-2(",
-        df_,
-        ") = ",
-        chi2_str,
-        ", ",
-        p_str,
-        if (simulate_p) " (simulated)"
+        spicy_fmt("test_chisq", df_, chi2_str, p_str),
+        if (simulate_p) spicy_str("note_chisq_simulated")
       )
 
       if (!is.null(assoc_name) && !is.na(estimate)) {
@@ -797,14 +1037,14 @@ cross_tab <- function(
           digits = 2L,
           decimal_mark = decimal_mark
         )
-        assoc_line <- paste0(assoc_name, " = ", est_str)
+        assoc_line <- spicy_fmt("note_kv_pair", assoc_name, est_str)
         if (isTRUE(assoc_ci) && !is.null(assoc_result)) {
           ci_lo <- assoc_result[["ci_lower"]]
           ci_hi <- assoc_result[["ci_upper"]]
           if (!is.na(ci_lo) && !is.na(ci_hi)) {
             assoc_line <- paste0(
               assoc_line,
-              ", 95% CI [",
+              spicy_str("note_assoc_ci"),
               format_number(ci_lo, digits = 2L, decimal_mark = decimal_mark),
               ci_bracket_separator(decimal_mark),
               format_number(ci_hi, digits = 2L, decimal_mark = decimal_mark),
@@ -816,13 +1056,14 @@ cross_tab <- function(
       }
 
       if (isTRUE(correct_used)) {
-        note <- paste0(note, "\nYates continuity correction applied.")
+        note <- paste0(note, "\n", spicy_str("note_yates_applied"))
       }
       if (pruned) {
         note <- paste0(
           note,
-          sprintf(
-            "\nStats computed on %dx%d sub-table after dropping empty rows / columns.",
+          "\n",
+          spicy_fmt(
+            "note_stats_subtable",
             nrow(tab_stats),
             ncol(tab_stats)
           )
@@ -842,54 +1083,67 @@ cross_tab <- function(
       small1 <- sum(expected < 1, na.rm = TRUE)
       prop5 <- small5 / length(expected)
       if ((prop5 > 0.20 || small1 > 0) && !simulate_p) {
-        min_exp <- round(min(expected, na.rm = TRUE), 2)
+        # The note's own numbers follow the mark too: a table whose
+        # cells read "66,7" cannot say "66.7" one line below. They
+        # reach `sprintf("%s")` as `round()`ed doubles, so
+        # `.mark_decimal()` renders them exactly as `as.character()`
+        # did -- under a point the note does not move by a byte.
+        min_exp <- .mark_decimal(
+          round(min(expected, na.rm = TRUE), 2),
+          decimal_mark
+        )
         note <- paste0(
           note,
-          "\nWarning: ",
-          small5,
-          " expected cell",
-          if (small5 > 1) "s" else "",
-          " < 5 (",
-          round(prop5 * 100, 1),
-          "%).",
+          "\n",
+          spicy_str("note_warning_prefix"),
+          spicy_fmt(
+            "note_expected_lt5",
+            small5,
+            if (small5 > 1) "s" else "",
+            .mark_decimal(round(prop5 * 100, 1), decimal_mark)
+          ),
           if (small1 > 0) {
             paste0(
               " ",
-              small1,
-              " expected cell",
-              if (small1 > 1) "s" else "",
-              " < 1."
+              spicy_fmt(
+                "note_expected_lt1",
+                small1,
+                if (small1 > 1) "s" else ""
+              )
             )
           },
-          " Minimum expected = ",
-          min_exp,
-          ". Consider `simulate_p = TRUE` or set globally via `options(spicy.simulate_p = TRUE)`."
+          spicy_fmt("note_min_expected", min_exp),
+          spicy_fmt(
+            "note_expected_advice",
+            "`simulate_p = TRUE`",
+            "`options(spicy.simulate_p = TRUE)`"
+          )
         )
       }
     }
 
     perc_label <- switch(
       percent,
-      "row" = " (Row %)",
-      "column" = " (Column %)",
-      "none" = " (N)"
+      "row" = spicy_str("title_percent_row"),
+      "column" = spicy_str("title_percent_column"),
+      "none" = spicy_str("title_percent_none")
     )
-    title <- paste0(
-      "Crosstable: ",
+    title <- spicy_fmt(
+      "title_crosstab",
       x_name,
-      if (!is.null(y_name)) paste0(" x ", y_name),
+      if (!is.null(y_name)) spicy_fmt("title_crosstab_by", y_name) else "",
       perc_label
     )
     if (!is.null(group_label)) {
-      title <- paste0(title, " | ", by_name, " = ", group_label)
+      title <- spicy_fmt("title_crosstab_group", title, by_name, group_label)
     }
 
     # Add weighting information to the note when applicable
     if (!rlang::quo_is_null(w_expr) && !isTRUE(all(w == 1))) {
-      w_name <- get_var_name(call_weights)
-      w_text <- paste0("Weight: ", w_name)
+      w_name <- get_var_name(call_weights, "weights")
+      w_text <- spicy_fmt("note_weight", w_name)
       if (isTRUE(rescale)) {
-        w_text <- paste0(w_text, " (rescaled)")
+        w_text <- paste0(w_text, spicy_str("note_weight_rescaled"))
       }
 
       # Append to the existing note or create a new one
@@ -900,23 +1154,121 @@ cross_tab <- function(
       }
     }
 
+    # NA disclosure: xtabs() silently excludes rows where x or y is NA.
+    # Report the per-variable counts in the table note (same wording as
+    # table_categorical()'s "Missing values removed" convention), naming
+    # only the variables that actually lost observations. Regular NA
+    # and declared missing values get separate lines so the reader can
+    # tell metadata-driven exclusions from plain missingness.
+    sys_na_x <- is.na(x_val) & !mask_x
+    sys_na_y <- is.na(y_val) & !mask_y
+    n_na_x <- sum(sys_na_x)
+    n_na_y <- sum(sys_na_y)
+    na_parts <- character(0)
+    if (n_na_x > 0L) {
+      na_parts <- c(na_parts, spicy_fmt("note_missing_item", x_name, n_na_x))
+    }
+    if (n_na_y > 0L) {
+      na_parts <- c(na_parts, spicy_fmt("note_missing_item", y_name, n_na_y))
+    }
+    if (length(na_parts) > 0L) {
+      # With NAs on BOTH variables the per-variable counts overlap
+      # (a row missing both is counted in each), so a reader summing
+      # them overstates the loss. Disclose the deduplicated row count
+      # once -- the SPSS Case Processing Summary convention. With a
+      # single affected variable, values = rows and the suffix would
+      # be noise.
+      na_suffix <- ""
+      if (n_na_x > 0L && n_na_y > 0L) {
+        n_rows_na <- sum(sys_na_x | sys_na_y)
+        na_suffix <- spicy_fmt("note_missing_rows_total", n_rows_na)
+      }
+      na_text <- paste0(
+        spicy_str("note_missing_removed"),
+        paste(na_parts, collapse = ", "),
+        na_suffix,
+        "."
+      )
+      if (is.null(note) || note == "") {
+        note <- na_text
+      } else {
+        note <- paste0(note, "\n", na_text)
+      }
+    }
+    # Declared-missing disclosure (user_na = TRUE): same grammar as the
+    # regular-NA line, one shared wording across the tabulators.
+    n_user_x <- sum(mask_x)
+    n_user_y <- sum(mask_y)
+    user_parts <- character(0)
+    if (n_user_x > 0L) {
+      user_parts <- c(
+        user_parts,
+        spicy_fmt("note_missing_item", x_name, n_user_x)
+      )
+    }
+    if (n_user_y > 0L) {
+      user_parts <- c(
+        user_parts,
+        spicy_fmt("note_missing_item", y_name, n_user_y)
+      )
+    }
+    if (length(user_parts) > 0L) {
+      user_suffix <- ""
+      if (n_user_x > 0L && n_user_y > 0L) {
+        user_suffix <- spicy_fmt(
+          "note_missing_rows_total",
+          sum(mask_x | mask_y)
+        )
+      }
+      user_text <- paste0(
+        spicy_str("note_declared_missing_removed"),
+        paste(user_parts, collapse = ", "),
+        user_suffix,
+        "."
+      )
+      if (is.null(note) || note == "") {
+        note <- user_text
+      } else {
+        note <- paste0(note, "\n", user_text)
+      }
+    }
+    if (n_by_dropped > 0L) {
+      by_text <- spicy_fmt(
+        "note_rows_missing_by_removed",
+        by_name,
+        n_by_dropped
+      )
+      if (is.null(note) || note == "") {
+        note <- by_text
+      } else {
+        note <- paste0(note, "\n", by_text)
+      }
+    }
+
     attr(df_out, "title") <- title
     attr(df_out, "note") <- note
     attr(df_out, "n_total") <- total_n
     attr(df_out, "digits") <- digits
     attr(df_out, "decimal_mark") <- decimal_mark
     attr(df_out, "p_digits") <- p_digits
+    # The percentage mode drives the default number of decimals in
+    # `print.spicy_cross_table()`. Carried as a KEY, never re-read from the
+    # title text: a title is a display string and may be translated (or may
+    # legitimately contain a "%" coming from a variable name).
+    attr(df_out, "percent_mode") <- percent
     # Mark the N row / N column position robustly (string-matching on
     # `Values == "N"` would collide with a user-level literally named
     # "N", e.g. Yes/No factors).
     attr(df_out, "n_row_idx") <- if (
-      styled && percent == "column" && show_n
+      console_output && percent == "column" && show_n
     ) {
       nrow(df_out)
     } else {
       NA_integer_
     }
-    attr(df_out, "n_col_name") <- if (styled && percent == "row" && show_n) {
+    attr(df_out, "n_col_name") <- if (
+      console_output && percent == "row" && show_n
+    ) {
       n_col
     } else {
       NA_character_
@@ -924,8 +1276,8 @@ cross_tab <- function(
     # Tell `spicy_print_table()` exactly where the Total row sits so it
     # does not have to grep the formatted text (and therefore never
     # mis-fires when a user category is literally named "Total").
-    attr(df_out, "total_row_idx") <- if (styled) {
-      n_row_added <- styled && percent == "column" && show_n
+    attr(df_out, "total_row_idx") <- if (console_output) {
+      n_row_added <- console_output && percent == "column" && show_n
       total_idx <- nrow(df_out) - as.integer(n_row_added)
       if (total_idx >= 1L) total_idx else NULL # nocov
     } else {
@@ -943,7 +1295,14 @@ cross_tab <- function(
   }
 
   if (!rlang::quo_is_null(by_expr)) {
-    by_vals <- rlang::eval_tidy(by_expr, data)
+    # Declared-missing group values follow the same `user_na` contract
+    # as x and y: with the default they are missing (no group is
+    # formed, rows counted in the removal note); with user_na = FALSE
+    # they define groups like any other value.
+    by_vals <- resolve_user_na(rlang::eval_tidy(by_expr, data))
+    # split() drops NA-by rows from every group; disclose the loss in
+    # each table's note (read by compute_ctab through its closure).
+    n_by_dropped <- sum(is.na(by_vals))
 
     if (is.factor(by_vals)) {
       f <- droplevels(by_vals)
@@ -968,24 +1327,127 @@ cross_tab <- function(
     )
     names(tables) <- level_names
 
-    if (styled) {
+    if (console_output) {
       tables <- lapply(tables, function(tt) {
         class(tt) <- c("spicy_cross_table", "spicy_table", class(tt))
         tt
       })
       class(tables) <- c("spicy_cross_table_list", class(tables))
+    } else {
+      tables <- lapply(tables, strip_spicy_table_attrs)
     }
     return(tables)
   } else {
     out <- compute_ctab(data)
   }
 
-  if (styled) {
+  if (console_output) {
     class(out) <- c("spicy_cross_table", "spicy_table", class(out))
     out
   } else {
-    as.data.frame(out, stringsAsFactors = FALSE)
+    strip_spicy_table_attrs(out)
   }
+}
+
+
+# Internal: return `df` as a genuinely plain data.frame -- the
+# `output = "data.frame"` contract. Drops every spicy metadata
+# attribute (title, note, n_total, chi2, p_value, assoc_*, ...) the
+# same way freq()'s plain branch never attaches them. Programmatic
+# access to the statistics goes through the attributes of the default
+# console object.
+strip_spicy_table_attrs <- function(df) {
+  out <- as.data.frame(df, stringsAsFactors = FALSE)
+  keep <- c("names", "row.names", "class")
+  for (a in setdiff(names(attributes(out)), keep)) {
+    attr(out, a) <- NULL
+  }
+  out
+}
+
+
+# Internal: classed validation for the `output` argument shared by
+# freq() and cross_tab(). The two tabulators support the console
+# object ("default") and the plain-data.frame payload ("data.frame"),
+# named after the same values in the table_*() family so a single
+# `output` vocabulary covers the whole package. The rendered-engine
+# values the table_*() family also accepts (tinytable, gt, flextable,
+# ...) are recognized here only to produce a more specific error;
+# they may be wired up later but are refused today.
+match_tabulation_output <- function(output, fn_name) {
+  choices <- c("default", "data.frame")
+
+  # The unevaluated signature default (the full choices vector)
+  # resolves to its first element, exactly like match.arg().
+  if (identical(output, choices)) {
+    return(choices[[1L]])
+  }
+  if (
+    is.character(output) &&
+      length(output) == 1L &&
+      !is.na(output) &&
+      output %in% choices
+  ) {
+    return(output)
+  }
+
+  engine_values <- c(
+    "long",
+    "tinytable",
+    "gt",
+    "flextable",
+    "excel",
+    "clipboard",
+    "word"
+  )
+  engine_hint <- if (
+    is.character(output) &&
+      length(output) == 1L &&
+      !is.na(output) &&
+      output %in% engine_values
+  ) {
+    c(
+      "i" = sprintf(
+        "output = \"%s\" is only available in the table_*() functions (e.g. table_categorical()).",
+        output
+      )
+    )
+  } else {
+    NULL
+  }
+
+  spicy_abort(
+    c(
+      sprintf(
+        "`output` must be \"default\" or \"data.frame\" in `%s()`.",
+        fn_name
+      ),
+      "i" = "\"default\" returns the console table object (prints as ASCII).",
+      "i" = "\"data.frame\" returns a plain data.frame.",
+      engine_hint
+    ),
+    class = "spicy_invalid_input"
+  )
+}
+
+
+# Internal: hard migration error for the removed `styled` argument of
+# freq() and cross_tab() (replaced by `output` in spicy 0.13.0).
+# `styled` survives as a default-less formal in both signatures purely
+# so that old `styled =` calls land here and get the actionable
+# replacement message instead of R's bare "unused argument" error.
+abort_styled_defunct <- function(fn_name) {
+  spicy_abort(
+    c(
+      sprintf(
+        "The `styled` argument of `%s()` is defunct: use `output` instead.",
+        fn_name
+      ),
+      "i" = "Replace `styled = TRUE` with `output = \"default\"` (the default).",
+      "i" = "Replace `styled = FALSE` with `output = \"data.frame\"`."
+    ),
+    class = c("spicy_defunct", "spicy_invalid_input")
+  )
 }
 
 
@@ -1025,17 +1487,46 @@ print.spicy_cross_table_list <- function(x, ...) {
 #'   decimal mark. Defaults to the value stored in the object.
 #' @param ... Additional arguments passed to internal formatting functions.
 #'
+#' @return Invisibly returns `x`.
+#'
 #' @keywords internal
 #' @export
-print.spicy_cross_table <- function(x, digits = NULL, decimal_mark = NULL, ...) {
+print.spicy_cross_table <- function(
+  x,
+  digits = NULL,
+  decimal_mark = NULL,
+  ...
+) {
+  if (!is.null(digits)) {
+    if (
+      !is.numeric(digits) ||
+        length(digits) != 1L ||
+        !is.finite(digits) ||
+        digits < 0 ||
+        digits != as.integer(digits)
+    ) {
+      spicy_abort(
+        "`digits` must be a single non-negative integer.",
+        class = "spicy_invalid_input"
+      )
+    }
+    digits <- as.integer(digits)
+  }
   title <- attr(x, "title")
   digits_attr <- attr(x, "digits")
   decimal_mark_attr <- attr(x, "decimal_mark")
+  percent_mode <- attr(x, "percent_mode")
 
   if (is.null(digits)) {
     digits <- if (!is.null(digits_attr)) {
       digits_attr
+    } else if (!is.null(percent_mode)) {
+      # Percentages get one decimal, raw counts none. Read from the KEY
+      # `cross_tab()` stored, not from a "%" in the displayed title.
+      if (identical(percent_mode, "none")) 0 else 1
     } else if (grepl("%", title)) {
+      # Objects rebuilt from the plain-data.frame payload have no
+      # `percent_mode`; they keep the historical text probe.
       1
     } else {
       0
@@ -1092,7 +1583,6 @@ print.spicy_cross_table <- function(x, digits = NULL, decimal_mark = NULL, ...) 
     padding = 2L,
     first_column_line = TRUE,
     row_total_line = TRUE,
-    column_total_line = TRUE,
     bottom_line = FALSE,
     ...
   )

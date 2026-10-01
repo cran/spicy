@@ -4,7 +4,7 @@
 \alias{phi}
 \title{Phi coefficient}
 \usage{
-phi(x, detail = FALSE, conf_level = 0.95, digits = 3L, .include_se = FALSE)
+phi(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -13,14 +13,14 @@ phi(x, detail = FALSE, conf_level = 0.95, digits = 3L, .include_se = FALSE)
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -37,7 +37,10 @@ equivalent to Cramer's V for 2x2 tables and equals the absolute
 value of the Pearson correlation between the two binary
 variables -- spicy returns only the magnitude (always
 non-negative), matching the DescTools (Signorell et al., 2024)
-and SPSS conventions. To recover the signed direction of the
+and PSPP conventions. SPSS itself SIGNS phi on 2x2 tables (its
+CROSSTABS algorithm sets the sign to that of the Pearson
+correlation), so SPSS output can show a negative value of the
+same magnitude. To recover the signed direction of the
 2x2 association, compute the Pearson correlation directly
 (e.g. \code{cor(x, y)} after coding both variables 0/1).
 
@@ -49,6 +52,9 @@ tab <- table(sochealth$smoking, sochealth$sex)
 phi(tab)
 phi(tab, detail = TRUE)
 
+}
+\references{
+Liebetrau, A. M. (1983). \emph{Measures of Association}. Sage.
 }
 \seealso{
 \code{\link[=cramer_v]{cramer_v()}}, \code{\link[=yule_q]{yule_q()}}, \code{\link[=assoc_measures]{assoc_measures()}}

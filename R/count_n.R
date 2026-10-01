@@ -12,17 +12,26 @@
 #'   `dplyr::mutate()`, where the current data context is used
 #'   automatically.
 #' @param select Columns to include. Defaults to `tidyselect::everything()`.
-#'   Uses tidyselect helpers like [tidyselect::starts_with()], etc.
+#'   Uses tidyselect helpers like [tidyselect::starts_with()], etc.; a
+#'   character vector of names is validated with [tidyselect::all_of()],
+#'   so unknown names raise an error (as in [mean_n()] and [sum_n()]).
 #'   If `regex = TRUE`, `select` is treated as a regex string.
-#' @param exclude Character vector of column names to exclude after selection.
-#'   Defaults to `NULL` (no exclusion).
+#' @param exclude Columns to exclude after selection (names or positions,
+#'   as accepted by [tidyselect::any_of()]). Defaults to `NULL`
+#'   (no exclusion).
 #' @param count Value(s) to count. Defaults to `NULL`. Ignored if `special` is used.
 #'   Multiple values are allowed (e.g., `count = c(1, 2, 3)` or `count = c("yes", "no")`).
 #'   R automatically coerces all values in `count` to a common type (e.g., `c(2, "2")` becomes `c("2", "2")`),
 #'   so all values are expected to be of the same final type.
 #'   If `allow_coercion = FALSE`, matching is type-safe using `identical()`, and the type of `count` must match that of the values in the data.
+#'   A zero-length `count` (e.g. an upstream filter that emptied it) raises a
+#'   classed error rather than silently counting nothing, and so does a
+#'   `count` made only of missing values (use `special = "NA"` / `"NaN"`).
 #' @param special Character vector of special values to count: `"NA"`, `"NaN"`, `"Inf"`, `"-Inf"`, or `"all"`.
 #'   Defaults to `NULL`.
+#'   Every entry is validated, including alongside `"all"`: any other
+#'   value raises an error, and so does an empty vector
+#'   (`special = character(0)` selects nothing to count).
 #'   `"NA"` uses `is.na()`, and therefore includes both `NA` and `NaN` values.
 #'   `"NaN"` uses `is.nan()` to match only actual NaN values.
 #' @param allow_coercion Logical. If `TRUE` (the default), values are compared after coercion.
@@ -33,9 +42,22 @@
 #'   If `TRUE`, interprets `select` as a regular expression pattern.
 #' @param verbose Logical. If `FALSE` (the default), messages are suppressed.
 #'   If `TRUE`, prints processing messages.
+#' @param user_na Logical. If `TRUE` (the default), `special = "NA"`
+#'   counts declared missing values together with regular `NA` (the
+#'   SPSS `MISSING` / `NMISS` convention). If `FALSE`, only genuine
+#'   `NA` / `NaN` count as missing. The `count =` path matches the
+#'   underlying codes in both modes, so explicitly listed declared
+#'   codes are always counted. See the "Declared missing values"
+#'   section of [freq()].
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @return A numeric vector of row-wise counts (unnamed), of length
-#'   `nrow(data)`.
+#'   `nrow(data)`. Missing values never match a regular `count` value,
+#'   so an all-`NA` row counts `0` unless `special` targets missing
+#'   values. If the selection resolves to zero usable columns, a
+#'   classed warning (`spicy_no_selection`) is emitted and `NA` is
+#'   returned for all rows, as in [mean_n()] and [sum_n()].
 #'
 #' @details
 #' # Strict matching (`allow_coercion = FALSE`)
@@ -139,45 +161,48 @@ count_n <- function(
   allow_coercion = TRUE,
   ignore_case = FALSE,
   regex = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE
 ) {
+  select_quo <- rlang::enquo(select)
+  select_was_missing <- missing(select)
+  validate_varlist_logical(user_na, "user_na")
+
   if (is.null(data)) {
     data <- dplyr::pick(tidyselect::everything())
   }
 
   data <- as.data.frame(data)
 
-  col_names <- if (regex) {
-    if (missing(select)) {
-      select <- ".*"
-    }
-    if (!is.character(select) || length(select) != 1L || is.na(select)) {
-      spicy_abort(
-        "When `regex = TRUE`, `select` must be a single character pattern.",
-        class = "spicy_invalid_input"
-      )
-    }
-    grep(select, names(data), value = TRUE)
-  } else {
-    sel_quo <- rlang::enquo(select)
-    sel_val <- tryCatch(
-      rlang::eval_tidy(sel_quo, env = rlang::quo_get_env(sel_quo)),
-      error = function(e) NULL
-    )
-    if (is.character(sel_val)) {
-      sel_val
-    } else {
-      names(tidyselect::eval_select(sel_quo, data))
-    }
+  # Declared missing values (see the "Declared missing values" section
+  # of ?freq): with `user_na = TRUE` (the default), `special = "NA"`
+  # counts declared codes together with regular NA (the columns keep
+  # their labelled class, so haven's `is.na()` dispatch sees the
+  # declaration). With `user_na = FALSE` the declaration is dropped
+  # here, so only genuine NA / NaN are counted as missing. The
+  # `count =` path always compares against the underlying codes, so an
+  # explicitly listed declared code is counted in both modes.
+  if (!isTRUE(user_na)) {
+    data[] <- lapply(data, .user_na_zap)
   }
 
-  if (!is.null(exclude)) {
-    col_names <- setdiff(col_names, exclude)
-  }
+  # Shared resolver keeps the select / exclude / regex contract
+  # identical across the row-wise family (character selections are
+  # validated via all_of(), `exclude` accepts names or positions);
+  # numeric_only = FALSE because counting works on any column type.
+  data <- .resolve_row_n_data(
+    data = data,
+    select_quo = select_quo,
+    select_was_missing = select_was_missing,
+    exclude = exclude,
+    regex = regex,
+    verbose = verbose,
+    fn_label = "count_n",
+    numeric_only = FALSE
+  )
 
   base_count_n(
     data = data,
-    select = col_names,
     count = count,
     special = special,
     allow_coercion = allow_coercion,
@@ -204,23 +229,75 @@ base_count_n <- function(
   }
 
   if (!is.null(count)) {
-    if (length(count) == 1L && is.na(count)) {
+    # A zero-length `count` (e.g. an upstream intersect() / filter
+    # that emptied it) selects nothing: abort rather than silently
+    # returning a plausible-looking all-zero count, matching the
+    # empty-`special` contract below.
+    if (length(count) == 0L) {
+      spicy_abort(
+        c(
+          "`count` is empty (zero-length): there is no value to count.",
+          "i" = "Supply at least one value, or use `special` to count special values."
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+    has_na <- vapply(count, is.na, logical(1))
+    if (all(has_na)) {
+      # All-missing `count` (single NA / NaN, or c(NA, NA)): point to
+      # the exact `special` counterpart. `special = "NaN"` matches
+      # only NaN; `special = "NA"` counts NA and NaN together.
+      if (is.numeric(count) && all(is.nan(count))) {
+        spicy_abort(
+          "Use `special = \"NaN\"` to count NaN values, not `count = NaN` (`special = \"NA\"` would count NA and NaN together).",
+          class = "spicy_invalid_input"
+        )
+      }
       spicy_abort(
         "Use `special = \"NA\"` to count missing values, not `count = NA`.",
         class = "spicy_invalid_input"
       )
     }
-    has_na <- vapply(count, is.na, logical(1))
     if (any(has_na)) {
       spicy_warn(
-        "NA values in `count` are ignored. Use `special = \"NA\"` to count missing values.", class = "spicy_ignored_arg")
+        "NA values in `count` are ignored. Use `special = \"NA\"` to count missing values.",
+        class = "spicy_ignored_arg"
+      )
       count <- count[!has_na]
     }
   }
 
   if (!is.null(special) && !is.null(count)) {
     spicy_warn(
-      "Both `special` and `count` supplied; `count` is ignored.", class = "spicy_ignored_arg")
+      "Both `special` and `count` supplied; `count` is ignored.",
+      class = "spicy_ignored_arg"
+    )
+  }
+
+  if (!is.null(special)) {
+    allowed <- c("NA", "NaN", "Inf", "-Inf")
+    # An empty `special` selects nothing to count: treat it like the
+    # missing-argument case above rather than silently returning a
+    # plausible-looking all-zero count (it also crashes `Reduce()`
+    # downstream). Same loud-signal policy as the empty-selection
+    # `spicy_no_selection` convention of the row-wise family.
+    if (length(special) == 0L) {
+      spicy_abort(
+        "`special` must contain at least one of 'NA', 'NaN', 'Inf', '-Inf', or 'all'.",
+        class = "spicy_invalid_input"
+      )
+    }
+    # Validate every entry before expanding "all": expansion first
+    # would silently discard invalid values supplied alongside it.
+    if (!all(special %in% c(allowed, "all"))) {
+      spicy_abort(
+        "Invalid `special`. Use 'NA', 'NaN', 'Inf', '-Inf', or 'all'.",
+        class = "spicy_invalid_input"
+      )
+    }
+    if ("all" %in% special) {
+      special <- allowed
+    }
   }
 
   data <- data[, select, drop = FALSE]
@@ -234,22 +311,15 @@ base_count_n <- function(
 
   n_rows <- nrow(data)
 
+  if (ncol(data) == 0L) {
+    spicy_warn(
+      "count_n(): No usable columns selected; returning NA for all rows.",
+      class = "spicy_no_selection"
+    )
+    return(rep(NA_real_, n_rows))
+  }
+
   if (!is.null(special)) {
-    allowed <- c("NA", "NaN", "Inf", "-Inf")
-    if ("all" %in% special) {
-      special <- allowed
-    }
-    if (!all(special %in% allowed)) {
-      spicy_abort(
-        "Invalid `special`. Use 'NA', 'NaN', 'Inf', '-Inf', or 'all'.",
-        class = "spicy_invalid_input"
-      )
-    }
-
-    if (ncol(data) == 0) {
-      return(rep(0L, n_rows))
-    }
-
     checkers <- list(
       "NA" = is.na,
       "NaN" = function(x) {
@@ -320,7 +390,14 @@ base_count_n <- function(
   }
 
   if (length(results) == 0) {
-    return(rep(0L, nrow(data)))
+    spicy_warn(
+      paste0(
+        "count_n(): No selected column could be compared with `count`; ",
+        "returning NA for all rows."
+      ),
+      class = "spicy_no_selection"
+    )
+    return(rep(NA_real_, n_rows))
   }
 
   result <- rowSums(as.data.frame(results), na.rm = TRUE)

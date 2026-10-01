@@ -3,10 +3,14 @@ title: "Getting started with spicy"
 description: >
   Get started with spicy for descriptive statistics, variable
   inspection, frequency tables, cross-tabulations, association
-  measures, categorical and continuous summary tables, and codebooks in
-  R. A tidyverse-friendly alternative to SPSS and Stata for survey and
-  labelled data workflows.
-output: rmarkdown::html_vignette
+  measures, categorical and continuous summary tables, regression
+  tables, and codebooks in R. A tidyverse-friendly
+  alternative to SPSS and Stata for survey and labelled data
+  workflows.
+output:
+  rmarkdown::html_vignette:
+    toc: true
+    toc_depth: 2
 vignette: >
   %\VignetteIndexEntry{Getting started with spicy}
   %\VignetteEngine{knitr::rmarkdown}
@@ -18,8 +22,6 @@ knitr::opts_chunk$set(
   collapse = TRUE,
   comment = "#>"
 )
-
-build_rich_tables <- identical(Sys.getenv("IN_PKGDOWN"), "true")
 ```
 
 ```{r setup}
@@ -32,18 +34,18 @@ variable inspection, frequency tables, cross-tabulations with
 chi-squared tests and effect sizes, and publication-ready summary
 tables, offering functionality similar to Stata or SPSS but within a
 tidyverse-friendly R environment. This vignette walks through the core
-workflow using the bundled [`sochealth`](../reference/sochealth.html)
-dataset, a simulated social-health survey with 1200 respondents and
-24 variables.
+workflow using the bundled `sochealth` dataset, a simulated
+social-health survey with 1200 respondents and 24 variables.
 
 ## Inspect your data
 
 `varlist()` (or its shortcut `vl()`) gives a compact overview of every
 variable in a data frame: name, label, representative values, class,
 number of distinct values, valid observations, and missing values.
-In RStudio or Positron, calling `varlist()` without arguments opens an
-interactive viewer - this is the most common usage in practice. Here we
-use `tbl = TRUE` to produce static output for the vignette:
+In RStudio or Positron, calling `varlist(mydata)` with the default
+`tbl = FALSE` opens an interactive viewer - this is the most common
+usage in practice. Here we use `tbl = TRUE` to produce static output
+for the vignette:
 
 ```{r varlist}
 varlist(sochealth, tbl = TRUE)
@@ -57,8 +59,9 @@ varlist(sochealth, starts_with("bmi"), income, weight, tbl = TRUE)
 
 ## Frequency tables
 
-`freq()` produces frequency tables with counts, percentages, and
-(optionally) valid and cumulative percentages.
+`freq()` produces frequency tables with counts, percentages, valid
+percentages (shown by default whenever missing values are present),
+and optionally cumulative percentages.
 
 ```{r freq}
 freq(sochealth, education)
@@ -83,7 +86,7 @@ cross_tab(sochealth, smoking, education)
 Add percentages with `percent`:
 
 ```{r crosstab-pct}
-cross_tab(sochealth, smoking, education, percent = "col")
+cross_tab(sochealth, smoking, education, percent = "column")
 ```
 
 Group by a third variable with `by`:
@@ -122,18 +125,17 @@ cramer_v(tbl, detail = TRUE)
 `table_categorical()` covers grouped or one-way summary tables for
 categorical variables:
 
-```{r table-categorical-tt, eval = build_rich_tables}
+```{r table-categorical}
 table_categorical(
   sochealth,
   select = c(smoking, physical_activity, dentist_12m),
-  by = education,
-  output = "tinytable"
+  by = education
 )
 ```
 
-`table_continuous()` summarizes continuous variables, either overall or
-by a categorical `by` variable, and can also add group-comparison
-tests:
+`table_continuous()` summarizes continuous variables, either overall
+or by a categorical `by` variable; when `by` is supplied it also
+reports a group-comparison test (a Welch test by default):
 
 ```{r table-continuous}
 table_continuous(
@@ -157,45 +159,138 @@ table_continuous_lm(
 )
 ```
 
+By default every `table_*` helper formats to APA conventions. To match
+a journal instead, pass `style =` — `"jama"`, `"nejm"`, `"lancet"`,
+`"annals"`, `"apa"`, `"aer"`; `spicy_style_names()` lists them all. Set
+it once for a whole document with `options(spicy.style = "nejm")`, or
+compose a custom variant with `spicy_style()`, for example
+`spicy_style("lancet", ci_sep = " to ")`. The same styles apply to the
+regression tables below. French typographic conventions are not a
+journal style: they come with the language, through
+`options(spicy.language = "fr")`.
+
 For detailed guidance, see the dedicated articles on
-`table_categorical()`, `table_continuous()`, `table_continuous_lm()`,
-and the final reporting overview for APA-style summary tables.
+`table_categorical()`, `table_continuous()`, and
+`table_continuous_lm()`, and the final reporting overview tying the
+summary tables together.
+
+## Regression tables
+
+`table_regression()` reports the full coefficient table for one or
+several fitted models — more than thirty classes, from `lm()` /
+`glm()` to mixed-effects, ordinal, survival and Bayesian engines (the
+full map is the [Supported models](https://amaltawfik.github.io/spicy/articles/table-regression-supported-models.html)
+article) — with
+APA formatting by default and the same journal styles on demand
+(`style = "jama"`, `"nejm"`, `"lancet"` and more), factor grouping with
+reference rows, robust variance, standardised coefficients, average
+marginal effects, hierarchical comparisons, and side-by-side
+multi-model layouts:
+
+```{r table-regression}
+fit <- lm(wellbeing_score ~ age + sex + smoking, data = sochealth)
+table_regression(fit)
+```
+
+For detailed guidance, start with the core `table_regression()`
+article; the Learn more section below lists the companion articles by
+model family.
 
 ## Row-wise summaries
 
 `mean_n()`, `sum_n()`, and `count_n()` compute row-wise statistics
-across selected columns, with automatic handling of missing values.
+across selected columns, with explicit control over missing values.
+By default, a row mean or sum requires every selected value to be
+valid; `min_valid` relaxes this to a minimum count (or proportion) of
+valid values. The rows selected below include respondents with missing
+satisfaction items so the difference is visible: `mean_sat` (no
+`min_valid`) turns `NA` as soon as one item is missing, `sum_sat` is
+computed from the valid items as long as at least three are present
+(and turns `NA` in the last row, which has only two), and
+`count_n(special = "NA")` counts the missing items themselves:
 
 ```{r mean-n}
 sochealth |>
   dplyr::mutate(
     mean_sat  = mean_n(select = starts_with("life_sat")),
-    sum_sat   = sum_n(select = starts_with("life_sat"), min_valid = 2),
+    sum_sat   = sum_n(select = starts_with("life_sat"), min_valid = 3),
     n_missing = count_n(select = starts_with("life_sat"), special = "NA")
   ) |>
   dplyr::select(starts_with("life_sat"), mean_sat, sum_sat, n_missing) |>
-  head() |>
+  dplyr::slice(c(1, 2, 43, 82, 455)) |>
   as.data.frame()
 ```
 
 ## Learn more
 
-- See `?varlist` to inspect variables, labels, values, and missing
-  data.
-- See `?freq` for one-way frequency tables (weights, sorting, custom
-  missing values, labelled-data display modes).
-- See `?cross_tab` for the full list of arguments (weights, simulation,
-  association measures).
-- See `?assoc_measures` for the complete list of association
-  statistics; `?cramer_v` for the canonical entry point.
-- See `?table_categorical` for grouped or one-way categorical tables.
-- See `?table_continuous` for continuous summaries and group
-  comparisons.
-- See `?table_continuous_lm` for model-based mean-comparison tables
-  with robust / cluster-robust / bootstrap / jackknife SE, case
-  weights, or additive covariate adjustment.
-- See `?mean_n`, `?sum_n`, `?count_n` for row-wise summaries with
-  optional minimum-valid-values rules.
-- See `?code_book` to generate an interactive HTML codebook;
-  `?label_from_names` to derive variable labels from
-  `"code. label"`-style column names (e.g., LimeSurvey exports).
+This is the vignette the package ships. Every walk-through below is an
+article on the [spicy website](https://amaltawfik.github.io/spicy/),
+kept alongside the reference pages and rebuilt with each release.
+
+**Explore and tabulate**
+
+- [Explore variables and build codebooks](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
+  — inspect variables, labels and missingness (`varlist()`,
+  `code_book()`, `label_from_names()`).
+- [Frequency tables and cross-tabulations](https://amaltawfik.github.io/spicy/articles/frequency-tables.html)
+  — `freq()` and `cross_tab()` in depth (weights, simulation,
+  labelled data).
+- [Cramer's V, Phi, and association measures](https://amaltawfik.github.io/spicy/articles/association-measures.html)
+  — choosing the right effect size for a contingency table.
+
+**Summary tables**
+
+- [Categorical summary tables](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
+  and [Continuous summary tables](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
+  — the Table 1 / 2 builders (APA by default, other journal styles via
+  `style =`).
+- [One outcome across several groupings](https://amaltawfik.github.io/spicy/articles/table-outcome.html)
+  — one continuous outcome across several groupings, one block of rows
+  per grouping.
+- [Model-based continuous summary tables](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
+  — model-based group comparisons (robust SE, weights, covariate
+  adjustment).
+- [Summary tables from a survey design](https://amaltawfik.github.io/spicy/articles/survey-tables.html)
+  — the same two tables from a `survey` design: design-based standard
+  errors, degrees of freedom and tests (`table_continuous_svy()`,
+  `table_categorical_svy()`).
+
+**Regression tables**
+
+- [Publication-ready regression tables](https://amaltawfik.github.io/spicy/articles/table-regression.html)
+  — the core guide, including the univariable screen
+  (`table_regression_uv()`).
+- [Supported models](https://amaltawfik.github.io/spicy/articles/table-regression-supported-models.html)
+  — the class-by-class capability map (more than thirty model
+  classes).
+- [The structured view](https://amaltawfik.github.io/spicy/articles/as-structured.html)
+  — the typed view behind every regression table: filter, aggregate,
+  or build a custom renderer.
+- [Mixed-effects regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-mixed.html)
+  — mixed-effects (multilevel) models, random effects as table rows,
+  ICC.
+- [GEE regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-gee.html)
+  — GEE (population-averaged) models, working-correlation choice via
+  QIC, sandwich inference.
+- [Count and two-part regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-counts.html)
+  — Poisson, negative-binomial, zero-inflated and hurdle models.
+- [Survival regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-survival.html)
+  — Cox hazard ratios and accelerated failure time models.
+- [Ordinal regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-ordinal.html)
+  — proportional-odds models, thresholds, per-category marginal
+  effects.
+- [Multinomial regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-multinomial.html)
+  — multinomial logit with outcome categories as columns.
+- [Bayesian regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-bayesian.html)
+  — posterior medians, credible intervals, convergence checks.
+- [Categorical predictors](https://amaltawfik.github.io/spicy/articles/categorical-predictors.html)
+  — reference levels, joint tests, contrasts — across all of the
+  above.
+
+**Putting it together**
+
+- [Summary tables for reporting](https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html)
+  — the end-to-end reporting sequence tying the four `table_*` helpers
+  together.
+- `?mean_n`, `?sum_n`, `?count_n` — row-wise summaries with
+  minimum-valid-values rules.

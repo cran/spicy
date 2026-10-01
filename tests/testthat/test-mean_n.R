@@ -155,6 +155,14 @@ test_that("mean_n() rejects non-integer / out-of-bounds `min_valid` (0.11.0)", {
   expect_silent(mean_n(df, min_valid = 3L))
 })
 
+test_that("mean_n masks all-NA rows to NA even with min_valid = 0 (0.13.0)", {
+  df <- tibble::tibble(a = c(1, NA, 3), b = c(2, NA, NA))
+  res <- mean_n(df, min_valid = 0)
+  expect_equal(res, c(1.5, NA, 3))
+  # the raw rowMeans identity (NaN) must not leak through
+  expect_false(any(is.nan(res)))
+})
+
 test_that("mean_n() rejects non-integer `digits` (matches cross_tab / freq 0.11.0)", {
   df <- tibble::tibble(a = c(1, 2), b = c(3, 4))
   expect_error(mean_n(df, digits = 1.5), "non-negative integer")
@@ -162,4 +170,16 @@ test_that("mean_n() rejects non-integer `digits` (matches cross_tab / freq 0.11.
   expect_error(mean_n(df, digits = NA_real_), "non-negative integer")
   expect_silent(mean_n(df, digits = 0L))
   expect_silent(mean_n(df, digits = 3))
+})
+
+test_that("mean_n() rejects bit64::integer64 columns with a classed error", {
+  # Manually classed vector: inherits() is all the guard needs, and
+  # this is exactly the shape a bare integer64 column has when bit64
+  # is not loaded (raw int64 bit patterns in a double payload).
+  df <- data.frame(a = c(1, 2))
+  df$b <- structure(c(9.9e-324, 1.5e-323), class = "integer64")
+  expect_error(mean_n(df), class = "spicy_invalid_data")
+  expect_error(mean_n(df), "integer64")
+  # excluding the integer64 column restores normal computation
+  expect_equal(mean_n(df, select = a), c(1, 2))
 })

@@ -9,8 +9,10 @@ table_regression(
   vcov = "classical",
   cluster = NULL,
   ci_level = 0.95,
-  ci_method = c("wald", "profile"),
+  ci_method = c("wald", "profile", "boot_percentile", "hdi"),
   boot_n = 1000L,
+  tau = NULL,
+  at_time = NULL,
   standardized = c("none", "refit", "posthoc", "basic", "smart", "pseudo"),
   exponentiate = FALSE,
   p_adjust = "none",
@@ -18,12 +20,19 @@ table_regression(
   keep = NULL,
   drop = NULL,
   show_intercept = TRUE,
+  show_thresholds = TRUE,
+  show_components = TRUE,
   intercept_position = c("first", "last"),
   factor_layout = c("grouped", "flat"),
   reference_style = c("row", "annotation", "footer", "none"),
   reference_label = "(ref.)",
   show_fit_stats = NULL,
   fit_stats_layout = c("first_col", "merged"),
+  show_re = TRUE,
+  re_scale = c("sd", "variance"),
+  re_columns = c("est", "se", "ci"),
+  re_test = c("none", "lrt", "rlrt"),
+  re_ci = c("wald", "profile"),
   model_labels = NULL,
   outcome_labels = NULL,
   stars = FALSE,
@@ -34,7 +43,7 @@ table_regression(
   fit_digits = 2L,
   ic_digits = 1L,
   decimal_mark = ".",
-  align = c("decimal", "center", "right", "auto"),
+  align = c("decimal", "center", "right"),
   padding = 0L,
   labels = NULL,
   title = NULL,
@@ -42,24 +51,52 @@ table_regression(
   output = c("default", "data.frame", "long", "gt", "flextable", "tinytable", "excel",
     "clipboard", "word"),
   excel_path = NULL,
-  excel_sheet = "Regression",
+  excel_sheet = NULL,
   clipboard_delim = "\\t",
   word_path = NULL,
-  word_template = NULL
+  word_template = NULL,
+  style = NULL
 )
 }
 \arguments{
-\item{models}{An \code{lm} or \code{glm} fitted model, or a list of such
-fits (named or unnamed; \code{lm} and \code{glm} may be mixed). Single
-fits are auto-promoted to a 1-element list. \code{merMod} and
-other classes raise \code{spicy_unsupported}. Raw data + formula
-is not accepted -- fit-only API.}
+\item{models}{A fitted model object, or a list of such fits
+(named or unnamed; classes may be mixed). Single fits are
+auto-promoted to a 1-element list. A broad set of model classes
+is supported -- linear / generalised linear (\code{lm}, \code{glm},
+\code{MASS::glm.nb}), mixed-effects (\code{lmer}, \code{lme}, \code{glmmTMB}),
+survival (\code{coxph}, \code{survreg}), ordinal (\code{polr}, \code{clm}),
+\code{mgcv::gam}/\code{bam}, \code{betareg}, \code{mlogit}, \code{survey::svyglm}, \code{rms}
+(\code{ols}/\code{lrm}/\code{cph}/\code{Glm}), and Bayesian (\code{rstanarm}/\code{brms}),
+among others. An unsupported class raises
+\code{spicy_unsupported}. Raw data + formula is not accepted
+-- fit-only API.}
 
 \item{vcov}{Variance-covariance estimator: \code{"classical"},
 \code{"HC0"}-\code{"HC5"}, \code{"CR0"}-\code{"CR3"}, \code{"bootstrap"}, or
 \code{"jackknife"}. A scalar is recycled to all models; a list
 (one string per model) allows mixed estimators. Default
-\code{"classical"}. See \emph{Inference and standard errors}.}
+\code{"classical"}. The resampling estimators (\code{lm} / \code{glm},
+including \code{MASS::glm.nb}) refit each replicate on resampled rows
+of the fixed evaluated design; for \code{glm.nb} the dispersion
+parameter theta is held at its full-sample estimate (Stata's
+\verb{nbreg, vce(bootstrap)} re-estimates it per replicate -- the two
+conventions differ slightly). Resampling that fails on nearly
+every replicate raises \code{spicy_resampling_failed} rather than
+silently reporting a different estimator.
+Quantile regression (\code{quantreg::rq}) uses its own estimator
+family instead: \code{"classical"} resolves to the
+heteroskedasticity-robust \code{"nid"} sandwich (Hendricks-Koenker,
+Hall-Sheather bandwidth -- quantreg's own large-sample default
+and the Stata \code{vce(robust)} analogue), with \code{"iid"}
+(Koenker-Bassett homoskedastic, Stata \code{vce(iid)} parity),
+\code{"ker"} (Powell kernel) and \code{"rank"} (rank-score inversion:
+genuine CIs, no SE / t / p -- those cells render as dashes) as
+opt-ins, and \code{"bootstrap"} running quantreg's native \code{boot.rq}
+(\code{bsmethod = "xy"}; with \verb{cluster =}, the Hagemann 2017 wild
+gradient cluster bootstrap -- the one cluster-robust route for
+\code{rq}; \verb{CR*} and \verb{HC*} are refused for \code{rq}, as is
+\code{"jackknife"}, whose leave-one-out form is inconsistent for
+quantiles). See \emph{Inference and standard errors}.}
 
 \item{cluster}{Cluster identifier for cluster-robust variance
 (used when \code{vcov} is \code{"CR0"}-\code{"CR3"} or a cluster-bootstrap /
@@ -73,43 +110,133 @@ cluster-jackknife). Three accepted forms (see \emph{How to specify
 on the fly).
 }
 For multi-model use, pass a list of one form per model
-(mix-and-match allowed). Bare unquoted names
-(\code{cluster = region}) are NOT accepted -- use \code{~region} or
-\code{"region"}. Default \code{NULL} (no clustering).}
+(mix-and-match allowed). A bare unquoted name
+(\code{cluster = region}) is not column selection: it is evaluated
+as an ordinary variable (the vector form when \code{region} exists
+in the calling environment, a migration error pointing at
+\code{~region} / \code{"region"} otherwise). Default \code{NULL} (no
+clustering).}
 
 \item{ci_level}{Confidence level for all reported CIs (B, \eqn{\beta}{beta},
 AME, partial effect sizes). Default \code{0.95}.}
 
 \item{ci_method}{CI construction. \code{"wald"} (default) uses
 \verb{estimate +/- z x SE} (\verb{t x SE} for \code{lm}). \code{"profile"}
-(\emph{glm only}) uses the profile-likelihood CI from
-\code{\link[MASS:confint.glm]{MASS::confint.glm()}} -- asymmetric, exact for
-likelihood-based inference (Venables & Ripley \emph{MASS} Section 7.2).
-Only the CI bounds change; estimate, SE, statistic and
-p-value remain Wald. \code{"profile"} with \code{lm} raises
+(\code{glm} and ordinal \code{MASS::polr} / \code{ordinal::clm}) uses the
+profile-likelihood CI from \code{\link[stats:confint]{stats::confint()}} --
+\code{\link[MASS:confint.glm]{MASS::confint.glm()}} for \code{glm}, \code{confint.polr()} / \code{confint.clm()}
+for ordinal fits -- asymmetric, exact for likelihood-based
+inference (Venables & Ripley \emph{MASS} Section 7.2). Only the CI bounds
+change; estimate, SE, statistic and p-value remain Wald. For ordinal
+fits the profile covers the predictor coefficients (the cut-point
+thresholds stay Wald), and a robust \code{vcov} takes precedence (its
+Wald-robust CIs are used instead, with a consolidated warning).
+\code{"profile"} with \code{lm} raises \code{spicy_invalid_input}.
+\code{"boot_percentile"} (requires \code{vcov = "bootstrap"} for every
+model) replaces the coefficient CI bounds with equal-tailed
+percentile intervals of the bootstrap replicates (the
+\code{\link[boot:boot.ci]{boot::boot.ci()}} \code{type = "perc"} convention; Davison & Hinkley
+1997, ch. 5), reusing the same resamples as the bootstrap SEs.
+Only the CI bounds change; estimate, SE, statistic and p-value
+remain Wald from the bootstrap covariance -- the Stata convention
+(normal-based table CIs by default, percentile on request via
+\verb{estat bootstrap}). AME and standardized-beta CIs are not
+covered. With \code{exponentiate = TRUE} the percentile bounds are
+exponentiated (percentile intervals are
+transformation-respecting).
+\code{"hdi"} (Bayesian \code{stanreg} / \code{brmsfit} fits only) replaces the
+default equal-tailed credible interval with the highest-density
+interval -- the shortest interval containing \code{ci_level} of the
+posterior draws (Kruschke 2015), relabelling the column header
+\verb{95\% HDI}. Unlike the equal-tailed interval the HDI is not
+transformation-invariant, so under \code{exponentiate = TRUE} it is
+recomputed on the exponentiated draws rather than transformed.
+Requesting \code{"hdi"} for a frequentist fit, or \code{"profile"} /
+\code{"boot_percentile"} for a Bayesian fit, raises
 \code{spicy_invalid_input}.}
 
 \item{boot_n}{Number of bootstrap replicates when
 \code{vcov = "bootstrap"}. Single positive integer. Default
 \code{1000L}.}
 
+\item{tau}{RMST horizon: the \code{"rmst"} column family reports the
+restricted-mean-survival-time difference over \verb{[0, tau]}
+(\code{coxph} and \code{survreg} fits). A positive time on the outcome's scale, or
+\code{"minmax"} for the smallest per-group maximum follow-up (the
+resolved value is disclosed in the table note). No default: the
+horizon defines the estimand. Stratified fits (\code{strata()}) are
+supported: standardization keeps each subject's own stratum
+baseline, disclosed in the table note.}
+
+\item{at_time}{Landmark time for the \code{"risk_diff"} column family:
+the difference in cumulative incidence at \code{at_time} (\code{coxph}
+and \code{survreg} fits). A positive time on the outcome's scale; no default.}
+
 \item{standardized}{Standardisation method for the \code{"beta"}
 column. One of \code{"none"} (default), \code{"refit"}, \code{"posthoc"},
 \code{"basic"}, \code{"smart"}, \code{"pseudo"}. \code{"pseudo"} is \emph{glm only}
 (Menard 2011 fully-standardised); using it with \code{lm()} raises
-\code{spicy_invalid_input}. See the \emph{Standardised coefficients}
+\code{spicy_invalid_input}. Supported classes: \code{lm}, \code{glm}
+(incl. \code{MASS::glm.nb}), the mixed engines (\code{lmer} /
+\code{glmer} / \code{glmmTMB} / \code{nlme::lme}), and fixed-effects
+\code{stan_glm}-style \code{stanreg} fits for the algebraic flavors
+\code{"posthoc"} / \code{"basic"} / \code{"smart"} -- exact affine rescales of
+the posterior draws (median, MAD SD and credible bounds all
+scale by the same positive SD ratio; the beta stays on the link
+scale under \code{exponentiate = TRUE}). Standard-formula
+fixed-effects \code{brmsfit} models are supported too (their design
+matrix is recovered through \pkg{insight}); the scale factors
+are engine-invariant, so the same model fit with rstanarm or
+brms gets identical betas up to sampling noise. Bayesian
+\code{"refit"} (would re-run the sampler) and \code{"pseudo"} (per-draw
+latent variance; planned) are refused. Also refused: multilevel
+fits (\code{stan_glmer} / \code{stan_lmer} and \code{brm()} with group-level
+terms; a Bayesian beta would need an explicit sd(Y)
+decomposition that the frequentist mixed engines resolve by
+refitting on z-scored data), non-GLM \code{stanreg} subclasses
+(\code{stan_polr}, \code{stan_betareg}), and brms formulas with
+distributional, multivariate or special terms (\code{mo()}, \code{s()},
+...). In all refused Bayesian cases, standardize predictors
+before fitting instead. Any other class
+raises
+\code{spicy_unsupported_standardized} rather than rendering an
+empty beta column. See the \emph{Standardised coefficients}
 section.}
 
-\item{exponentiate}{Logical. When \code{TRUE} and the model is a
-\code{glm} with a non-identity link, \code{B}, the CI bounds, and the
-SE are transformed via \code{exp()} (delta method:
-\verb{SE_OR = OR x SE_log-odds}). The column header is rebranded
-per family / link: \code{OR} (binomial logit), \code{IRR} (poisson
-log), \code{HR} (binomial cloglog), \code{RR} (binomial log), \code{MR}
-(Gamma log), else \code{exp(B)}. The statistic and p-value stay
-on the link scale (invariant under monotone transformation).
-Default \code{FALSE}. No effect on \code{lm} or identity-link glm;
-emits a \code{spicy_ignored_arg} warning in those cases.}
+\item{exponentiate}{Logical. When \code{TRUE}, \code{B}, the CI bounds, and
+the SE (delta method: \verb{SE_OR = OR x SE_log-odds}) are
+\code{exp()}-transformed for links where the result is a ratio:
+logit (\code{OR}), log (\code{IRR} / \code{RR} / \code{MR} per family, generic
+\code{exp(B)} for other log-link families -- a genuine ratio of
+means), and binomial / ordinal cloglog (\code{HR}; grouped-time
+proportional hazards, Prentice & Gloeckler 1978). For the
+\emph{ordinal} (cumulative) cloglog model the displayed \code{HR} is
+\code{exp(-B)}, not \code{exp(B)}: the cumulative parametrisation
+\verb{cloglog P(Y <= j) = zeta_j - xB} places the hazard of the
+grouped event on \code{-B}, so \code{exp(B)} would be the reciprocal of
+the hazard ratio (the CI endpoints are negated and swapped
+accordingly, and the table note discloses the convention; a
+cloglog \code{clm} with \verb{nominal =} terms refuses \code{exponentiate}
+because threshold-side coefficients have no covariate-HR
+reading). The statistic
+and p-value stay on the link scale (invariant under monotone
+transformation). Identity-link fits are left untouched (a
+\code{spicy_ignored_arg} warning fires when no model in the table
+exponentiates), so mixed \code{lm} + logit tables keep working. Any
+other link (probit, cauchit, inverse -- the
+\code{Gamma()} default --, \code{1/mu^2}, sqrt, ordinal \code{loglog}, ...)
+raises \code{spicy_invalid_input}: the exponential of such a
+coefficient has no ratio interpretation, and reporting it
+would mislabel the estimate. Report response-scale effects for
+those models via the AME column instead. Note that the displayed
+CI is the link-scale CI with exponentiated endpoints (Wald or
+profile per \code{ci_method}), so it is asymmetric around the ratio
+and cannot be reconstructed as \verb{estimate ± z × SE}; the
+delta-method SE follows the Stata convention (\verb{[R] logistic},
+Methods and formulas: \verb{se(OR) = OR × se(b)}) and the log-scale
+CI endpoints carry the uncertainty more faithfully than this SE.
+The footer states the SE scale and the CI asymmetry whenever an
+SE column is displayed. Default \code{FALSE}.}
 
 \item{p_adjust}{Multiple-comparison adjustment method applied
 to the family of estimated coefficient p-values within each
@@ -125,17 +252,27 @@ adjustment} section for when this is and is not appropriate.}
 \item{show_columns}{Character vector of tokens selecting the
 per-coefficient columns and their display order. Accepts
 \strong{atomic tokens} (\code{"b"}, \code{"se"}, \code{"ci"}, \code{"t"}, \code{"p"},
-\code{"beta"}, \code{"ame"}, \code{"ame_se"}, \code{"ame_ci"}, \code{"ame_p"},
+\code{"beta"}, \code{"n"}, \code{"n_events"}, \code{"pd"} (probability of
+direction, Bayesian fits only), \code{"rhat"} / \code{"ess_bulk"} /
+\code{"ess_tail"} / \code{"mcse"} (per-coefficient sampler diagnostics and
+the Monte Carlo standard error of the displayed posterior
+median, all-Bayesian tables only), \code{"ame"}, \code{"ame_se"}, \code{"ame_ci"},
+\code{"ame_p"}, \code{"rmst"} + \code{"rmst_se"} / \code{"rmst_ci"} / \code{"rmst_p"},
+\code{"risk_diff"} + its \verb{_se} / \verb{_ci} / \verb{_p} companions,
 \code{"partial_f2"} + \code{"partial_f2_ci"}, \code{"partial_eta2"} +
 \code{"partial_eta2_ci"}, \code{"partial_omega2"} +
-\code{"partial_omega2_ci"}, \code{"partial_chi2"}) and \strong{group tokens}
+\code{"partial_omega2_ci"}, \code{"partial_chi2"}, \code{"r2"} / \code{"adj_r2"}
+(per-fit variance explained, \code{lm} screens)) and \strong{group tokens}
 (\code{"all_b"}, \code{"all_b_compact"}, \code{"all_b_full"}, \code{"all_beta"},
 \code{"all_ame"}, \code{"all_ame_compact"}, \code{"all_f2"}, \code{"all_eta2"},
 \code{"all_omega2"}). See \emph{Vocabulary tokens} in the details for
 the full enumeration. Default \code{NULL} selects a context-aware
-layout: \code{"all_b"} (single model) or \code{"all_b_compact"} (multi-
-model). The \code{"p"} token is always the B / beta p-value; for
-the AME-specific p-value use \code{"ame_p"}.}
+layout: \code{"all_b"} (single model) or \code{"all_b_compact"}
+(multi-model, and the single-multinomial outcome-as-columns
+layout, which has the same width pressure -- restore CIs with
+atomic tokens, e.g. \code{c("b", "se", "ci", "p")}). The \code{"p"}
+token is always the B / beta p-value; for the AME-specific
+p-value use \code{"ame_p"}.}
 
 \item{keep}{Character vector of regexes. Only coefficient rows
 whose term name (as in \code{\link[stats:coef]{stats::coef()}} -- e.g. \code{"wt"},
@@ -150,6 +287,44 @@ matching any pattern are removed. Mutually exclusive with
 
 \item{show_intercept}{Whether to display the intercept row.
 Default \code{TRUE} (APA convention). Hide via \code{FALSE}.}
+
+\item{show_thresholds}{For ordinal cumulative-link models
+(\code{MASS::polr}, \code{ordinal::clm}), whether to display the estimated
+category thresholds (cut-points) as a subordinate \code{"Thresholds"}
+block of rows below the predictors, carrying B / SE / CI / p like
+the predictor rows. Default \code{TRUE}. \code{FALSE} collapses them to a
+compact one-line footer note instead. Thresholds are reported on
+the log-odds (B) scale and are \strong{never exponentiated} (under
+\code{exponentiate = TRUE} their rows stay on the log-odds scale).
+Has no effect on non-ordinal models, and the rows are shown only
+when a coefficient column (\code{"b"}/\code{"beta"}) is in \code{show_columns}.}
+
+\item{show_components}{For models with secondary components,
+whether to display them as labelled subordinate blocks of rows
+below the primary (count / conditional / location) coefficients.
+Default \code{TRUE}:
+\itemize{
+\item \code{pscl::zeroinfl} and \code{glmmTMB(ziformula = )}: a
+\code{Zero-inflation} block -- the model for the probability of a
+\strong{structural (excess) zero}.
+\item \code{pscl::hurdle}: a \verb{Zero hurdle} block -- the model for the
+probability of a \strong{nonzero count} (note the opposite direction
+vs zero-inflation; the footer names each block's meaning).
+\item \code{glmmTMB(dispformula = )}: a \code{Dispersion} block (only when
+dispersion was actually modelled; log scale, never
+exponentiated).
+\item \verb{ordinal::clm(scale = ~)}: a \verb{Scale effects} block -- the
+covariate effects on the \strong{log standard deviation of the
+latent response}. Never exponentiated: their exponential is a
+ratio of latent standard deviations, not an odds ratio.
+}
+Component rows carry full Wald inference (B / SE / z / p / CI),
+join the \code{p_adjust} family, and take significance stars. Under
+\code{exponentiate = TRUE} a component is exponentiated \strong{only when its
+link makes the result an odds ratio} (the logit zero components);
+probit / cauchit / cloglog zero links and count-type hurdle zero
+parts stay on the link scale, disclosed in the footer. \code{FALSE}
+omits the blocks (the title still names the model type).}
 
 \item{intercept_position}{Where to place the intercept when
 shown. \code{"first"} (default, APA) or \code{"last"} (Stata-style,
@@ -175,7 +350,7 @@ Four modes, distinguishing WHERE the reference information is
 exposed (in a row, inline, in the footer, or nowhere):
 \itemize{
 \item \code{"row"} (default): explicit row \code{Female (ref.)} with
-em-dashes in all stat columns (NEJM / BMJ clinical
+en-dashes in all stat columns (NEJM / BMJ clinical
 convention). \code{reference_label} controls the suffix.
 \item \code{"annotation"}: the row is dropped and the reference
 is shown inline. Under \code{factor_layout = "grouped"} the
@@ -194,7 +369,17 @@ responsible for stating the reference convention
 elsewhere (article text, table caption). Under
 \code{factor_layout = "flat"}, an informational message is
 emitted to flag the silent omission.
-}}
+}
+\strong{Ordered factors with AME}: under R's default \code{contr.poly},
+ordered factors have B coefficients named \code{.L} / \code{.Q} / \code{.C}
+(orthogonal polynomial trends) which have no per-level reference
+semantics. When \code{"ame"} is in \code{show_columns}, however, the AME
+block is per-level contrasts against \code{levels()[1]}. A synthetic
+reference row anchored on \code{levels()[1]} is therefore emitted so
+the reader sees the AME baseline explicitly, with the same
+\code{reference_style} handling as plain treatment-coded factors. The
+\verb{[vs <ref>]} annotation in \code{"annotation"} mode is attached to the
+first AME row, not to the polynomial-trend rows.}
 
 \item{reference_label}{Suffix shown after the reference level in
 \code{reference_style = "row"} mode. Default \code{"(ref.)"}. Ignored
@@ -205,10 +390,13 @@ wording -- "ref:", "vs", "Reference categories:").}
 model-level rows below the coefficients; row order follows
 token order. \code{NULL} (default) resolves class-aware:
 \itemize{
-\item \code{lm}: \code{c("nobs", "r2", "adj_r2")}.
-\item \code{glm}: \code{c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "AIC")}.
+\item \code{lm}, \code{estimatr::lm_robust()}: \code{c("nobs", "r2", "adj_r2")}. \code{estimatr::iv_robust()} gets \code{"nobs"} alone --
+the 2SLS R-squared is not the classical one.
+\item \code{glm}, ordinal \code{polr} / \code{clm}:
+\code{c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "aic")} (McFadden = Stata \code{ologit} default,
+Nagelkerke = SPSS PLUM).
 \item mixed \code{lm} + \code{glm}: the union of the two (the
-renderer em-dashes per cell the stat not defined for a
+renderer en-dashes per cell the stat not defined for a
 given model class).
 }
 Under \code{nested = TRUE} the default is extended with the
@@ -252,12 +440,138 @@ values plus any fit-stat value(s) in \code{"first_col"} mode
 trivially decimal-aligns in \code{"merged"} mode (the fit-stat
 values move out of the B column into the merged cell).}
 
+\item{show_re}{Logical. \code{TRUE} (default) renders the random-effects
+variance components of a mixed-effects fit (\code{lmer}, \code{glmer},
+\code{glmmTMB}, \code{lme}) as a subordinate \strong{"Random effects" block of
+table rows} below the fixed effects: one row per standard
+deviation / correlation per grouping factor, plus the residual,
+each with its estimate, SE, and CI in the shared coefficient
+columns. The group sizes (\code{N (groups)}) and the ICC render as
+fit-statistic rows; the footer reports the estimation method
+(\code{REML} / \code{ML}) and the likelihood-ratio test of the whole
+random part against the no-random-effects model, with the
+boundary-corrected chi-bar-squared p-value (Self & Liang 1987;
+Stram & Lee 1994). Variance-component rows deliberately carry
+\strong{no per-row p-value}: a Wald test of a variance is invalid at
+the boundary of the parameter space, and no reporting guideline
+requests one (see the \emph{Mixed-effects models} section of the
+\href{https://amaltawfik.github.io/spicy/articles/table-regression.html}{Publication-ready regression tables}
+article). \code{FALSE} suppresses the block.
+No effect on fits without random effects (\code{lm}, \code{glm},
+\code{coxph}, ...).}
+
+\item{re_scale}{One of \code{"sd"} (default) or \code{"variance"}.
+Controls the display scale of the random-effects rows:
+\itemize{
+\item \code{"sd"}: report the random-effect standard
+deviation \eqn{\sigma} (Gelman 2005, \emph{Technometrics}:
+"\emph{directly interpretable as the size of the variation
+across groups}"). Standard error and CI converted via
+the Delta method:
+\eqn{SE(\sigma) = SE(\sigma^2) / (2\sigma)};
+\eqn{CI(\sigma) = \sqrt{CI(\sigma^2)}}.
+\item \code{"variance"}: report \eqn{\sigma^2} (the canonical
+internal scale; SE and CI come straight from the
+Hessian / \code{nlme::intervals()} / \code{glmmTMB::confint()}
+without rescaling).
+}
+Correlation rows (\eqn{\rho}) are unitless and pass through
+either way.}
+
+\item{re_columns}{Character vector. Subset of
+\code{c("est", "se", "ci")} controlling which cells of the
+random-effects rows are \strong{displayed} (\code{"est"} is mandatory);
+deselected SE / CI cells render as an en-dash on those rows
+only. Useful for slimming output (\code{re_columns = "est"}) or
+for journals that want only standard errors
+(\code{re_columns = c("est", "se")}). Display-only: the underlying
+data (\code{broom::tidy()}, \code{\link[=as_structured]{as_structured()}}) always carries the
+full SE + CI.
+
+Note. Under the default \code{re_ci = "wald"} the SE and CI are Wald
+(\verb{est ± z * SE}, clamped at 0 for variances). Wald can be
+optimistic near the variance boundary (Self & Liang 1987
+chi-bar-squared); request boundary-respecting profile-likelihood
+intervals with \code{re_ci = "profile"} when robustness is critical.
+See the \emph{Mixed-effects models} section of the
+\href{https://amaltawfik.github.io/spicy/articles/table-regression.html}{Publication-ready regression tables}
+article.
+
+For \code{lmer} / \code{glmer} fits these SEs come from \code{merDeriv}, whose
+cost grows superlinearly with the number of observations (about a
+minute at n of roughly 2,700). Above \code{options("spicy.re_se_max_n")}
+(default \code{1000}) they are skipped: the rows keep their estimates,
+the SE / CI cells render as en-dashes, a table note states the
+omission, and a \code{spicy_caveat} warning points here. Raise the cap
+(e.g. \code{options(spicy.re_se_max_n = Inf)}) to force the
+computation, or test the random terms with \code{re_test = "lrt"}.}
+
+\item{re_test}{One of \code{"none"} (default), \code{"lrt"}, or \code{"rlrt"}.
+Opt-in \strong{per-term significance test} for the random-effect
+variance components, filling the otherwise-empty p column of
+the Random effects rows. Never a Wald test (invalid at the
+boundary sigma = 0):
+\itemize{
+\item \code{"lrt"}: likelihood-ratio test of each random term vs
+the model refitted without it (the term's variance plus its
+covariances with the other terms of its bar), referred to
+the boundary-corrected chi-bar-squared mixture
+\verb{0.5 chi2(q-1) + 0.5 chi2(q)} (Self & Liang 1987; Stram &
+Lee 1994). The reduction scheme matches
+\code{lmerTest::ranova()}; the mixture reference makes the
+p-value exact-asymptotic rather than conservative. A bar's
+intercept is tested only when it is the bar's single term.
+Supported: \code{lmer}, \code{glmer}, \code{glmmTMB}, and \code{lme} with a
+simple \code{random = ~ terms | group} structure.
+\item \code{"rlrt"}: exact restricted likelihood-ratio test with a
+simulated finite-sample null (\code{RLRsim::exactRLRT()};
+Crainiceanu & Ruppert 2004). Only defined for a Gaussian
+\code{lmer} / \code{lme} fit with a single variance component.
+}
+The test statistic and df stay out of the displayed t/z column
+(they are chi-square-scale, not t/z) but are carried in
+\code{broom::tidy()} (\code{test_type} \code{"chibar2"} / \code{"rlrt"}). The
+whole-block LR test in the footer is unaffected. Correlation
+and residual rows are never tested (a correlation is tested
+jointly with its slope; the residual has no zero-variance
+null). Refits happen once per random term: expect a
+noticeable cost on large models. For structures outside these
+two routes (e.g. multiple variance components needing a
+finite-sample null), \code{pbkrtest::PBmodcomp()} offers a
+parametric-bootstrap LR test on the same nested pair of fits
+(Halekoh & Hojsgaard 2014) -- run it directly and report its
+p-value alongside the table.}
+
+\item{re_ci}{One of \code{"wald"} (default) or \code{"profile"}. Uncertainty
+route for the random-effect variance-component rows of \code{lmer} /
+\code{glmer} fits:
+\itemize{
+\item \code{"wald"}: SE and symmetric CI from the observed
+information (\code{merDeriv}), subject to the
+\code{options("spicy.re_se_max_n")} size cap (see \code{re_columns}).
+\item \code{"profile"}: \strong{profile-likelihood CIs} via
+\code{confint(fit, method = "profile")} -- the route lme4 itself
+documents and defaults to. The intervals are asymmetric and
+respect the boundary at 0; no SE is shown (lme4's position:
+a symmetric SE misdescribes the skewed sampling distribution
+of a variance). Sidesteps the size cap entirely (roughly two
+seconds per variance parameter even at n ~ 7,000; \code{glmer}
+profiles cost more). The footer discloses the method, and
+likelihood intervals transform exactly, so
+\code{re_scale = "variance"} shows the profile CI of the variance
+itself.
+}
+\code{glmmTMB} and \code{nlme::lme} fits keep their engine-native CIs
+(TMB's \code{sdreport}; nlme's \code{apVar}) and refuse \code{"profile"}.}
+
 \item{model_labels}{Per-model labels used as the \strong{column-group
 spanner} above each model's sub-columns (console + gt /
 flextable / tinytable / Excel / Word renderers). \code{NULL}
 (default) resolves automatically; see \emph{Multi-model semantics}
 for the full rule. A character vector of length
-\code{length(models)} overrides.}
+\code{length(models)} overrides. Refused (error) for a single
+multinomial model: there the column groups are outcome
+categories, relabelled via \code{outcome_labels}.}
 
 \item{outcome_labels}{Optional \strong{Outcome body row} override.
 \code{NULL} (default) hides the row entirely -- under the
@@ -265,13 +579,22 @@ multi-model spanner the DV is already visible above the data.
 A character vector of length \code{length(models)} forces an
 explicit Outcome row with those values (the spanner stays as
 \code{"Model 1, ..."} unless \code{model_labels} is also supplied).
-\code{FALSE} also suppresses the row.}
+\code{FALSE} also suppresses the row. \strong{Single multinomial model}
+(outcome-as-columns layout): repurposed as the category
+spanner override -- a character vector with one label per
+non-reference outcome category (unique, in model order), e.g.
+\code{c("Student vs Employed", ...)}; the reference category's
+AME-only group (when displayed) keeps its own name, and \code{FALSE}
+is a no-op (there is no Outcome row to suppress).}
 
 \item{stars}{Significance asterisks. \code{FALSE} (default, APA 7
 Section 6.46) -- no stars. \code{TRUE} -- APA cutoffs
 \code{c("*" = 0.05, "**" = 0.01, "***" = 0.001)}. A named numeric
 vector specifies custom thresholds, e.g.
-\code{c("+" = 0.10, "*" = 0.05, "**" = 0.01, "***" = 0.001)}.}
+\code{c("+" = 0.10, "*" = 0.05, "**" = 0.01, "***" = 0.001)}.
+With \code{output = "excel"} a marked estimate is written as text
+(\code{"64.63***"} is not a number); the cells with no marker stay
+numeric.}
 
 \item{nested}{Whether to inject pairwise change-statistic rows
 for adjacent models (M2 vs M1, M3 vs M2, ...). \code{FALSE}
@@ -304,7 +627,11 @@ effect-size fit stats (\code{r2}, \code{adj_r2}, \code{r2_change},
 \item{decimal_mark}{Decimal mark used in numeric display.
 \code{"."} (default) or \code{","} (European convention). When
 \code{","} is used, the CI bracket separator switches to \code{"; "}
-automatically to avoid \code{"0,18 [0,07, 0,30]"} ambiguity.}
+automatically to avoid \code{"0,18 [0,07, 0,30]"} ambiguity.
+With \code{output = "excel"} a numeric cell is displayed by Excel
+with the \emph{viewer's} locale separator, which a file cannot set,
+so a non-default mark makes the body go out as pre-formatted
+text (the default \code{"."} keeps every cell a real number).}
 
 \item{align}{Numeric column alignment.
 \code{"decimal"} (default) -- pre-pad cells so decimal marks line
@@ -312,8 +639,8 @@ up vertically (publication-style). For CI cells (\verb{[LL, UL]})
 the left bracket, the LL decimal point, the comma separator,
 the UL decimal point, and the right bracket are independently
 aligned across rows.
-\code{"center"}, \code{"right"}, or \code{"auto"} for legacy per-column
-alignment.}
+\code{"center"} and \code{"right"} apply the same alignment to every
+numeric column.}
 
 \item{padding}{Non-negative integer giving the extra characters
 added to each data column's auto-computed width when the
@@ -327,7 +654,22 @@ of padding.}
 row labels. Names are coefficient term names (from
 \code{\link[stats:terms]{stats::terms()}}); values are the displayed labels. E.g.
 \code{c("age" = "Age (years)", "sexM" = "Male (vs Female)")}.
-Default \code{NULL} (use raw term names).}
+Default \code{NULL} (use raw term names).
+
+The names are model identifiers, not display text: they are the
+term and coefficient names R itself produces, and they keep that
+form regardless of the language the table is rendered in. A name
+that is neither a term label nor a coefficient name is rejected,
+so the header of a subordinate block -- \verb{Random effects},
+\code{Thresholds}, \code{Zero-inflation}, ... -- cannot be relabelled here;
+those headers are set by the package. Classes that carry no
+\code{terms} component at all (\code{nls()},
+\code{sampleSelection::selection()}) are keyed on their coefficient
+(or parameter) names alone.
+
+With several models, a name is checked against the union of their
+terms: a key naming a term only one model has is legal, and the
+label lands on the rows where that term exists.}
 
 \item{title, note}{Override or suppress the auto-built caption /
 methodological footer. Three modes per argument:
@@ -358,17 +700,21 @@ tables); \code{"excel"} (writes to \code{excel_path}); \code{"clipboard"}
 \item{excel_path}{File path for \code{output = "excel"}. Default
 \code{NULL} (required when \code{output = "excel"}).}
 
-\item{excel_sheet}{Sheet name when writing to Excel. Default
-\code{"Regression"}.}
+\item{excel_sheet}{Sheet name when writing to Excel. \code{NULL} (the
+default) uses \code{"Regression"}.}
 
 \item{clipboard_delim}{Field delimiter for
 \code{output = "clipboard"}. Default \code{"\\t"} (tab-separated, pastes
 cleanly into Excel / Google Sheets / Word). The clipboard
 payload mirrors the Excel layout (title row, spanner row,
 header, body, footer note) but is plain text -- horizontal
-rules, cell merging, decimal alignment, monospace font, and
-factor-level indentation cannot be encoded in TSV and are
-therefore absent from the paste.
+rules, cell merging, decimal alignment and the monospace font
+cannot be encoded in delimited text and are therefore absent
+from the paste. A cell holding the delimiter itself (a label
+with a comma under \code{clipboard_delim = ","}, or any number under
+\code{decimal_mark = ","}), a double quote or a line break is quoted
+RFC 4180-style, so the grid survives whatever delimiter you
+choose.
 
 Paste behaviour by target:
 \itemize{
@@ -423,6 +769,16 @@ delegation keeps the rendered caption consistent with the
 surrounding document and lets editorial conventions (Nature,
 APA-strict, journal-specific) be applied without modifying the
 call site.}
+
+\item{style}{A journal style: a theme name (\code{"jama"}, \code{"nejm"},
+\code{"lancet"}, \code{"annals"}, \code{"apa"}, \code{"aer"}), a
+\code{\link[=spicy_style]{spicy_style()}} object, or \code{NULL} (the default). A style only
+changes DEFAULTS -- any argument you pass explicitly wins over it.
+Set \code{options(spicy.style = )} for document-wide scope. A theme
+covers numeric formatting conformity only, not full editorial
+conformity; \code{?spicy_style} lists the exact rules each one encodes
+and the official document they come from. An unknown name is an
+error.}
 }
 \value{
 A \code{spicy_regression_table} object (a \code{data.frame}
@@ -467,11 +823,50 @@ p-value; for the AME-specific p-value use \code{"ame_p"}.
 \item Partial effect sizes -- \code{lm} only: \code{"partial_f2"},
 \code{"partial_eta2"}, \code{"partial_omega2"}, each with a paired
 \verb{_ci} companion (\code{"partial_f2_ci"}, ...).
-\item Partial effect size -- \code{glm} only: \code{"partial_chi2"}
-(likelihood-ratio chi-square via \code{drop1(test = "LRT")};
-SAS PROC LOGISTIC \code{TYPE3}; Long & Freese 2014 Section 3.5).
-Rendered as \code{value (df)} to disambiguate factor terms
-(k-1 df) from numeric terms (1 df).
+\item Partial effect size -- \code{glm} and mixed-effects models:
+\code{"partial_chi2"}, the term-level Type-II partial chi-square.
+Each term is tested under the marginality-respecting
+hypothesis that excludes any higher-order interaction
+containing it (the \code{car::Anova(type = 2)} convention), so
+the value does not depend on the factor coding. For \code{glm}
+the statistic is the likelihood-ratio chi-square (Long &
+Freese 2014 Sections 3.2.2, 3.2.4); for \code{lmer} / \code{glmer} / \code{glmmTMB} /
+\code{nlme::lme} it is the Wald chi-square built from the same
+Type-II hypothesis -- a deliberate departure from the
+Type-III default of SAS PROC MIXED and \code{lmerTest} (the two
+conventions coincide for models without interactions).
+Rendered as \code{value (df)} to disambiguate factor terms (k-1
+df) from numeric terms (1 df).
+\item Variance explained per fit -- \code{lm} only: \code{"r2"},
+\code{"adj_r2"}. Like \code{"n"}, these are \emph{per-fit} columns: they are
+populated by \code{\link[=table_regression_uv]{table_regression_uv()}} screens, where each
+predictor block is its own model and the \eqn{R^2}{R^2}
+answers "how much of the outcome does this predictor explain
+on its own". A model whose \eqn{R^2}{R^2} is a single
+model-level number drops the column and reports it in the
+fit-statistics rows instead (the \code{"r2"} / \code{"adj_r2"} tokens of
+\code{show_fit_stats}, on by default for \code{lm}). Refused for classes
+with no least-squares variance partition (\code{glm}, \code{coxph},
+...), where only competing pseudo-\eqn{R^2}{R^2} measures
+exist: name the one you want in \code{show_fit_stats}.
+\item Sample columns: \code{"n"} -- per-row N, populated by
+\code{\link[=table_regression_uv]{table_regression_uv()}} screens (each predictor block is its
+own fit); models without per-row N data drop the column.
+\code{"n_events"} -- outcome event counts as \code{events/N}, per
+factor level (reference row included) and model totals on
+continuous rows, computed on each model's own estimation
+sample (STROBE item 16's "data behind the association";
+NEJM-style \verb{no. of events/total no.}). Binary (binomial)
+outcomes and right-censored \code{coxph} fits -- other models
+raise \code{spicy_invalid_input}.
+\item Survival estimands -- \code{coxph} only: \code{"rmst"},
+\code{"rmst_se"}, \code{"rmst_ci"}, \code{"rmst_p"} (restricted-mean-
+survival-time difference over \verb{[0, tau]}) and
+\code{"risk_diff"}, \code{"risk_diff_se"}, \code{"risk_diff_ci"},
+\code{"risk_diff_p"} (cumulative-incidence difference at
+\code{at_time}), by g-computation from the fitted model with
+bootstrap inference. The horizon arguments are required;
+see \code{tau} / \code{at_time}.
 }
 
 \strong{Group tokens} (presets) expand to a fixed atomic vector
@@ -505,17 +900,76 @@ side-by-side layout; restore it explicitly when needed).
 \subsection{\code{show_fit_stats} -- model-level rows below the coefficients}{
 
 \itemize{
-\item Counts: \code{"nobs"}, \code{"weighted_nobs"}.
+\item Counts: \code{"nobs"}, \code{"weighted_nobs"}, \code{"n_events"} (Cox
+models: number of events, reported alongside \code{n} per the
+field convention; blank for other classes).
 \item Variance explained (\code{lm} only): \code{"r2"}, \code{"adj_r2"},
 \code{"omega2"}.
-\item Pseudo-\eqn{R^2}{R^2} (\code{glm} only): \code{"pseudo_r2_mcfadden"}
-(McFadden 1974), \code{"pseudo_r2_nagelkerke"} (Nagelkerke 1991),
+\item Pseudo-\eqn{R^2}{R^2} (\code{glm} and ordinal \code{polr} / \code{clm}):
+\code{"pseudo_r2_mcfadden"} (McFadden 1974),
+\code{"pseudo_r2_nagelkerke"} (Nagelkerke 1991),
 \code{"pseudo_r2_tjur"} (Tjur 2009; binomial only).
 \item Residual scale: \code{"sigma"} (lm \eqn{\hat{\sigma}}{sigma-hat}
 / glm dispersion), \code{"rmse"}.
+\item Survey designs (\code{survey::svyglm} only): \code{"eff_p"}, the
+effective number of parameters of the design (the first element
+of survey's \code{extractAIC}, the sum of the Rao-Scott eigenvalues).
+Opt-in and distinct from \code{"aic"}, which reports the design-based
+AIC of Lumley & Scott (2015). Blank for other classes.
+\item Bayesian fits only: \code{"r2_bayes"} (posterior-median
+Bayesian \eqn{R^2}{R^2}, Gelman et al. 2019 -- in the
+all-Bayesian default), \code{"elpd_loo"} and \code{"looic"} (PSIS-LOO
+expected log predictive density and its deviance-scale twin,
+Vehtari et al. 2017; opt-in, a few seconds per model; the
+footer discloses the elpd standard error), and \code{"waic"}
+(Watanabe-Akaike; PSIS-LOO is generally preferred).
+\item Negative-binomial dispersion (\code{MASS::glm.nb} only):
+\code{"theta"} (\eqn{V = \mu + \mu^2/\theta}{V = mu + mu^2/theta})
+and \code{"alpha"} (\eqn{= 1/\theta}{= 1/theta}, the Stata \code{nbreg}
+convention). Refused for other families.
+\item Beta-regression precision (\code{betareg::betareg} only):
+\code{"phi"} (\eqn{Var(y) = \mu(1-\mu)/(1+\phi)}{Var(y) =
+    mu(1-mu)/(1+phi)}, Ferrari & Cribari-Neto 2004; higher
+\eqn{\phi}{phi} = less dispersion). A constant precision is
+back-transformed from its link, so \code{y ~ x | 1} reports the
+same \eqn{\phi}{phi} as \code{y ~ x}. Refused for other families
+and when the precision has covariates (\code{y ~ x | z}), so it is
+not a single number.
+\item GEE (\code{geepack::geeglm} only): \code{"qic"} and \code{"qicu"} -- the
+quasi-likelihood information criteria (Pan 2001; QIC for
+working-correlation choice, QICu for covariate choice) via
+\code{\link[geepack:QIC]{geepack::QIC()}}, computed only when requested (QIC silently
+refits the independence working model); \code{"scale"} -- the
+estimated scale (dispersion) parameter, shown only when the
+fit estimated it (blank under \code{scale.fix = TRUE}, matching
+geepack's own summary); \code{"max_cluster_size"} -- the largest
+cluster in the estimation sample (on by default with
+\code{"n_groups"}, which renders the \verb{N (<id>)} cluster count).
+Cluster statistics count the clusters geepack itself used
+(\code{geese$clusz}, consecutive runs of \verb{id =} values), so they
+always describe the displayed sandwich inference.
+Refused when no model in the table is a geeglm fit; the
+likelihood-based tokens (\code{"aic"}, pseudo-\eqn{R^2}{R^2}, ...)
+are refused in return for all-GEE tables -- quasi-likelihood
+has no likelihood.
+\item Absorbed fixed effects (\code{fixest} fits, and \code{estimatr} fits
+built with \verb{fixed_effects =}): \code{"fixed_effects"} renders a
+\verb{Fixed effects:} block at the top of the fit statistics --
+one Yes / No row per absorbed factor (the \code{etable} / \code{esttab}
+convention), blank cells for models without the concept in
+mixed tables -- and is on by default for both.
+Varying-slope-only factors (\code{Origin[[x]]}) absorb no
+intercept: they read No when another model absorbs that
+factor, and contribute no row otherwise.
+\code{"within_r2"} is the FE-partialled within
+R-squared (a default for \code{feols}, opt-in for \code{estimatr};
+GLM-family fixest fits report fixest's McFadden \code{pr2}
+instead). Both tokens are refused when no model in the table
+absorbs fixed effects.
 \item Effect size: \code{"f2"}.
-\item Information criteria: \code{"AIC"}, \code{"AICc"}, \code{"BIC"},
-\code{"deviance"}.
+\item Information criteria: \code{"aic"}, \code{"aicc"}, \code{"bic"},
+\code{"deviance"} (lowercase like every other token; the rendered
+row labels stay \code{AIC} / \code{AICc} / \code{BIC}).
 \item Change-stats for hierarchical comparison
 (active under \code{nested = TRUE}; see \emph{Hierarchical
 comparison} below): \code{"r2_change"}, \code{"adj_r2_change"},
@@ -524,11 +978,15 @@ comparison} below): \code{"r2_change"}, \code{"adj_r2_change"},
 \code{"deviance_change"}, \code{"p_change"}.
 }
 
-Default (resolved when \code{NULL}) is class-aware: lm fits get
-\code{c("nobs", "r2", "adj_r2")}; glm fits get
-\code{c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "AIC")};
+Default (resolved when \code{NULL}) is class-aware: lm and
+\code{lm_robust} fits get
+\code{c("nobs", "r2", "adj_r2")}; glm and ordinal \code{polr} / \code{clm} fits get
+\code{c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "aic")};
 mixed lm + glm sets union both groups (the renderer per-row
-em-dashes the inappropriate cell). When \code{nested = TRUE}, the
+en-dashes the inappropriate cell); Cox fits get
+\code{c("nobs", "n_events", "aic")}; GEE fits get
+\code{c("nobs", "n_groups", "max_cluster_size")} (the cluster
+structure, Stata \code{xtgee}-header style). When \code{nested = TRUE}, the
 class-aware default is extended with change tokens
 (\code{c("r2_change", "f_change", "p_change")} for lm,
 \code{c("lrt_change", "p_change")} for glm). The order of tokens in
@@ -555,14 +1013,18 @@ suppressed. If DVs match, the labels default to
 
 Duplicate explicit names in the list are rejected
 (\code{spicy_invalid_input}) -- they would silently collide in the
-internal model_id key.
+internal model_id key. So is a name that collides with the
+auto-filled label of another slot (\code{list("Model 2" = m1, m2)}):
+two models under one spanner cannot be told apart in the table,
+nor addressed by \code{\link[=inline]{inline()}}. Rename the model, or pass
+\code{model_labels}.
 }
 
 \section{Inference and standard errors}{
 \code{vcov} selects the variance-covariance estimator:
 
 \itemize{
-\item \code{"classical"} -- OLS (lm) / MLE inverse Hessian (glm).
+\item \code{"classical"} -- OLS (lm) / Fisher information (glm).
 \item \code{"HC0"} to \code{"HC5"} -- heteroskedasticity-consistent
 (via \code{\link[sandwich:vcovHC]{sandwich::vcovHC()}}).
 \item \code{"CR0"} to \code{"CR3"} -- cluster-robust with
@@ -578,9 +1040,11 @@ value (recycled to all models) or a list (one per model). The
 same fit can appear several times with different estimators to
 compare standard errors side-by-side.
 
-Inferential regimes (B and AME share the same regime):
+Inferential regimes for \code{lm} / \code{glm} (B and AME share the same
+regime):
 \itemize{
-\item \code{classical}, \verb{HC*} -> t with \code{df.residual}.
+\item \code{classical}, \verb{HC*} -> t with \code{df.residual} (\code{lm}) /
+z-asymptotic (\code{glm}).
 \item \code{bootstrap}, \code{jackknife} -> z asymptotic.
 \item \code{CR0}-\code{CR3} -> t with \strong{Satterthwaite-corrected df} (B
 via \code{\link[clubSandwich:coef_test]{clubSandwich::coef_test()}}; AME via
@@ -589,6 +1053,110 @@ via \code{\link[clubSandwich:coef_test]{clubSandwich::coef_test()}}; AME via
 \code{splines::ns()}), AME falls back to z-asymptotic with a
 \code{spicy_fallback} warning.
 }
+For other classes the t-vs-z axis follows the estimator's native
+reference distribution (e.g. \code{glm}, \code{glmmTMB}, survival, ordinal,
+\code{betareg}, \code{mlogit} use z; \code{lm}, \code{lme}, \code{lmer}, \code{rms::ols} use t).
+\subsection{Multinomial models: outcome categories as columns}{
+
+A single \code{nnet::multinom} model renders the publication layout:
+predictors as rows, one column group per \strong{non-reference outcome
+category} (spanner = category name), so a predictor's effect can
+be compared across equations along its row. The mandatory footer
+note \verb{Reference outcome: <level>.} names the base category (Stata's
+"base outcome" line); \code{outcome_labels} relabels the spanners (e.g.
+\code{"Student vs Employed"}). Fit statistics print once, under the
+first group. When per-category AMEs are requested the reference
+category appears as a last, AME-only group (its coefficient cells
+are empty -- the reference has no equation; its AMEs complete the
+zero-sum across categories). The default \code{show_columns} compacts
+to B / SE / p exactly like multi-model tables; request atomic
+tokens to restore CIs. Multi-model and \code{nested = TRUE} multinomial
+tables keep the one-row-per-(category, predictor) layout --
+categories-within-models would need two spanner levels.
+\code{tidy()} and \code{output = "long"} always return the long form
+(\code{"<category>: <term>"} rows), whatever the display;
+\code{as_structured()} mirrors the displayed table (one column set per
+category), as it does for every other layout.
+}
+
+\subsection{Robust SE availability by model class}{
+
+Not every estimator is defined for every class. A robust \code{vcov}
+the class cannot honour fails fast with \code{spicy_unsupported_vcov}
+-- never a silent model-based result under a robust label:
+
+\describe{
+\item{\code{lm}, \code{glm}, \code{MASS::glm.nb}}{all of \code{classical}, \verb{HC*},
+\verb{CR*}, \code{bootstrap}, \code{jackknife}. \code{lm} additionally takes
+\code{"CR1S"} -- the full Stata \verb{regress, vce(cluster)}
+convention: the CR1S small-sample scaling (equal to
+\code{\link[sandwich:vcovCL]{sandwich::vcovCL()}} with \code{type = "HC1"}) with \code{t(G - 1)}
+inference, \code{G} the number of clusters. Use it to reproduce
+Stata tables; \code{"CR2"} (Bell-McCaffrey, Satterthwaite df)
+remains the recommended modern choice. \code{"CR1S"} is refused
+for \code{glm} with an explanation: Stata's ML commands use a
+different convention (\code{G/(G-1)} scaling, z), so the label
+would not match Stata output there.}
+\item{\code{mlogit}}{\code{classical} + \verb{CR*} only (cluster at the
+choice-situation level) -- \code{sandwich::vcovHC()} mis-scales the
+sandwich for mlogit's per-choice-situation scores, so \verb{HC*} is
+refused.}
+\item{\code{lmer}, \code{lme}, \code{coxph}, \code{survreg},
+\code{mgcv::gam}/\code{bam}, \code{polr}, \code{clm}, \code{betareg},
+\code{nnet::multinom}, \code{pscl::zeroinfl}/\code{hurdle},
+\code{rms} (\code{ols}/\code{lrm}/\code{cph}/\code{Glm})}{\code{classical}
++ \verb{CR*} only -- \verb{HC*} and the resamplers (which refit
+\code{lm}/\code{glm}) are not defined for these. \code{clm} with a scale /
+nominal (partial-PO) component is \code{classical} only.
+\code{multinom} needs \pkg{sandwich} >= 3.1-2 (which added its
+\code{estfun()} method); its \code{cluster} is one entry per
+observation. For the two-part \code{pscl} fits the cluster
+sandwich covers both components (count and zero) at once.}
+\item{\code{quantreg::rq}}{its own estimator family, not the sandwich
+vocabulary: \code{classical} (= \code{"nid"}, quantreg's large-sample
+default), \code{"iid"}, \code{"ker"}, \code{"rank"} (intervals only) and a
+native \code{"bootstrap"}, clustered via the wild gradient
+bootstrap. \verb{HC*}, \verb{CR*} and \code{jackknife} are refused, each with
+its own reason -- see the \code{vcov} argument.}
+\item{\code{geepack::geeglm}}{no spicy-side estimator at all: GEE
+inference is robust by construction, so the fit's own sandwich
+(or jackknife) standard errors -- chosen by geeglm's
+\verb{std.err =} option, clustered on its \verb{id =} -- are the
+displayed inference. \verb{HC*} / \verb{CR*} and \code{cluster} are refused
+with a pointer to those fit options.}
+\item{\code{survey::svyglm}}{\code{classical} only, on principle: the
+design-based Taylor / replicate variance is already the robust
+variance for the declared design, and clustering belongs in
+the design itself (\code{survey::svydesign(ids = )}), not in the
+table call.}
+\item{\code{estimatr} (\code{lm_robust}/\code{iv_robust}) and \code{fixest}}{these
+fits carry the variance they were computed with -- estimatr's
+\verb{se_type =}, and whatever fixest's own \code{vcov} interface
+produced -- and spicy never overwrites it. A \code{vcov} request is
+refused; set the estimator through the fitting package instead
+(\verb{se_type =} for estimatr; \verb{vcov =} at estimation or in
+\code{summary()} for fixest).}
+\item{Other classes (\code{glmer}, \code{glmmTMB},
+\code{rstanarm}/\code{brms}, ...)}{\code{classical} (model-based) only
+(\pkg{clubSandwich} has no working backend for \code{glmer} /
+\code{glmmTMB}).}
+}
+
+Cluster-robust backends differ by class but are each cross-validated
+to the field-standard oracle: \code{lm}/\code{glm}/\code{lmer}/\code{lme} use
+\pkg{clubSandwich} (CR2 = Bell-McCaffrey, with Satterthwaite df for
+\code{lm}/\code{lme}/\code{lmer}); \code{coxph}/\code{cph} use the Lin-Wei grouped-dfbeta
+sandwich (identical to \code{coxph(..., cluster=)});
+\code{survreg}/\code{gam}/\code{polr}/\code{clm}/\code{betareg}/\code{mlogit}/\code{multinom} and the
+\code{pscl} two-part fits use
+\code{\link[sandwich:vcovCL]{sandwich::vcovCL()}}; \code{rms} fits use \code{\link[rms:robcov]{rms::robcov()}} (which
+needs the fit's \verb{x = TRUE, y = TRUE}). These single cluster
+sandwiches have no CR0-CR3 bias-reduction variants, so the requested
+\verb{CR*} maps to the one available estimator. \code{cluster} length is one
+entry per observation, except \code{mlogit} (one per choice situation)
+and censored \code{coxph} (one per subject).
+}
+
 \subsection{How to specify \code{cluster}}{
 
 Three accepted forms, in order of preference:
@@ -613,14 +1181,79 @@ a \strong{different dataset} with matching row order, or is
 otherwise not a column of the model's \code{data}.
 }
 
-Bare unquoted names (\code{cluster = region}) are \strong{not} accepted --
-they would require non-standard evaluation magic that breaks
-under programmatic use (function wrapping, dynamic column
-choice, loops). Use \code{~region} or \code{"region"} instead.
+A bare unquoted name (\code{cluster = region}) is \strong{not} column
+selection: it is evaluated as an ordinary R variable. If an object
+\code{region} exists in the calling environment, its value is used as
+the \strong{vector} form above; if it does not (the typical "unquoted
+column name" intent), the call fails with a migration error
+pointing at \code{~region} / \code{"region"}. Bare-name column selection is
+deliberately unsupported -- it would require non-standard
+evaluation magic that breaks under programmatic use (function
+wrapping, dynamic column choice, loops).
 
 For multi-model use, mix forms freely:
 \code{cluster = list(~region, "region", df$region)}.
 }
+}
+
+\section{Bayesian fits (rstanarm / brms)}{
+\code{stanreg} and \code{brmsfit} models are summarized from their posterior
+draws: \code{B} is the posterior median, \code{SE} the posterior MAD SD (the
+scaled median absolute deviation -- the pairing of \emph{Regression and
+Other Stories} and rstanarm's own print; equal to the posterior SD
+for a normal posterior), and the interval an equal-tailed credible
+interval (header \verb{95\% CrI}; \code{ci_method = "hdi"} opts into the
+highest-density interval, header \verb{95\% HDI}). There is no p-value
+or t-statistic; group presets (\code{"all_b"}, ...) expand without
+them, and the opt-in \code{"pd"} column reports the probability of
+direction with a footer definition (Makowski et al. 2019). Under
+\code{exponentiate = TRUE} all quantities are computed from the
+exponentiated draws directly (the SE is the posterior MAD SD on
+the ratio scale, not a delta-method approximation). The AME
+columns are equally draws-native: \code{avg_slopes()} computes the
+marginal effects per posterior draw, and the table reports their
+posterior median, MAD SD and credible interval (equal-tailed or
+HDI per \code{ci_method}); \code{"ame_p"} has nothing to fill and follows
+the p-column policy (dropped from presets, refused as an atomic
+token, dashed in mixed tables). Standardized betas follow the same
+draws logic: \code{"posthoc"} / \code{"basic"} / \code{"smart"} are exact affine
+rescales of the link-scale summaries (the Gaussian family divides
+by SD(y); every other family standardizes predictors only, the
+frequentist glm convention); \code{"refit"} and \code{"pseudo"} are refused.
+
+Fit statistics: \code{"r2_bayes"} (in the Bayesian default) plus the
+opt-in \code{"elpd_loo"} / \code{"looic"} / \code{"waic"}, whose standard errors
+are disclosed in the footer; unreliable estimates (PSIS-LOO Pareto
+k above the sample-size-specific threshold
+\eqn{\min(1 - 1/\log_{10} S, 0.7)}{min(1 - 1/log10(S), 0.7)} of
+Vehtari et al. 2024 -- the same bound \code{loo::loo()} prints -- and
+WAIC p_waic > 0.4) add a footer caveat instead of being
+silenced. Every table is backed by an automatic sampler-diagnostics
+guard (R-hat >= 1.01, ESS below 100 per chain -- floored at 400 so
+fewer chains never weaken the bar --, divergent
+transitions, E-BFMI < 0.2, per Vehtari et al. 2021): problems add
+a footer line and raise a warning classed
+\code{spicy_bayes_diagnostics} (nested under \code{spicy_caveat}, so
+\code{withCallingHandlers(spicy_bayes_diagnostics = ...)} mutes the
+guard selectively); clean fits print nothing. Per-coefficient
+\code{"rhat"} / \code{"ess_bulk"} / \code{"ess_tail"} columns are available in
+all-Bayesian tables, as is \code{"mcse"} -- the Monte Carlo standard
+error of the displayed posterior median, the criterion for how
+many digits a table can honestly show (a displayed digit is
+Monte-Carlo stable when twice the MCSE stays below it; Gelman,
+Vehtari, McElreath et al. 2026, sec. 11.6). Under
+\code{exponentiate = TRUE} the MCSE is recomputed on the exponentiated
+draws.
+
+Refused on principle (classed error, never a silent fallback):
+likelihood-based fit statistics (\code{"aic"}, pseudo-R², ...),
+\code{p_adjust}, robust / cluster \code{vcov} (model the clustering with
+group-level terms instead), \code{ci_method = "profile"} /
+\code{"boot_percentile"}, and non-MCMC fits
+(\code{algorithm = "meanfield"} / \code{"optimizing"} -- refit with
+\code{algorithm = "sampling"}). See the
+\href{https://amaltawfik.github.io/spicy/articles/table-regression-bayesian.html}{Bayesian regression tables}
+article.
 }
 
 \section{Hierarchical (nested) model comparison}{
@@ -628,24 +1261,73 @@ For multi-model use, mix forms freely:
 rows} (APA Table 7.13 / Stata \code{esttab} / SPSS Model Summary
 convention). Each adjacent pair (M2 vs M1, M3 vs M2, ...)
 contributes one column of change stats; the FIRST model column
-gets em-dashes (no previous model to compare to). Validation
+gets en-dashes (no previous model to compare to). Validation
 requires identical \code{nobs} and identical response variable
 across all models.
+
+\strong{Structural refusals.} Four hierarchies carry no valid change
+statistic whatever their \code{nobs} and response, and are refused with
+\code{spicy_invalid_input} rather than rendered with empty or
+meaningless cells:
+\itemize{
+\item \emph{A REML pair whose fixed effects differ}
+(\code{nlme::lme(method = "REML")}, \code{glmmTMB(REML = TRUE)}). The
+restricted likelihood depends on the fixed-effects design
+matrix, so the two criteria are not on a common scale and the
+likelihood-ratio test is not valid (Pinheiro & Bates 2000
+Section 2.4.2). Refit both by maximum likelihood
+(\code{method = "ML"}, \code{REML = FALSE}). A REML pair that differs
+only in its random structure stays valid and is accepted.
+\item \emph{Two \code{fixest} fits that absorbed different fixed
+effects}. fixest counts every absorbed level as an estimated
+parameter, so a test across two \verb{| fe} structures measures the
+change in the absorbed effects together with the change in the
+coefficients, and the two cannot be separated. Hold the
+\verb{| fe} part fixed across the hierarchy.
+\item \emph{Mixed-effects fits from different engines} (\code{lme4},
+\code{glmmTMB}, \code{nlme::lme}). The change statistics come from the
+engine's own two-model \code{anova()}, and no engine's method
+accepts a fit produced by another. Refit one of the two with
+the other's engine.
+\item \emph{A \code{MASS::rlm} hierarchy}. M-estimation minimises a
+bounded loss on the scaled residuals: it partitions no sums of
+squares and it is not a likelihood, so there is neither a
+likelihood-ratio test nor a partial F to report. Every change
+token is refused -- including on a single fit or a
+\code{nested = FALSE} pair, where the token is the explicit
+request. Compare the least-squares fits (\code{lm()}) if the
+hierarchy itself is the question.
+}
+In the first three, \code{nested = FALSE} renders the models side by
+side instead.
 
 Default change tokens auto-injected when \code{show_fit_stats} is
 \code{NULL}:
 \itemize{
-\item All-lm: \code{c("r2_change", "f_change", "p_change")} --
-APA hierarchical regression standard.
+\item All-lm (and \code{nls}): \code{c("r2_change", "f_change", "p_change")} -- APA hierarchical regression standard.
 \item All-glm: \code{c("lrt_change", "p_change")} -- Hosmer &
-Lemeshow Section 3.5; Long & Freese 2014 Section 3.6.
+Lemeshow Section 3.5; Long & Freese 2014 Section 3.2.4.
+\item Any other hierarchy that carries a likelihood
+(\code{survreg}, \code{polr}, \code{clm}, \code{coxph}, \code{gls}, \code{betareg},
+\code{multinom}, \code{fixest}, ...): the same
+\code{c("lrt_change", "p_change")}.
+\item Mixed-effects (\code{lmer} / \code{glmer} / \code{glmmTMB} /
+\code{nlme::lme}): \code{c("aic_change", "bic_change", "lrt_change", "p_change")} -- Pinheiro & Bates 2000 Section 2.4.1.
+\item Quantile (\code{rq}): \code{c("f_change", "p_change")} -- the
+Wald-type test \code{quantreg::anova.rq()} reports.
 }
 To customise, pass the change tokens directly to
-\code{show_fit_stats}. Variance-explained change tokens on an
-all-glm hierarchy raise \code{spicy_invalid_input} (the
-residual-sum-of-squares partition does not apply outside the
-least-squares framework -- the renderer points the user at
-\code{lrt_change}).
+\code{show_fit_stats}. The variance-explained change tokens
+(\code{"r2_change"}, \code{"adj_r2_change"}, \code{"f_change"},
+\code{"f2_change"}) raise \code{spicy_invalid_input} on any hierarchy
+whose nested comparison is a likelihood-ratio test -- \code{glm},
+and equally every other likelihood class and the
+mixed-effects families: that comparison reports a chi-square,
+not a variance-explained change, and the message points at
+\code{"lrt_change"} + \code{"p_change"}. A quantile hierarchy refuses
+them too, and \code{"lrt_change"} with them, pointing at
+\code{"f_change"} + \code{"p_change"} instead. \code{lm} and \code{nls} keep the
+least-squares tokens.
 }
 
 \section{Standardised coefficients}{
@@ -654,7 +1336,7 @@ least-squares framework -- the renderer points the user at
 \itemize{
 \item \code{"refit"} -- refit on z-scored data. For \code{lm} both X
 and Y are z-scored (Cohen et al. 2003 gold standard); for
-\code{glm} only numeric X (Long & Freese 2014 Section 4.3.4
+\code{glm} only numeric X (Long & Freese 2014 Section 4.7.2
 "x-standardization").
 \item \code{"posthoc"} -- post-hoc scaling. lm:
 \eqn{\beta = B \times SD(X) / SD(Y)}{beta = B * SD(X) / SD(Y)};
@@ -662,8 +1344,11 @@ glm: X-only \eqn{\beta = B \times SD(X)}{beta = B * SD(X)}
 (Y is undefined on the link scale).
 \item \code{"basic"} -- like \code{"posthoc"} but factor dummies are
 scaled by their column SD.
-\item \code{"smart"} -- Gelman (2008): divide binary predictors
-by \code{2 * SD} instead of \code{SD}.
+\item \code{"smart"} -- Gelman (2008): continuous numeric inputs
+are scaled by \code{2 * SD(X)} (a +/-1 SD swing then spans the
+same range as a binary's 0 to 1 step); binary inputs --
+numeric 0/1 and factor dummies -- are left unscaled. (Before
+0.13.0 the rule was applied inverted; see NEWS.)
 \item \code{"pseudo"} -- \emph{glm only}. Menard (2004, 2011)
 fully-standardised \eqn{\beta = B \times SD(X) / SD(Y^*)}{beta = B * SD(X) / SD(Y*)},
 with \eqn{Y^*}{Y*} the latent variable on the link scale and
@@ -674,11 +1359,27 @@ non-binomial returns NA with a \code{spicy_caveat}.
 \item \code{"none"} (default) -- no \eqn{\beta}{beta} computed.
 }
 
-Under interactions or transformed predictors (\code{I()}, \code{poly()},
-\code{log()}, \code{splines::ns()}), a \code{spicy_caveat} warns that
-standardised coefficients on such terms are subtle to interpret
-(Cohen et al. 2003 Section 7.7; Aiken & West 1991). The caveat is
-auto-documented in the footer.
+\strong{Interactions and transforms.} Under \code{"refit"}, an interaction's
+\eqn{\beta}{beta} is the coefficient of the product of the z-scored
+components -- the recommended treatment for such models (Cohen et
+al. 2003 Section 7.7; Aiken & West 1991; Friedrich 1982). Under
+\code{"posthoc"}, \code{"basic"}, and \code{"smart"}, the product / transformed
+design column is treated as a single numeric column and scaled by
+its own SD (under \code{"smart"}, by \code{2 * SD} when the product column is
+continuous; a binary product column -- e.g. a binary-by-binary
+interaction -- stays unscaled like any binary input) -- the
+convention of SPSS beta, Stata \verb{regress, beta}, SAS PROC REG \code{STB}, and
+\code{lm.beta::lm.beta()}, identical to
+\code{effectsize::standardize_parameters(method = "basic")} on those
+columns. The two conventions differ whenever the components are
+correlated; a \code{spicy_caveat} warns and the footer names the
+convention actually used. \code{"refit"} declines formulas with inline
+transforms (\code{log(x)}, \code{poly()}, \code{factor()} written in the formula):
+the model frame's evaluated columns cannot be re-evaluated on
+z-scored data, so spicy falls back to \code{"posthoc"} with a warning
+(\code{effectsize}'s refit instead standardizes \emph{before} the transform
+-- a different estimand). Pre-build transformed columns in \code{data}
+for an exact refit.
 }
 
 \section{Multiple-comparison adjustment}{
@@ -700,6 +1401,38 @@ so the family is the model's full coefficient set (intercept
 and reference rows excluded), not the displayed subset --
 filtering is a display choice and must not change the
 inferential family.
+}
+
+\section{Tied event times and the survival estimands}{
+A Cox model has to decide what to do when several events share
+the same time, and \code{survival::coxph()} decides with
+\code{ties = "efron"} by default. The absolute estimands do not make
+a second decision:
+
+\strong{The baseline hazard behind the RMST-difference and
+risk-difference columns follows the tie-handling convention of
+the fit, exactly as \code{\link[survival:survfit]{survival::survfit()}} and
+\code{\link[survival:basehaz]{survival::basehaz()}} do.} A \code{ties = "breslow"} fit gives a
+Breslow baseline; the default Efron fit gives an Efron baseline.
+One rule, so the hazard-ratio column and the dRMST column always
+come from the same likelihood. To change the convention, change
+the fit.
+
+When the choice matters is not simply "when there are many
+ties". What governs it is the fraction of tied events \emph{within
+the risk set}, together with the effect size and the spread of
+the covariates: a large risk set dilutes a tied block, a small
+one -- fine strata, matched or nested case-control designs --
+does not. A file with hundreds of tied days can be insensitive
+to the convention while a small stratified one with a handful of
+ties is not.
+
+And Efron is the better default, not the correct answer: the
+approximations are all biased at finite sample size and agree
+asymptotically, and Efron's virtue is a much smaller small-sample
+bias (Hertz-Picciotto & Rockhill 1997). Efron himself, quoting
+Peto, put it as "it probably doesn't make much difference"
+(Efron 1977).
 }
 
 \section{Output formats and broom integration}{
@@ -728,6 +1461,37 @@ model with the model-level statistics; \code{df.residual} is kept
 numeric so cluster-robust Satterthwaite df is preserved.
 }
 
+\section{Global options}{
+\itemize{
+\item \strong{\code{options(spicy.style = )}} -- the journal style applied by
+default to all four table families
+(\code{table_regression()}, \code{table_categorical()},
+\code{table_continuous()}, \code{table_continuous_lm()}). Takes a theme
+name (\code{"jama"}, \code{"nejm"}, \code{"lancet"}, \code{"annals"}, \code{"apa"},
+\code{"aer"}) or a \code{\link[=spicy_style]{spicy_style()}} object. The style of a report is a
+property of the document, so it is set once in the setup chunk;
+the \code{style} argument overrides it per call, and any formatting
+argument you type overrides both. \code{options(spicy.style = NULL)}
+restores spicy's own defaults. See \code{\link[=spicy_style]{spicy_style()}} for the exact
+rules each theme encodes and the official document they come
+from.
+\item \strong{\code{options(spicy.note_style = )}} -- how the table note is
+rendered by the \code{"tinytable"} engine (all four table families).
+A note is subordinate to the table it documents, so it is set
+one size down, in black: \verb{0.9em}, matching the \code{"gt"} engine and
+the 10pt-on-11pt of the Word engine. Two opt-ins:
+\itemize{
+\item \code{"none"} -- no intervention; the note is rendered
+exactly as the receiving document template styles it.
+\item any other string -- extra arguments for the Typst
+\code{text()} call around the note, appended to the size (e.g.
+\code{options(spicy.note_style = "fill: luma(89)")} for a grey
+note). Typst only; the HTML note keeps the plain \verb{0.9em}.
+}
+\code{options(spicy.note_style = NULL)} restores the default.
+}
+}
+
 \section{Weights}{
 No \code{weights} argument: weights are a property of the fit
 (extracted via \code{\link[stats:weights]{stats::weights()}}). Pass them when fitting:
@@ -751,6 +1515,7 @@ or \code{\link[=withCallingHandlers]{withCallingHandlers()}}. Errors inherit fro
 (root); warnings from \code{spicy_warning}. Specific leaves used by
 this function include \code{spicy_invalid_input},
 \code{spicy_invalid_data}, \code{spicy_unsupported},
+\code{spicy_unsupported_vcov}, \code{spicy_unsupported_standardized},
 \code{spicy_missing_pkg}, \code{spicy_missing_column},
 \code{spicy_ignored_arg}, \code{spicy_caveat}, \code{spicy_fallback}. See
 \code{\link[=spicy-package]{spicy}} for the full taxonomy.
@@ -761,36 +1526,55 @@ this function include \code{spicy_invalid_input},
 fit <- lm(wellbeing_score ~ age + sex + smoking, data = sochealth)
 
 # Default APA layout: B / SE / 95\% CI / p plus the n / R^2 /
-# Adj.R^2 fit-stats footer. Factor reference level is annotated
-# with `(ref.)` and shows an em-dash in the statistic columns.
+# Adj. R^2 fit-stats footer. Factor reference level is annotated
+# with `(ref.)` and shows an en dash in the statistic columns.
 table_regression(fit)
 
-# Standardised coefficients (beta) injected next to B. Four
-# methods available; "refit" is the SPSS / Stata regress, beta
-# gold standard.
+\donttest{
+# Standardised coefficients (beta) injected next to B. "refit"
+# is the Cohen et al. (2003) refit-on-z-scores convention;
+# "basic" reproduces the SPSS / Stata regress, beta definition.
 table_regression(fit, standardized = "refit")
+}
 
+\donttest{
 # Custom column set: B + AME + AME-specific p-value. Note that
 # the `p` token always belongs to B, never to AME -- use the
 # explicit `ame_p` token for AME inference.
-table_regression(
-  fit,
-  show_columns = c("b", "p", "ame", "ame_ci", "ame_p")
-)
+if (requireNamespace("marginaleffects", quietly = TRUE)) {
+  table_regression(
+    fit,
+    show_columns = c("b", "p", "ame", "ame_ci", "ame_p")
+  )
+}
+}
 
+\donttest{
 # Group-token shortcut: "all_b" + "all_ame" expands to the full
 # B / AME column families side by side.
-table_regression(fit, show_columns = c("all_b", "all_ame"))
+if (requireNamespace("marginaleffects", quietly = TRUE)) {
+  table_regression(fit, show_columns = c("all_b", "all_ame"))
+}
+}
 
 # ---- Cluster-robust variance -------------------------------------
 # CR2 (Bell-McCaffrey) with Satterthwaite-corrected df is the
 # recommended default under few clusters. Three forms are accepted
 # for `cluster`; the formula is preferred for composability with
 # multi-way clustering and for programmatic robustness.
-table_regression(fit, vcov = "CR2", cluster = ~region)
-table_regression(fit, vcov = "CR2", cluster = "region")
-table_regression(fit, vcov = "CR2", cluster = ~region:age_group)
+\donttest{
+if (requireNamespace("clubSandwich", quietly = TRUE)) {
+  table_regression(fit, vcov = "CR2", cluster = ~region)
+}
+if (requireNamespace("clubSandwich", quietly = TRUE)) {
+  table_regression(fit, vcov = "CR2", cluster = "region")
+}
+if (requireNamespace("clubSandwich", quietly = TRUE)) {
+  table_regression(fit, vcov = "CR2", cluster = ~region:age_group)
+}
+}
 
+\donttest{
 # ---- Hierarchical (nested) regression ----------------------------
 # Adds in-table change-statistic rows (Delta R^2 / F-change /
 # p-change for lm; LRT / p-change for glm) below the fit-stats.
@@ -808,18 +1592,58 @@ table_regression(
   list("Step 1" = m1, "Step 2" = m2, "Step 3" = m3),
   nested = TRUE
 )
+}
 
+\donttest{
 # ---- Side-by-side variance comparison ----------------------------
 # Same fit, three vcovs in one wide table. Useful for showing the
 # sensitivity of inference to the variance assumption.
-table_regression(
-  list("Classical" = fit, "HC3" = fit, "CR2" = fit),
-  vcov    = list("classical", "HC3", "CR2"),
-  cluster = list(NULL, NULL, ~region)
-)
+if (requireNamespace("clubSandwich", quietly = TRUE)) {
+  table_regression(
+    list("Classical" = fit, "HC3" = fit, "CR2" = fit),
+    vcov    = list("classical", "HC3", "CR2"),
+    cluster = list(NULL, NULL, ~region)
+  )
+}
+}
 
 # ---- Tidy long format for downstream pipelines -------------------
-broom::tidy(table_regression(fit))
+if (requireNamespace("broom", quietly = TRUE)) {
+  broom::tidy(table_regression(fit))
+}
+
+\donttest{
+# ---- Mixed-effects models ----------------------------------------
+# Linear mixed-effects (lme4). The footer adds a random-effects
+# panel with sigma + Wald SE / CI from `merDeriv`, the Nakagawa
+# marginal / conditional R^2 fit-stats, and a per-class p-value
+# annotation line.
+if (requireNamespace("lme4", quietly = TRUE)) {
+  fit <- lme4::lmer(Reaction ~ Days + (Days | Subject),
+                     data = lme4::sleepstudy)
+  table_regression(fit)
+
+  # Switch to the variance scale (sigma^2 instead of sigma).
+  table_regression(fit, re_scale = "variance")
+
+  # Minimal random-effects display: estimates only, no SE / CI.
+  table_regression(fit, re_columns = "est")
+
+  # Suppress the random-effects panel entirely.
+  table_regression(fit, show_re = FALSE)
+}
+
+# Hierarchical mixed-effects comparison (nested LRT).
+if (requireNamespace("lme4", quietly = TRUE)) {
+  m1 <- lme4::lmer(Reaction ~ 1     + (1 | Subject),
+                    data = lme4::sleepstudy, REML = FALSE)
+  m2 <- lme4::lmer(Reaction ~ Days  + (1 | Subject),
+                    data = lme4::sleepstudy, REML = FALSE)
+  m3 <- lme4::lmer(Reaction ~ Days  + (Days | Subject),
+                    data = lme4::sleepstudy, REML = FALSE)
+  table_regression(list(m1, m2, m3), nested = TRUE)
+}
+}
 
 \dontrun{
 # ---- Rich-format outputs (require optional Suggests packages) ----
@@ -849,6 +1673,21 @@ Cohen, J., Cohen, P., West, S.G., & Aiken, L.S. (2003).
 \emph{Applied multiple regression / correlation analysis for the
 behavioral sciences} (3rd ed.). Lawrence Erlbaum.
 
+Davison, A.C. & Hinkley, D.V. (1997). \emph{Bootstrap methods and
+their application}. Cambridge University Press.
+
+Efron, B. (1977). The efficiency of Cox's likelihood function
+for censored data. \emph{Journal of the American Statistical
+Association}, 72(359), 557-565.
+
+Friedrich, R.J. (1982). In defense of multiplicative terms in
+multiple regression equations. \emph{American Journal of Political
+Science}, 26(4), 797-833.
+
+Hertz-Picciotto, I. & Rockhill, B. (1997). Validity and
+efficiency of approximation methods for tied survival times in
+Cox regression. \emph{Biometrics}, 53(3), 1151-1156.
+
 Pustejovsky, J.E. & Tipton, E. (2018). Small-sample methods for
 cluster-robust variance estimation and hypothesis testing in
 fixed effects models. \emph{Journal of Business & Economic
@@ -859,6 +1698,11 @@ to a world beyond "p < 0.05". \emph{The American Statistician},
 73(sup1), 1-19.
 }
 \seealso{
+\code{\link[=table_regression_models]{table_regression_models()}} for the registry of supported model
+classes and the per-family behaviour reference (also reachable as
+\code{?table_regression_mixed}, \code{?table_regression_ordinal}, ...). If a
+class is not listed there, try \code{table_regression(fit)} anyway --
+unsupported classes error with a clear message.
 Other regression-table functions:
 \code{\link[=table_continuous_lm]{table_continuous_lm()}} for one-predictor-by-many-outcomes
 descriptive tables.
@@ -869,8 +1713,8 @@ Underlying machinery:
 \code{\link[=spicy_print_table]{spicy_print_table()}} for ASCII rendering;
 \code{\link[=build_ascii_table]{build_ascii_table()}} for the low-level renderer.
 Inferential infrastructure (internal):
-\code{compute_lm_vcov()}, \code{compute_lm_coef_inference()},
-\code{compute_lm_wald_test()}.
+\code{compute_model_vcov()}, \code{compute_coef_inference()},
+\code{compute_wald_test()}.
 broom integration:
 \code{\link[broom:tidy]{broom::tidy()}}, \code{\link[broom:glance]{broom::glance()}}.
 }

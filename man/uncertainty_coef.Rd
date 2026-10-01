@@ -9,8 +9,7 @@ uncertainty_coef(
   direction = c("symmetric", "row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 )
 }
 \arguments{
@@ -24,14 +23,14 @@ or \code{"column"} (row predicts column).}
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -57,6 +56,22 @@ of the \strong{row} and \strong{column} variables respectively, and
 \eqn{U = 2 (H_X + H_Y - H_{XY}) / (H_X + H_Y)}.
 }
 
+The default \code{direction = "symmetric"} follows the SPSS and
+DescTools convention: the symmetric coefficient is a standard,
+well-defined variant with its own asymptotic standard error.
+\code{\link[=somers_d]{somers_d()}} deliberately differs (its default is \code{"row"})
+because its symmetric form is a derived quantity without an
+analytic SE; see its documentation.
+
+When the marginal entropy in the denominator is zero (the
+predicted variable is constant, e.g. an unused factor level),
+the coefficient is the undefined form \eqn{0/0}: the function
+returns \code{NA} with a \code{spicy_undefined_stat} warning, like the
+other measures in the family. For \code{direction = "symmetric"}
+this happens only when both variables are constant; with a
+single constant variable the symmetric coefficient is a
+well-defined 0.
+
 The entropy terms use the standard mathematical convention
 \eqn{0 \log 0 = 0}, matching SPSS / PSPP \code{CROSSTABS} and the
 definition in Cover & Thomas (2006). Note that
@@ -73,6 +88,11 @@ tab <- table(sochealth$smoking, sochealth$education)
 uncertainty_coef(tab)
 uncertainty_coef(tab, direction = "row", detail = TRUE)
 
+}
+\references{
+Theil, H. (1970). On the estimation of relationships involving
+qualitative variables. \emph{American Journal of Sociology}, 76(1),
+103-154. \doi{10.1086/224909}
 }
 \seealso{
 \code{\link[=lambda_gk]{lambda_gk()}}, \code{\link[=goodman_kruskal_tau]{goodman_kruskal_tau()}}, \code{\link[=assoc_measures]{assoc_measures()}}

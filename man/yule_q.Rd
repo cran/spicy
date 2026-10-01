@@ -4,7 +4,7 @@
 \alias{yule_q}
 \title{Yule's Q}
 \usage{
-yule_q(x, detail = FALSE, conf_level = 0.95, digits = 3L, .include_se = FALSE)
+yule_q(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -13,14 +13,14 @@ yule_q(x, detail = FALSE, conf_level = 0.95, digits = 3L, .include_se = FALSE)
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -52,6 +52,11 @@ Standard error formulas follow the DescTools implementations
 tab <- table(sochealth$smoking, sochealth$sex)
 yule_q(tab)
 
+}
+\references{
+Yule, G. U. (1900). On the association of attributes in
+statistics. \emph{Philosophical Transactions of the Royal Society of
+London, Series A}, 194, 257-319. \doi{10.1098/rsta.1900.0019}
 }
 \seealso{
 \code{\link[=phi]{phi()}}, \code{\link[=gamma_gk]{gamma_gk()}}, \code{\link[=assoc_measures]{assoc_measures()}}

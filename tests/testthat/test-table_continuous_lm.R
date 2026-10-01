@@ -39,7 +39,8 @@ test_that("table_continuous_lm returns expected raw structure", {
       "r2",
       "adj_r2",
       "n",
-      "weighted_n"
+      "weighted_n",
+      "boot_n_valid"
     )
   )
   expect_equal(nrow(out), 6L)
@@ -56,6 +57,24 @@ test_that("table_continuous_lm default output returns a spicy table", {
   expect_s3_class(out, "spicy_table")
   expect_equal(attr(out, "by_var"), "Species")
   expect_equal(attr(out, "vcov_type"), "classical")
+})
+
+test_that("table_continuous_lm returns visibly and is silent when assigned", {
+  # Decision 47: a bare call renders (capture.output() evaluates as at
+  # top level, so the visible return auto-prints); an assignment
+  # writes nothing.
+  expect_visible(table_continuous_lm(iris, select = Sepal.Length, by = Species))
+  bare <- capture.output(
+    table_continuous_lm(iris, select = Sepal.Length, by = Species)
+  )
+  expect_true(length(bare) > 0)
+
+  assigned <- capture.output(
+    tl <- table_continuous_lm(iris, select = Sepal.Length, by = Species)
+  )
+  expect_identical(assigned, character(0))
+  expect_s3_class(tl, "spicy_continuous_lm_table")
+  expect_identical(capture.output(print(tl)), bare)
 })
 
 # ---- computation ----
@@ -189,6 +208,22 @@ test_that("table_continuous_lm ignores weighted n when weights are absent", {
     "show_weighted_n"
   )
 
+  # Positive control: "Weighted n" IS a column name when weights are
+  # present, so the negative below is about the missing weights and not
+  # about a header that has quietly been renamed.
+  wd <- iris
+  wd$w <- seq_len(nrow(wd)) / 10
+  expect_true(
+    "Weighted n" %in%
+      names(table_continuous_lm(
+        wd,
+        select = Sepal.Length,
+        by = Species,
+        weights = w,
+        show_weighted_n = TRUE,
+        output = "data.frame"
+      ))
+  )
   expect_false("Weighted n" %in% names(out))
 })
 
@@ -326,7 +361,8 @@ test_that("table_continuous_lm rejects deprecated contrast value", {
       contrast = "reference",
       output = "long"
     ),
-    "should be one of"
+    "`contrast` must be one of",
+    class = "spicy_invalid_input"
   )
 })
 
@@ -347,6 +383,20 @@ test_that("table_continuous_lm data.frame output puts >2 categorical levels in c
   expect_false(any(grepl("CI", names(out))))
   expect_true("F(2, 147)" %in% names(out))
   expect_true("p" %in% names(out))
+  # Positive control: "f²" IS a column name when the effect size is
+  # asked for, so its absence here is the default at work and not a
+  # renamed header quietly disarming the assertion.
+  expect_true(
+    "f²" %in%
+      names(table_continuous_lm(
+        iris,
+        select = Sepal.Length,
+        by = Species,
+        statistic = TRUE,
+        effect_size = "f2",
+        output = "data.frame"
+      ))
+  )
   expect_false("f²" %in% names(out))
   expect_true("R²" %in% names(out))
   expect_equal(out$Variable[1], "Sepal.Length")
@@ -386,6 +436,21 @@ test_that("table_continuous_lm data.frame output honors optional columns", {
     effect_size = "none",
     output = "data.frame"
   )
+
+  # Positive control: all four ARE column names when every optional
+  # column is switched on. Four negative memberships on typed-out
+  # headers assert nothing the day any of them is renamed.
+  all_on <- table_continuous_lm(
+    sochealth,
+    select = c(wellbeing_score, bmi),
+    by = sex,
+    statistic = TRUE,
+    p_value = TRUE,
+    show_n = TRUE,
+    effect_size = "f2",
+    output = "data.frame"
+  )
+  expect_true(all(c("t", "p", "n", "f²") %in% names(all_on)))
 
   expect_false("t" %in% names(out))
   expect_false("p" %in% names(out))
@@ -436,7 +501,8 @@ test_that("table_continuous_lm rejects deprecated wide output", {
       by = sex,
       output = "wide"
     ),
-    "should be one of"
+    "`output` must be one of",
+    class = "spicy_invalid_input"
   )
 })
 
@@ -501,7 +567,7 @@ test_that("table_continuous_lm validates core user arguments", {
       df,
       select = y,
       by = x,
-      decimal_mark = ";",
+      decimal_mark = "--",
       output = "long"
     ),
     "decimal_mark"
@@ -603,32 +669,56 @@ test_that("table_continuous_lm reports ignored non-numeric outcomes in verbose m
 })
 
 test_that("table_continuous_lm helper functions cover empty-model cases", {
-  num_empty <- spicy:::fit_numeric_predictor_lm_rows(
-    y = c(1, 2),
-    x = c(1, 1),
-    weights = NULL,
-    outcome_name = "y",
-    outcome_label = "Y",
-    predictor_label = "X",
-    vcov_type = "classical",
-    ci_level = 0.95
+  expect_warning(
+    num_empty <- spicy:::fit_numeric_predictor_lm_rows(
+      y = c(1, 2),
+      x = c(1, 1),
+      weights = NULL,
+      outcome_name = "y",
+      outcome_label = "Y",
+      predictor_label = "X",
+      vcov_type = "classical",
+      ci_level = 0.95
+    ),
+    class = "spicy_undefined_stat"
   )
-  cat_empty <- spicy:::fit_categorical_predictor_lm_rows(
-    y = c(1, 2),
-    x = factor(c("A", "A")),
-    weights = NULL,
-    outcome_name = "y",
-    outcome_label = "Y",
-    predictor_label = "G",
-    vcov_type = "classical",
-    contrast = "auto",
-    ci_level = 0.95
+  expect_warning(
+    cat_empty <- spicy:::fit_categorical_predictor_lm_rows(
+      y = c(1, 2),
+      x = factor(c("A", "A")),
+      weights = NULL,
+      outcome_name = "y",
+      outcome_label = "Y",
+      predictor_label = "G",
+      vcov_type = "classical",
+      contrast = "auto",
+      ci_level = 0.95
+    ),
+    class = "spicy_undefined_stat"
+  )
+  # Zero observations: the level template falls back to one NA row.
+  expect_warning(
+    cat_zero <- spicy:::fit_categorical_predictor_lm_rows(
+      y = numeric(0),
+      x = factor(character(0)),
+      weights = NULL,
+      outcome_name = "y",
+      outcome_label = "Y",
+      predictor_label = "G",
+      vcov_type = "classical",
+      contrast = "auto",
+      ci_level = 0.95
+    ),
+    class = "spicy_undefined_stat"
   )
 
   expect_true(all(is.na(num_empty$estimate)))
   expect_equal(num_empty$predictor_type, "continuous")
   expect_true(all(is.na(cat_empty$emmean)))
   expect_equal(cat_empty$predictor_type, "categorical")
+  expect_identical(cat_empty$level, "A")
+  expect_identical(nrow(cat_zero), 1L)
+  expect_true(is.na(cat_zero$level))
 })
 
 test_that("table_continuous_lm helper functions handle coercion and weights detection", {
@@ -769,7 +859,31 @@ test_that("table_continuous_lm low-level formatting helpers behave as expected",
     ),
     setNames(data.frame(1, 2, check.names = FALSE), c("LL", "UL"))
   )
-  hdr <- spicy:::build_header_rows_lm(c("Variable", "LL", "UL"), "95%")
+  # Neither bound present: legitimate (`ci = FALSE`), so the frame comes
+  # back untouched.
+  expect_named(
+    spicy:::rename_ci_cols_lm(
+      setNames(data.frame(1, 2, check.names = FALSE), c("Variable", "p")),
+      "95% CI LL",
+      "95% CI UL"
+    ),
+    c("Variable", "p")
+  )
+  # Exactly one bound present: the frame and the coverage disagree, and
+  # every consumer downstream is guarded by a `has_ci` that would read
+  # FALSE and hide the mismatch. It must fail here instead.
+  expect_error(
+    spicy:::rename_ci_cols_lm(
+      setNames(
+        data.frame(1, 2, check.names = FALSE),
+        c("Variable", "95% CI LL")
+      ),
+      "95% CI LL",
+      "95% CI UL"
+    ),
+    class = "spicy_internal_invariant"
+  )
+  hdr <- spicy:::build_header_rows_lm(c("Variable", "LL", "UL"), "95% CI")
   expect_equal(hdr$top, c("Variable", "95% CI", "95% CI"))
   expect_equal(hdr$bottom, c("", "LL", "UL"))
   expect_match(spicy:::get_delta_label_lm(block), "versicolor - setosa")
@@ -781,7 +895,113 @@ test_that("table_continuous_lm low-level formatting helpers behave as expected",
   expect_true(is.numeric(spicy:::get_r2_value_lm(block, "r2")))
   expect_equal(spicy:::format_number(c(1.2, NA), 1L, ","), c("1,2", ""))
   expect_equal(spicy:::format_p_value(NA_real_), "")
-  expect_equal(spicy:::format_p_value(0.045, ","), ",045")
+  expect_equal(spicy:::format_p_value(0.045, ","), "0,045")
+})
+
+test_that("a wide-character label does not split the console into panels", {
+  # `nchar()` counts CHARACTERS, the renderer lays out COLUMNS. A CJK
+  # label is twice as wide as it is long, so the padding decision used
+  # to over-estimate what the compact layout needed, keep the 2-char
+  # padding, and hand `spicy_print_table()` a table too wide for the
+  # console -- which then split it into panels the console had room
+  # for. Non-monotonic on top of it: the same table printed on ONE
+  # panel at width 92, on TWO at width 100, and on one again at 106.
+  d <- data.frame(
+    yy = c(1, 2, 3, 10, 11, 12),
+    g = factor(c("a", "a", "a", "b", "b", "b"))
+  )
+  attr(d$yy, "label") <- strrep("身", 10L)
+  render <- function(w) {
+    withr::with_options(list(width = w), {
+      invisible(capture.output(
+        out <- table_continuous_lm(d, select = yy, by = g)
+      ))
+      capture.output(print(out))
+    })
+  }
+  for (w in c(92L, 95L, 100L, 103L)) {
+    txt <- render(w)
+    # Exactly one header rule: one panel, not two.
+    expect_length(which(grepl("┼", txt, fixed = TRUE)), 1L)
+    expect_lte(max(crayon::col_nchar(txt, type = "width")), w)
+  }
+})
+
+test_that("the console and every engine print the registry header, not the key", {
+  # At the English default a label and its frozen key are the SAME
+  # string, so nothing else in the suite can tell whether this family
+  # reads the label layer at all -- the console goldens and the
+  # byte-identity corpus stay green with the whole wiring severed.
+  # Repainting the labels makes the difference visible.
+  #
+  # `.lm_spec_labels()` is mocked rather than `.lm_labels()` on purpose:
+  # it is the value `table_continuous_lm()` hands to the exporter as
+  # `labels =`, so the mock also dies if that argument is dropped, while
+  # a mock of the resolver would keep decorating a NULL carrier.
+  orig <- spicy:::.lm_spec_labels
+  local_mocked_bindings(
+    .lm_spec_labels = function(spec) {
+      out <- orig(spec)
+      stats::setNames(paste0("<", out, ">"), names(out))
+    },
+    .package = "spicy"
+  )
+  d <- data.frame(
+    y = c(1, 2, 3, 10, 11, 12),
+    g = factor(c("a", "a", "a", "b", "b", "b"))
+  )
+
+  # 1. Console (`display_labels` reaches spicy_print_table()).
+  txt <- withr::with_options(list(width = 200L), {
+    invisible(capture.output(out <- table_continuous_lm(d, select = y, by = g)))
+    capture.output(print(out))
+  })
+  expect_true(any(grepl("<Variable>", txt, fixed = TRUE)))
+  expect_true(any(grepl("<M (a)>", txt, fixed = TRUE)))
+  # The frozen key no longer stands alone in the header row.
+  expect_false(any(grepl(" Variable ", txt, fixed = TRUE)))
+
+  # 2. The two-row header builder: flextable / Word, Excel and the
+  #    clipboard all print `hdrs$top`.
+  skip_if_not_installed("flextable")
+  ft <- table_continuous_lm(d, select = y, by = g, output = "flextable")
+  hdr <- unlist(ft$header$dataset, use.names = FALSE)
+  expect_true(any(grepl("<Variable>", hdr, fixed = TRUE)))
+  expect_true(any(grepl("<M (a)>", hdr, fixed = TRUE)))
+
+  skip_if_not_installed("clipr")
+  cap <- new.env(parent = emptyenv())
+  with_mocked_bindings(
+    table_continuous_lm(d, select = y, by = g, output = "clipboard"),
+    clipr_available = function(...) TRUE,
+    write_clip = function(content, ...) {
+      cap$text <- content
+      invisible(content)
+    },
+    .package = "clipr"
+  )
+  expect_true(any(grepl("<M (a)>", cap$text, fixed = TRUE)))
+
+  # 3. The two engines that resolve column by column through `lab()`.
+  skip_if_not_installed("gt")
+  g_tbl <- table_continuous_lm(d, select = y, by = g, output = "gt")
+  spanners <- vapply(
+    as.data.frame(g_tbl[["_spanners"]])$spanner_label,
+    function(z) as.character(z)[[1L]],
+    character(1)
+  )
+  expect_true("<Variable>" %in% spanners)
+  expect_true("<M (a)>" %in% spanners)
+  # The gt column ids stay on the frozen keys: only the labels moved.
+  expect_true("Variable" %in% as.data.frame(g_tbl[["_boxhead"]])$var)
+
+  skip_if_not_installed("tinytable")
+  tt <- table_continuous_lm(d, select = y, by = g, output = "tinytable")
+  # `group_tt()` stores the spanner texts as the row of `group_data_j`;
+  # the names it keeps are the bare bound keys the exporter left.
+  spans <- unlist(tt@group_data_j, use.names = FALSE)
+  expect_true(any(grepl("<Variable>", spans, fixed = TRUE)))
+  expect_true(any(grepl("<M (a)>", spans, fixed = TRUE)))
 })
 
 test_that("table_continuous_lm internal covariance helper covers fallback branches", {
@@ -789,14 +1009,14 @@ test_that("table_continuous_lm internal covariance helper covers fallback branch
   fit_singular <- lm(mpg ~ wt + I(2 * wt), data = mtcars)
 
   expect_error(
-    spicy:::compute_lm_vcov(fit, "bogus"),
+    spicy:::compute_model_vcov(fit, "bogus"),
     "Unknown `vcov` type"
   )
 
   # sandwich::vcovHC handles rank-deficient fits gracefully by
   # returning the (rank x rank) matrix for the identifiable
   # coefficients, without raising a warning.
-  vc <- spicy:::compute_lm_vcov(fit_singular, "HC3")
+  vc <- spicy:::compute_model_vcov(fit_singular, "HC3")
   expect_true(is.matrix(vc))
   expect_equal(dim(vc), c(fit_singular$rank, fit_singular$rank))
   expect_false(anyNA(vc))
@@ -1325,13 +1545,29 @@ test_that("effect_size_ci = TRUE adds numeric LL/UL columns in wide raw", {
     output = "data.frame"
   )
 
+  # Decision 26: the wide raw bounds carry the LONG output's names,
+  # derived from the frozen `es_ci` token. The 0.12.x names are gone.
   expect_true(all(
-    c("d", "effect_size_ci_lower", "effect_size_ci_upper") %in% names(out)
+    c("d", "es_ci_lower", "es_ci_upper") %in% names(out)
   ))
-  expect_type(out$effect_size_ci_lower, "double")
-  expect_type(out$effect_size_ci_upper, "double")
-  expect_lt(out$effect_size_ci_lower[1], out$d[1])
-  expect_gt(out$effect_size_ci_upper[1], out$d[1])
+  expect_false(any(
+    c("effect_size_ci_lower", "effect_size_ci_upper") %in% names(out)
+  ))
+  expect_type(out$es_ci_lower, "double")
+  expect_type(out$es_ci_upper, "double")
+  expect_lt(out$es_ci_lower[1], out$d[1])
+  expect_gt(out$es_ci_upper[1], out$d[1])
+  # One quantity, one name: the wide bounds equal the long bounds.
+  lng <- table_continuous_lm(
+    df,
+    select = Sepal.Length,
+    by = Species,
+    effect_size = "d",
+    effect_size_ci = TRUE,
+    output = "long"
+  )
+  expect_identical(out$es_ci_lower[1], lng$es_ci_lower[1])
+  expect_identical(out$es_ci_upper[1], lng$es_ci_upper[1])
 })
 
 test_that("effect_size_ci = TRUE warns and resets when effect_size is none", {
@@ -1397,11 +1633,14 @@ test_that("degenerate models still preserve the predictor label", {
   )
   attr(df$g, "label") <- "Group label"
 
-  out <- table_continuous_lm(
-    df,
-    select = c(y_ok, y_bad),
-    by = g,
-    output = "long"
+  expect_warning(
+    out <- table_continuous_lm(
+      df,
+      select = c(y_ok, y_bad),
+      by = g,
+      output = "long"
+    ),
+    class = "spicy_undefined_stat"
   )
 
   expect_true(all(out$predictor_label == "Group label"))
@@ -1466,7 +1705,7 @@ test_that("as.data.frame.spicy_continuous_lm_table strips spicy classes/attrs", 
   )
   expect_equal(attr(df, "by_var"), "sex")
   # Same content: 28 columns + same number of rows.
-  expect_equal(ncol(df), 28L)
+  expect_equal(ncol(df), 29L) # + boot_n_valid (2026-07-09)
   expect_equal(nrow(df), nrow(out))
   # Original object is unchanged.
   expect_true(inherits(out, "spicy_continuous_lm_table"))
@@ -1482,7 +1721,7 @@ test_that("as_tibble.spicy_continuous_lm_table returns a tbl_df", {
   )
   tib <- tibble::as_tibble(out)
   expect_s3_class(tib, "tbl_df")
-  expect_equal(ncol(tib), 28L)
+  expect_equal(ncol(tib), 29L) # + boot_n_valid (2026-07-09)
   expect_equal(nrow(tib), nrow(out))
   expect_true(inherits(out, "spicy_continuous_lm_table"))
 })
@@ -1512,8 +1751,16 @@ test_that("tidy() returns one row per parameter for binary categorical by", {
   # Standard broom columns present.
   expect_true(all(
     c(
-      "outcome", "label", "term", "estimate_type", "estimate",
-      "std.error", "conf.low", "conf.high", "statistic", "p.value"
+      "outcome",
+      "label",
+      "term",
+      "estimate_type",
+      "estimate",
+      "std.error",
+      "conf.low",
+      "conf.high",
+      "statistic",
+      "p.value"
     ) %in%
       names(tidy_out)
   ))
@@ -1563,9 +1810,21 @@ test_that("glance() returns one row per outcome with model-level stats", {
   expect_equal(nrow(glance_out), 2L)
   expect_true(all(
     c(
-      "outcome", "label", "predictor_type", "test_type", "statistic",
-      "df", "df.residual", "p.value", "r.squared", "adj.r.squared",
-      "es_type", "es_value", "es_ci_lower", "es_ci_upper", "nobs"
+      "outcome",
+      "label",
+      "predictor_type",
+      "test_type",
+      "statistic",
+      "df",
+      "df.residual",
+      "p.value",
+      "r.squared",
+      "adj.r.squared",
+      "es_type",
+      "es_value",
+      "es_ci_lower",
+      "es_ci_upper",
+      "nobs"
     ) %in%
       names(glance_out)
   ))
@@ -1617,10 +1876,191 @@ test_that("format_p_value derives threshold from digits", {
 })
 
 test_that("format_p_value respects European decimal mark across digits", {
-  expect_equal(spicy:::format_p_value(0.045, ",", 3L), ",045")
-  expect_equal(spicy:::format_p_value(0.0008, ",", 3L), "<,001")
-  expect_equal(spicy:::format_p_value(0.00008, ",", 4L), "<,0001")
-  expect_equal(spicy:::format_p_value(0.005, ",", 2L), "<,01")
+  # A comma keeps the leading zero at every precision: ",045" is not a
+  # number (BIPM, SI brochure 9th ed., 5.4.4).
+  expect_equal(spicy:::format_p_value(0.045, ",", 3L), "0,045")
+  expect_equal(spicy:::format_p_value(0.0008, ",", 3L), "<0,001")
+  expect_equal(spicy:::format_p_value(0.00008, ",", 4L), "<0,0001")
+  expect_equal(spicy:::format_p_value(0.005, ",", 2L), "<0,01")
+})
+
+test_that("an explicit leading_zero still outranks the mark", {
+  # The pair's lever (`cross_tab()` has no style layer): it can force
+  # the drop back under a comma, and force the zero under a point.
+  expect_equal(
+    spicy:::format_p_value(0.045, ",", 3L, leading_zero = FALSE),
+    ",045"
+  )
+  expect_equal(
+    spicy:::format_p_value(0.045, ".", 3L, leading_zero = TRUE),
+    "0.045"
+  )
+})
+
+test_that("options(OutDec) cannot override a typed decimal_mark", {
+  # Beside the shared formatters because that is where the leak was:
+  # `formatC()` and `as.character()` both read the session option, so a
+  # user with `OutDec = ","` got commas out of a table that asked for a
+  # point -- the substitution that owns the mark looks for a dot and
+  # found none. The whole rendered surface is compared, not a sample.
+  d <- mtcars
+  d$am <- factor(d$am, labels = c("auto", "manual"))
+  d$cyl <- factor(d$cyl)
+  fit <- stats::lm(mpg ~ wt, data = d)
+  render <- function() {
+    c(
+      spicy:::format_number(37.226, 2L, "."),
+      spicy:::format_number(1.75e11, 2L, "."),
+      spicy:::format_p_value(0.045, "."),
+      spicy:::format_p_value(0.0004, "."),
+      spicy:::format_p_threshold(0.05, "."),
+      spicy:::.mark_decimal(2.84, "."),
+      spicy:::.ci_pct_str(0.975),
+      capture.output(print(
+        table_categorical(d, cyl, by = am, decimal_mark = ".")
+      )),
+      capture.output(print(
+        table_continuous(d, mpg, by = am, decimal_mark = ".")
+      )),
+      capture.output(print(
+        table_continuous_lm(d, mpg, by = am, decimal_mark = ".")
+      )),
+      capture.output(print(
+        table_outcome(d, outcome = mpg, select = am, decimal_mark = ".")
+      )),
+      capture.output(print(
+        table_regression(fit, stars = TRUE, decimal_mark = ".")
+      )),
+      capture.output(print(cross_tab(d, cyl, am, decimal_mark = "."))),
+      capture.output(print(freq(d, cyl, decimal_mark = ".")))
+    )
+  }
+  dot <- render()
+  expect_false(any(grepl("[0-9],[0-9]", dot)))
+  expect_identical(withr::with_options(list(OutDec = ","), render()), dot)
+
+  # And the comma the user DID ask for is unaffected by the option too.
+  comma <- function() {
+    c(
+      spicy:::format_number(37.226, 2L, ","),
+      spicy:::format_p_value(0.0004, ","),
+      spicy:::format_p_threshold(0.05, ","),
+      spicy:::.mark_decimal(2.84, ","),
+      capture.output(print(
+        table_regression(fit, stars = TRUE, decimal_mark = ",")
+      ))
+    )
+  }
+  expect_identical(withr::with_options(list(OutDec = ","), comma()), comma())
+})
+
+test_that("options(OutDec) cannot reach the renderers outside the shared formatters", {
+  # The witness above covers the five families, the pair and the shared
+  # formatters. Several renderers write their own `formatC()` and never
+  # pass through `format_number()`; a mutation reverting THEIR pins left
+  # the whole suite green, so they get a witness of their own here.
+  #
+  # One entry per pinned site:
+  #   the survey twin's cell formatter  R/table_categorical_svy_render.R
+  #   print.spicy_assoc_detail          R/assoc.R
+  #   print.spicy_assoc_table           R/assoc.R
+  #   format_signed(), change tokens    R/regression_nested.R
+  #   the fractional Satterthwaite df   R/table_continuous_lm_render.R
+  #   the GEE working-correlation alpha R/regression_titlefooter.R
+  #   the R-hat and MCSE cells          R/regression_render.R
+  skip_if_not_installed("survey")
+  d <- mtcars
+  d$am <- factor(d$am, labels = c("auto", "manual"))
+  d$cyl <- factor(d$cyl)
+  des <- survey::svydesign(ids = ~1, data = d, weights = ~1)
+  tbl <- table(d$cyl, d$am)
+  m1 <- stats::lm(mpg ~ wt, data = d)
+  m2 <- stats::lm(mpg ~ wt + hp, data = d)
+  # A fractional df2 is what sends `format_df()` down its `formatC()`
+  # branch; an integer one returns early through `as.character()`.
+  df_block <- data.frame(
+    test_type = "t",
+    df1 = 1,
+    df2 = 45.3,
+    statistic = 2,
+    predictor_type = "categorical",
+    estimate = c(NA, 1),
+    level = c("A", "B"),
+    stringsAsFactors = FALSE
+  )
+  cell <- function(field, value) {
+    spicy:::format_cell_value(
+      long_row = stats::setNames(list(value), field),
+      cs = list(token = field, fields = field),
+      stars_map = NULL,
+      digits = 2L,
+      p_digits = 3L,
+      effect_size_digits = 2L,
+      decimal_mark = ".",
+      show_columns = field
+    )
+  }
+  render <- function() {
+    c(
+      capture.output(print(
+        table_categorical_svy(des, select = cyl, by = am, decimal_mark = ".")
+      )),
+      capture.output(print(cramer_v(tbl, detail = TRUE))),
+      capture.output(print(assoc_measures(tbl))),
+      capture.output(print(
+        table_regression(list(m1, m2), nested = TRUE, decimal_mark = ".")
+      )),
+      spicy:::get_test_header_lm(df_block, TRUE, TRUE),
+      spicy:::.format_gee_for_frame(
+        list(
+          info = list(
+            class = "geeglm",
+            extras = list(gee_corstr = "exchangeable", gee_alpha = 0.077)
+          )
+        ),
+        "."
+      ),
+      cell("rhat", 1.0125),
+      cell("mcse", 0.0995)
+    )
+  }
+  dot <- render()
+  # Sentinel: an empty or all-blank render() would make the identity
+  # below vacuous.
+  expect_true(sum(nzchar(dot)) > 20L)
+  expect_false(any(grepl("[0-9],[0-9]", dot)))
+  expect_identical(withr::with_options(list(OutDec = ","), render()), dot)
+
+  # Every site that has a mark to follow follows the argument, not the
+  # session: same call, comma asked for, comma out under either option.
+  comma <- function() {
+    c(
+      capture.output(print(
+        table_categorical_svy(des, select = cyl, by = am, decimal_mark = ",")
+      )),
+      capture.output(print(
+        table_regression(list(m1, m2), nested = TRUE, decimal_mark = ",")
+      )),
+      spicy:::.format_gee_for_frame(
+        list(
+          info = list(
+            class = "geeglm",
+            extras = list(gee_corstr = "exchangeable", gee_alpha = 0.077)
+          )
+        ),
+        ","
+      )
+    )
+  }
+  com <- comma()
+  expect_identical(withr::with_options(list(OutDec = "."), comma()), com)
+  expect_identical(withr::with_options(list(OutDec = ","), comma()), com)
+  # The two sites this branch taught the mark, asserted by value: the
+  # change tokens used to read "+0.07" over cells reading "0,75".
+  expect_true(any(grepl("+0,07", com, fixed = TRUE)))
+  expect_true(any(grepl("+12,38", com, fixed = TRUE)))
+  expect_false(any(grepl("+0.07", com, fixed = TRUE)))
+  expect_true(any(grepl("alpha = 0,08", com, fixed = TRUE)))
 })
 
 test_that("format_p_value handles NA and falls back to default for bad digits", {
@@ -1716,7 +2156,7 @@ test_that("p_digits validates as a single positive integer", {
       by = sex,
       p_digits = 0
     ),
-    "positive integer"
+    "integer >= 1"
   )
   expect_error(
     table_continuous_lm(
@@ -1725,7 +2165,7 @@ test_that("p_digits validates as a single positive integer", {
       by = sex,
       p_digits = -1
     ),
-    "positive integer"
+    "integer >= 1"
   )
   expect_error(
     table_continuous_lm(
@@ -1734,7 +2174,7 @@ test_that("p_digits validates as a single positive integer", {
       by = sex,
       p_digits = c(2, 3)
     ),
-    "positive integer"
+    "integer >= 1"
   )
   expect_error(
     table_continuous_lm(
@@ -1743,7 +2183,7 @@ test_that("p_digits validates as a single positive integer", {
       by = sex,
       p_digits = NA
     ),
-    "positive integer"
+    "integer >= 1"
   )
 })
 
@@ -1903,7 +2343,8 @@ test_that("align argument validates", {
       by = sex,
       align = "bogus"
     ),
-    "should be one of"
+    "`align` must be one of",
+    class = "spicy_invalid_input"
   )
 })
 
@@ -2002,11 +2443,11 @@ test_that("wide raw column names match wide display when ci_level is custom", {
 
 # ---- categorical Wald F: tryCatch around solve(vc_sub, beta_sub) ----
 
-test_that("compute_lm_wald_test degrades to NA on a singular submatrix", {
+test_that("compute_wald_test degrades to NA on a singular submatrix", {
   fit <- stats::lm(Sepal.Length ~ Species, data = iris)
   vc <- stats::vcov(fit)
-  vc[, ] <- 0
-  result <- spicy:::compute_lm_wald_test(
+  vc[,] <- 0
+  result <- spicy:::compute_wald_test(
     fit,
     coef_idx_set = 2:3,
     vc = vc,
@@ -2253,8 +2694,11 @@ test_that("glance() preserves df.residual without integer truncation", {
     cluster_id = rep(1:50, 4)
   )
   res <- table_continuous_lm(
-    d, outcome, by = predictor,
-    vcov = "CR2", cluster = cluster_id
+    d,
+    outcome,
+    by = predictor,
+    vcov = "CR2",
+    cluster = cluster_id
   )
   long <- as.data.frame(res)
   raw_df2 <- long$df2[1]
@@ -2308,7 +2752,11 @@ test_that("get_test_header_lm formats fractional df with one decimal", {
   expect_equal(hdr, "t(45.3)")
 
   long$df2 <- 45.0
-  hdr_int <- spicy:::get_test_header_lm(long, show_statistic = TRUE, exact = TRUE)
+  hdr_int <- spicy:::get_test_header_lm(
+    long,
+    show_statistic = TRUE,
+    exact = TRUE
+  )
   expect_equal(hdr_int, "t(45)")
 })
 
@@ -2553,13 +3001,13 @@ test_that("boot_n validates as a positive integer >= 50", {
 
 # ---- additional coverage: SE helpers and edge cases ----
 
-test_that("compute_lm_vcov_bootstrap reproducibility and weighted refit", {
+test_that("compute_resample_vcov_bootstrap reproducibility and weighted refit", {
   set.seed(20260418)
   fit <- stats::lm(extra ~ group, data = sleep)
   set.seed(20260418)
-  vc1 <- spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 100)
+  vc1 <- spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 100)
   set.seed(20260418)
-  vc2 <- spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 100)
+  vc2 <- spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 100)
   expect_equal(vc1, vc2)
   expect_true(is.matrix(vc1))
   expect_equal(dim(vc1), c(2L, 2L))
@@ -2568,40 +3016,49 @@ test_that("compute_lm_vcov_bootstrap reproducibility and weighted refit", {
   w <- stats::runif(nrow(sleep), 0.5, 1.5)
   fit_w <- stats::lm(extra ~ group, data = sleep, weights = w)
   set.seed(20260418)
-  vc_w <- spicy:::compute_lm_vcov_bootstrap(fit_w, boot_n = 100, weights = w)
+  vc_w <- spicy:::compute_resample_vcov_bootstrap(
+    fit_w,
+    boot_n = 100,
+    weights = w
+  )
   expect_true(is.matrix(vc_w))
   expect_equal(dim(vc_w), c(2L, 2L))
 })
 
-test_that("compute_lm_vcov_jackknife reproduces the leave-one-out variance", {
+test_that("compute_resample_vcov_jackknife reproduces the leave-one-out variance", {
   fit <- stats::lm(extra ~ group, data = sleep)
-  vc <- spicy:::compute_lm_vcov_jackknife(fit)
+  vc <- spicy:::compute_resample_vcov_jackknife(fit)
   expect_true(is.matrix(vc))
   expect_equal(dim(vc), c(2L, 2L))
   # Closed-form jackknife for the slope
-  jacks <- vapply(seq_len(nrow(sleep)), function(i) {
-    stats::coef(stats::lm(extra ~ group, data = sleep[-i, ]))[2]
-  }, numeric(1))
-  jack_var <- ((length(jacks) - 1) / length(jacks)) * sum((jacks - mean(jacks))^2)
+  jacks <- vapply(
+    seq_len(nrow(sleep)),
+    function(i) {
+      stats::coef(stats::lm(extra ~ group, data = sleep[-i, ]))[2]
+    },
+    numeric(1)
+  )
+  jack_var <- ((length(jacks) - 1) / length(jacks)) *
+    sum((jacks - mean(jacks))^2)
   expect_equal(vc[2, 2], jack_var, tolerance = 1e-8)
 })
 
-test_that("compute_lm_vcov dispatches by type and validates unknowns", {
+test_that("compute_model_vcov dispatches by type and validates unknowns", {
   fit <- stats::lm(extra ~ group, data = sleep)
   expect_equal(
-    spicy:::compute_lm_vcov(fit, "classical"),
+    spicy:::compute_model_vcov(fit, "classical"),
     stats::vcov(fit)
   )
-  vc_boot <- spicy:::compute_lm_vcov(fit, "bootstrap", boot_n = 100)
+  vc_boot <- spicy:::compute_model_vcov(fit, "bootstrap", boot_n = 100)
   expect_true(is.matrix(vc_boot))
-  vc_jack <- spicy:::compute_lm_vcov(fit, "jackknife")
+  vc_jack <- spicy:::compute_model_vcov(fit, "jackknife")
   expect_true(is.matrix(vc_jack))
   expect_error(
-    spicy:::compute_lm_vcov(fit, "BOGUS"),
+    spicy:::compute_model_vcov(fit, "BOGUS"),
     "Unknown `vcov` type"
   )
   expect_error(
-    spicy:::compute_lm_vcov(fit, "CR2"),
+    spicy:::compute_model_vcov(fit, "CR2"),
     "requires `cluster`"
   )
 })
@@ -2695,30 +3152,30 @@ test_that("get_test_header_lm covers all test_type branches", {
   expect_null(spicy:::get_test_header_lm(out_kgt2, FALSE, TRUE))
 })
 
-test_that("compute_lm_vcov_bootstrap warns on too few valid replicates", {
+test_that("compute_resample_vcov_bootstrap errors on too few valid replicates", {
   # Fit before mocking so the original fit succeeds; the mock then
-  # blocks every refit inside compute_lm_vcov_bootstrap.
+  # blocks every refit inside compute_resample_vcov_bootstrap.
+  # Pre-1.0: hard error (was a classical fallback under a "bootstrap"
+  # footer -- the footer lied about the estimator actually applied).
   fit <- stats::lm(extra ~ group, data = sleep)
   testthat::local_mocked_bindings(
-    lm = function(...) stop("synthetic refit failure"),
+    lm.wfit = function(...) stop("synthetic refit failure"),
     .package = "stats"
   )
-  msg <- tryCatch(
-    spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 100),
-    warning = function(w) conditionMessage(w)
+  expect_error(
+    spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 100),
+    class = "spicy_resampling_failed"
   )
-  expect_true(is.character(msg))
-  expect_match(msg, "replicates were valid")
 })
 
 # ---- end additional coverage ----
 
 # ---- coverage: more SE error paths and helper branches ----
 
-test_that("compute_lm_vcov_bootstrap cluster path produces a finite vcov", {
+test_that("compute_resample_vcov_bootstrap cluster path produces a finite vcov", {
   set.seed(20260418)
   fit <- stats::lm(extra ~ group, data = sleep)
-  vc <- spicy:::compute_lm_vcov_bootstrap(
+  vc <- spicy:::compute_resample_vcov_bootstrap(
     fit,
     cluster = sleep$ID,
     boot_n = 100
@@ -2728,59 +3185,61 @@ test_that("compute_lm_vcov_bootstrap cluster path produces a finite vcov", {
   expect_true(all(is.finite(vc)))
 })
 
-test_that("compute_lm_vcov_jackknife cluster path matches leave-one-out", {
+test_that("compute_resample_vcov_jackknife cluster path matches leave-one-out", {
   fit <- stats::lm(extra ~ group, data = sleep)
-  vc_obs <- spicy:::compute_lm_vcov_jackknife(fit)
-  vc_cl <- spicy:::compute_lm_vcov_jackknife(fit, cluster = sleep$ID)
+  vc_obs <- spicy:::compute_resample_vcov_jackknife(fit)
+  vc_cl <- spicy:::compute_resample_vcov_jackknife(fit, cluster = sleep$ID)
   expect_true(is.matrix(vc_obs))
   expect_true(is.matrix(vc_cl))
   expect_false(isTRUE(all.equal(vc_obs, vc_cl)))
 })
 
-test_that("compute_lm_vcov_jackknife falls back when too few replicates", {
+test_that("compute_resample_vcov_jackknife errors when too few replicates", {
   fit <- stats::lm(extra ~ group, data = sleep)
   testthat::local_mocked_bindings(
-    lm = function(...) stop("synthetic refit failure"),
+    lm.wfit = function(...) stop("synthetic refit failure"),
     .package = "stats"
   )
-  msg <- tryCatch(
-    spicy:::compute_lm_vcov_jackknife(fit),
-    warning = function(w) conditionMessage(w)
+  expect_error(
+    spicy:::compute_resample_vcov_jackknife(fit),
+    class = "spicy_resampling_failed"
   )
-  expect_match(msg, "fewer than 2 valid")
 })
 
-test_that("compute_lm_vcov errors for CR* without cluster and clubSandwich", {
+test_that("compute_model_vcov errors for CR* without cluster and clubSandwich", {
   fit <- stats::lm(extra ~ group, data = sleep)
   expect_error(
-    spicy:::compute_lm_vcov(fit, type = "CR2"),
+    spicy:::compute_model_vcov(fit, type = "CR2"),
     "requires `cluster`"
   )
 })
 
-test_that("compute_lm_vcov CR fallback warns when clubSandwich errors", {
+test_that("compute_model_vcov refuses when clubSandwich errors", {
+  # Was a spicy_fallback warning plus the classical matrix, which the
+  # caller then labelled cluster-robust (register n. 229).
   fit <- stats::lm(extra ~ group, data = sleep)
   testthat::local_mocked_bindings(
     vcovCR = function(...) stop("synthetic CR failure"),
     .package = "clubSandwich"
   )
   msg <- tryCatch(
-    spicy:::compute_lm_vcov(fit, type = "CR2", cluster = sleep$ID),
-    warning = function(w) conditionMessage(w)
+    spicy:::compute_model_vcov(fit, type = "CR2", cluster = sleep$ID),
+    error = function(e) conditionMessage(e)
   )
   expect_true(is.character(msg))
-  expect_match(msg, "Cluster-robust")
+  expect_match(msg, "CR2")
   expect_match(msg, "synthetic CR failure")
+  expect_match(msg, "clubSandwich::vcovCR()", fixed = TRUE)
 })
 
-test_that("compute_lm_coef_inference falls back when clubSandwich coef_test errors", {
+test_that("compute_coef_inference falls back when clubSandwich coef_test errors", {
   fit <- stats::lm(extra ~ group, data = sleep)
   vc <- clubSandwich::vcovCR(fit, type = "CR2", cluster = sleep$ID)
   testthat::local_mocked_bindings(
     coef_test = function(...) stop("synthetic coef_test failure"),
     .package = "clubSandwich"
   )
-  out <- spicy:::compute_lm_coef_inference(
+  out <- spicy:::compute_coef_inference(
     fit,
     coef_idx = 2L,
     vc = vc,
@@ -2793,14 +3252,14 @@ test_that("compute_lm_coef_inference falls back when clubSandwich coef_test erro
   expect_true(is.finite(out$se))
 })
 
-test_that("compute_lm_wald_test falls back when clubSandwich Wald_test errors", {
+test_that("compute_wald_test falls back when clubSandwich Wald_test errors", {
   fit <- stats::lm(Sepal.Length ~ Species, data = iris)
   vc <- clubSandwich::vcovCR(fit, type = "CR2", cluster = iris$Species)
   testthat::local_mocked_bindings(
     Wald_test = function(...) stop("synthetic Wald_test failure"),
     .package = "clubSandwich"
   )
-  out <- spicy:::compute_lm_wald_test(
+  out <- spicy:::compute_wald_test(
     fit,
     coef_idx_set = 2:3,
     vc = vc,
@@ -2811,9 +3270,9 @@ test_that("compute_lm_wald_test falls back when clubSandwich Wald_test errors", 
   expect_true(is.finite(out$statistic))
 })
 
-test_that("compute_lm_wald_test handles q == 0", {
+test_that("compute_wald_test handles q == 0", {
   fit <- stats::lm(extra ~ group, data = sleep)
-  out <- spicy:::compute_lm_wald_test(
+  out <- spicy:::compute_wald_test(
     fit,
     coef_idx_set = integer(0),
     vc = stats::vcov(fit),
@@ -2850,6 +3309,7 @@ test_that("table_continuous_lm errors clearly on bad cluster + vcov combinations
     ),
     "cluster.*only used"
   )
+  skip_if_not_installed("clubSandwich")
   expect_error(
     table_continuous_lm(
       sochealth,
@@ -2916,11 +3376,20 @@ test_that("compute_lm_omega2 returns NA when sums of squares are degenerate", {
   # Constant outcome -> SS_total = 0 -> omega2 not defined.
   df <- data.frame(y = rep(5, 10), x = factor(rep(c("A", "B"), each = 5)))
   fit <- stats::lm(y ~ x, data = df)
-  expect_equal(spicy:::compute_lm_omega2(fit, df_effect = 1L, df_resid = 8L), NA_real_)
+  expect_equal(
+    spicy:::compute_lm_omega2(fit, df_effect = 1L, df_resid = 8L),
+    NA_real_
+  )
   # Negative df_effect rejected.
-  expect_equal(spicy:::compute_lm_omega2(fit, df_effect = 0L, df_resid = 8L), NA_real_)
+  expect_equal(
+    spicy:::compute_lm_omega2(fit, df_effect = 0L, df_resid = 8L),
+    NA_real_
+  )
   # Negative df_resid rejected.
-  expect_equal(spicy:::compute_lm_omega2(fit, df_effect = 1L, df_resid = 0L), NA_real_)
+  expect_equal(
+    spicy:::compute_lm_omega2(fit, df_effect = 1L, df_resid = 0L),
+    NA_real_
+  )
 })
 
 # ---- end coverage edge cases ----
@@ -3018,11 +3487,10 @@ test_that("pick_es_value_lm fails fast on unknown effect_size", {
   expect_equal(spicy:::pick_es_value_lm(ms, "g"), 0.45)
 })
 
-test_that("compute_lm_vcov falls back to classical vcov when sandwich errors", {
-  # The defensive fallback in compute_lm_vcov (warn + return classical
-  # vcov) is reached only when sandwich::vcovHC() itself errors. We
-  # mock a failure to verify the fallback path emits a clear sprintf
-  # warning and returns a usable (possibly-NA) matrix.
+test_that("compute_model_vcov refuses when sandwich errors", {
+  # The branch is reached only when sandwich::vcovHC() itself errors. It
+  # used to warn and return the classical matrix, which the caller then
+  # labelled robust (register n. 229); it now refuses and says why.
   testthat::local_mocked_bindings(
     vcovHC = function(x, type, ...) stop("synthetic test failure"),
     .package = "sandwich"
@@ -3030,22 +3498,22 @@ test_that("compute_lm_vcov falls back to classical vcov when sandwich errors", {
 
   fit <- stats::lm(mpg ~ wt, data = mtcars)
   msg <- tryCatch(
-    spicy:::compute_lm_vcov(fit, "HC4m"),
-    warning = function(w) conditionMessage(w)
+    spicy:::compute_model_vcov(fit, "HC4m"),
+    error = function(e) conditionMessage(e)
   )
 
   expect_true(is.character(msg))
-  expect_match(msg, "Robust `vcov = \"HC4m\"`")
+  expect_match(msg, "`vcov = \"HC4m\"`", fixed = TRUE)
   expect_match(msg, "synthetic test failure")
-  # cli-style bullet wording: "Falling back to the classical OLS variance"
-  expect_match(msg, "Falling back to the classical OLS variance")
+  expect_match(msg, "sandwich::vcovHC()", fixed = TRUE)
+  expect_false(grepl("Falling back", msg, fixed = TRUE))
 })
 
-test_that("compute_lm_vcov matches sandwich::vcovHC numerically", {
+test_that("compute_model_vcov matches sandwich::vcovHC numerically", {
   fit <- stats::lm(mpg ~ wt + cyl, data = mtcars)
   for (type in c("HC0", "HC1", "HC2", "HC3", "HC4", "HC4m", "HC5")) {
     expect_equal(
-      spicy:::compute_lm_vcov(fit, type),
+      spicy:::compute_model_vcov(fit, type),
       sandwich::vcovHC(fit, type = type),
       info = paste0("vcov type = ", type)
     )
@@ -3062,6 +3530,7 @@ test_that("table_continuous_lm clipboard output can be exercised with a mocked w
   captured <- NULL
 
   local_mocked_bindings(
+    clipr_available = function(...) TRUE,
     write_clip = function(text, ...) {
       captured <<- text
       invisible(text)
@@ -3128,17 +3597,17 @@ test_that("resolve_cluster_argument rejects non-atomic resolved value", {
   )
 })
 
-# ---- coverage: compute_lm_vcov dispatch ----
+# ---- coverage: compute_model_vcov dispatch ----
 
-test_that("compute_lm_vcov errors clearly on unknown vcov type", {
+test_that("compute_model_vcov errors clearly on unknown vcov type", {
   fit <- stats::lm(mpg ~ wt, data = mtcars)
   expect_error(
-    spicy:::compute_lm_vcov(fit, type = "BOGUS"),
+    spicy:::compute_model_vcov(fit, type = "BOGUS"),
     "Unknown `vcov` type"
   )
 })
 
-test_that("compute_lm_vcov simulates clubSandwich missing for CR types", {
+test_that("compute_model_vcov simulates clubSandwich missing for CR types", {
   fit <- stats::lm(extra ~ group, data = sleep)
   testthat::local_mocked_bindings(
     requireNamespace = function(package, ...) {
@@ -3147,7 +3616,7 @@ test_that("compute_lm_vcov simulates clubSandwich missing for CR types", {
     .package = "base"
   )
   expect_error(
-    spicy:::compute_lm_vcov(
+    spicy:::compute_model_vcov(
       fit,
       type = "CR2",
       cluster = sleep$ID
@@ -3158,32 +3627,32 @@ test_that("compute_lm_vcov simulates clubSandwich missing for CR types", {
 
 # ---- coverage: bootstrap warnings ----
 
-test_that("compute_lm_vcov_bootstrap warns when fewer than 10 valid replicates", {
+test_that("compute_resample_vcov_bootstrap errors when fewer than 10 valid replicates", {
   fit <- stats::lm(mpg ~ wt, data = mtcars)
-  # Force every refit to fail by mocking lm so 0 replicates succeed.
+  # Force every refit to fail by mocking lm.wfit so 0 replicates succeed.
   testthat::local_mocked_bindings(
-    lm = function(...) stop("synthetic lm failure"),
+    lm.wfit = function(...) stop("synthetic lm failure"),
     .package = "stats"
   )
-  msg <- tryCatch(
-    spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 20L),
-    warning = function(w) conditionMessage(w)
+  err <- tryCatch(
+    spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 20L),
+    spicy_resampling_failed = function(e) e
   )
-  expect_match(msg, "only 0 / 20 replicates were valid")
-  expect_match(msg, "unreliable")
+  expect_s3_class(err, "spicy_resampling_failed")
+  expect_match(conditionMessage(err), "only 0 of 20 replicates")
 })
 
-test_that("compute_lm_vcov_bootstrap warns when over half of replicates fail", {
+test_that("compute_resample_vcov_bootstrap warns when over half of replicates fail", {
   fit <- stats::lm(mpg ~ wt, data = mtcars)
-  real_lm <- stats::lm
+  real_lm_wfit <- stats::lm.wfit
   call_count <- 0L
   # Make ~75% of bootstrap refits fail (still leave > 10 valid so we
   # exercise the n_valid < boot_n/2 warning branch, not the < 10 branch).
   testthat::local_mocked_bindings(
-    lm = function(...) {
+    lm.wfit = function(...) {
       call_count <<- call_count + 1L
       if (call_count %% 4L == 0L) {
-        return(real_lm(...))
+        return(real_lm_wfit(...))
       }
       stop("synthetic lm failure")
     },
@@ -3191,7 +3660,7 @@ test_that("compute_lm_vcov_bootstrap warns when over half of replicates fail", {
   )
   withr::with_seed(123, {
     msg <- tryCatch(
-      spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 60L),
+      spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 60L),
       warning = function(w) conditionMessage(w)
     )
   })
@@ -3216,24 +3685,33 @@ test_that("get_test_header_lm returns NULL when test_type column is all NA", {
 test_that("get_test_header_lm returns plain z / chi^2 / t / F when df not available", {
   # z asymptotic
   block_z <- data.frame(
-    test_type = "z", df1 = 1L, df2 = NA_real_,
-    predictor_type = "continuous", level = NA_character_,
+    test_type = "z",
+    df1 = 1L,
+    df2 = NA_real_,
+    predictor_type = "continuous",
+    level = NA_character_,
     estimate = 1
   )
   expect_equal(spicy:::get_test_header_lm(block_z), "z")
 
   # chi^2 with no df1
   block_c <- data.frame(
-    test_type = "chi2", df1 = NA_integer_, df2 = NA_real_,
-    predictor_type = "categorical", level = c("a", "b"),
+    test_type = "chi2",
+    df1 = NA_integer_,
+    df2 = NA_real_,
+    predictor_type = "categorical",
+    level = c("a", "b"),
     estimate = c(NA, 1)
   )
   expect_equal(spicy:::get_test_header_lm(block_c), "χ²")
 
   # chi^2 with exact = FALSE -> bare "χ²"
   block_c2 <- data.frame(
-    test_type = "chi2", df1 = 2L, df2 = NA_real_,
-    predictor_type = "categorical", level = c("a", "b"),
+    test_type = "chi2",
+    df1 = 2L,
+    df2 = NA_real_,
+    predictor_type = "categorical",
+    level = c("a", "b"),
     estimate = c(NA, 1)
   )
   expect_equal(
@@ -3243,16 +3721,22 @@ test_that("get_test_header_lm returns plain z / chi^2 / t / F when df not availa
 
   # t with no df2
   block_t <- data.frame(
-    test_type = "t", df1 = 1L, df2 = NA_real_,
-    predictor_type = "continuous", level = NA_character_,
+    test_type = "t",
+    df1 = 1L,
+    df2 = NA_real_,
+    predictor_type = "continuous",
+    level = NA_character_,
     estimate = 1
   )
   expect_equal(spicy:::get_test_header_lm(block_t), "t")
 
   # F with no df1/df2
   block_f <- data.frame(
-    test_type = "F", df1 = NA_integer_, df2 = NA_real_,
-    predictor_type = "categorical", level = c("a", "b"),
+    test_type = "F",
+    df1 = NA_integer_,
+    df2 = NA_real_,
+    predictor_type = "categorical",
+    level = c("a", "b"),
     estimate = c(NA, 1)
   )
   expect_equal(spicy:::get_test_header_lm(block_f), "F")
@@ -3261,7 +3745,8 @@ test_that("get_test_header_lm returns plain z / chi^2 / t / F when df not availa
 test_that("get_test_header_lm returns the raw test_type for unknown labels", {
   block <- data.frame(
     test_type = "weirdo",
-    df1 = NA_integer_, df2 = NA_real_,
+    df1 = NA_integer_,
+    df2 = NA_real_,
     predictor_type = "continuous",
     level = NA_character_,
     estimate = 1
@@ -3295,7 +3780,11 @@ test_that("compute_lm_omega2 returns NA when y is non-numeric", {
 test_that("compute_smd_ci_lm returns NA when slope is not finite or x not factor", {
   # Numeric predictor (not a factor) -> NA
   fit_num <- stats::lm(mpg ~ wt, data = mtcars)
-  out <- spicy:::compute_smd_ci_lm(fit_num, ci_level = 0.95, hedges_correct = FALSE)
+  out <- spicy:::compute_smd_ci_lm(
+    fit_num,
+    ci_level = 0.95,
+    hedges_correct = FALSE
+  )
   expect_equal(out, c(NA_real_, NA_real_))
 
   # Factor predictor with > 2 levels -> NA
@@ -3335,12 +3824,15 @@ test_that("table_continuous_lm renders empty cells when n / weighted_n are NA", 
     y_short = c(1, NA, NA, NA, NA, NA),
     g = factor(rep(c("a", "b"), 3))
   )
-  out <- table_continuous_lm(
-    df,
-    select = y_short,
-    by = g,
-    output = "data.frame",
-    show_weighted_n = FALSE
+  expect_warning(
+    out <- table_continuous_lm(
+      df,
+      select = y_short,
+      by = g,
+      output = "data.frame",
+      show_weighted_n = FALSE
+    ),
+    class = "spicy_undefined_stat"
   )
   expect_s3_class(out, "data.frame")
   # n column for empty row is "" rather than a number
@@ -3353,13 +3845,16 @@ test_that("table_continuous_lm with show_weighted_n = TRUE renders blank weighte
     g = factor(rep(c("a", "b"), 3)),
     w = c(1, 1, 1, 1, 1, 1)
   )
-  out <- table_continuous_lm(
-    df,
-    select = y_short,
-    by = g,
-    weights = w,
-    output = "data.frame",
-    show_weighted_n = TRUE
+  expect_warning(
+    out <- table_continuous_lm(
+      df,
+      select = y_short,
+      by = g,
+      weights = w,
+      output = "data.frame",
+      show_weighted_n = TRUE
+    ),
+    class = "spicy_undefined_stat"
   )
   expect_s3_class(out, "data.frame")
   expect_true("Weighted n" %in% names(out))
@@ -3378,9 +3873,9 @@ test_that("table_continuous_lm gt output is rendered (decimal align default)", {
   expect_s3_class(out, "gt_tbl")
 })
 
-test_that("table_continuous_lm gt output respects align = 'center' / 'right' / 'auto'", {
+test_that("table_continuous_lm gt output respects align = 'center' / 'right'", {
   skip_if_not_installed("gt")
-  for (al in c("center", "right", "auto")) {
+  for (al in c("center", "right")) {
     out <- table_continuous_lm(
       sochealth,
       select = wellbeing_score,
@@ -3392,9 +3887,9 @@ test_that("table_continuous_lm gt output respects align = 'center' / 'right' / '
   }
 })
 
-test_that("table_continuous_lm tinytable output respects align = 'center' / 'right' / 'auto'", {
+test_that("table_continuous_lm tinytable output respects align = 'center' / 'right'", {
   skip_if_not_installed("tinytable")
-  for (al in c("center", "right", "auto")) {
+  for (al in c("center", "right")) {
     out <- table_continuous_lm(
       sochealth,
       select = wellbeing_score,
@@ -3417,9 +3912,9 @@ test_that("table_continuous_lm flextable output is rendered (decimal default)", 
   expect_s3_class(out, "flextable")
 })
 
-test_that("table_continuous_lm flextable output respects align = 'center' / 'right' / 'auto'", {
+test_that("table_continuous_lm flextable output respects align = 'center' / 'right'", {
   skip_if_not_installed("flextable")
-  for (al in c("center", "right", "auto")) {
+  for (al in c("center", "right")) {
     out <- table_continuous_lm(
       sochealth,
       select = wellbeing_score,
@@ -3523,67 +4018,86 @@ test_that("table_continuous_lm: numeric predictor + weights exercises weighted l
 })
 
 test_that("fit_categorical_predictor_lm_rows handles df_resid <= 0 (perfect fit)", {
-  # Perfect fit: 3 observations, 3 levels => df.residual = 0; the qnorm
-  # fallback at line 1382 fires. Use vcov = "classical" to avoid CR
-  # complications; the function still returns rows without erroring.
-  out <- spicy:::fit_categorical_predictor_lm_rows(
-    y = c(1, 2, 3),
-    x = factor(c("a", "b", "c")),
-    weights = NULL,
-    outcome_name = "y",
-    outcome_label = "y",
-    predictor_label = "g",
-    vcov_type = "classical",
-    contrast = "treatment",
-    ci_level = 0.95,
-    effect_size = "none"
+  # Perfect fit: 3 observations, 3 levels => df.residual = 0. The
+  # saturated-fit degradation (audit phase 2, finding 32) warns with a
+  # classed condition and blanks the inferential columns to NA; the
+  # function still returns rows without erroring.
+  expect_warning(
+    out <- spicy:::fit_categorical_predictor_lm_rows(
+      y = c(1, 2, 3),
+      x = factor(c("a", "b", "c")),
+      weights = NULL,
+      outcome_name = "y",
+      outcome_label = "y",
+      predictor_label = "g",
+      vcov_type = "classical",
+      contrast = "treatment",
+      ci_level = 0.95,
+      effect_size = "none"
+    ),
+    class = "spicy_undefined_stat"
   )
   expect_s3_class(out, "data.frame")
   expect_equal(nrow(out), 3L)
+  expect_true(all(is.na(out$emmean_se)))
 })
 
-test_that("compute_lm_vcov HC fallback returns the classical vcov after warning", {
+test_that("a failed HC computation yields no matrix at all", {
   testthat::local_mocked_bindings(
     vcovHC = function(x, type, ...) stop("synthetic test failure"),
     .package = "sandwich"
   )
   fit <- stats::lm(mpg ~ wt, data = mtcars)
-  vc <- suppressWarnings(spicy:::compute_lm_vcov(fit, "HC4m"))
-  expect_true(is.matrix(vc))
-  expect_equal(vc, stats::vcov(fit))
+  expect_error(
+    spicy:::compute_model_vcov(fit, "HC4m"),
+    class = "spicy_unsupported_vcov"
+  )
+  got <- tryCatch(
+    spicy:::compute_model_vcov(fit, "HC4m"),
+    error = function(e) e
+  )
+  expect_false(is.matrix(got))
 })
 
-test_that("compute_lm_vcov CR fallback returns the classical vcov after warning", {
+test_that("a failed CR computation yields no matrix at all", {
   testthat::local_mocked_bindings(
     vcovCR = function(...) stop("synthetic CR failure"),
     .package = "clubSandwich"
   )
   fit <- stats::lm(extra ~ group, data = sleep)
-  vc <- suppressWarnings(
-    spicy:::compute_lm_vcov(fit, type = "CR2", cluster = sleep$ID)
+  expect_error(
+    spicy:::compute_model_vcov(fit, type = "CR2", cluster = sleep$ID),
+    class = "spicy_unsupported_vcov"
   )
-  expect_true(is.matrix(vc))
-  expect_equal(vc, stats::vcov(fit))
+  got <- tryCatch(
+    spicy:::compute_model_vcov(fit, type = "CR2", cluster = sleep$ID),
+    error = function(e) e
+  )
+  expect_false(is.matrix(got))
 })
 
-test_that("compute_lm_vcov_bootstrap fallback returns the classical vcov when 0 valid replicates", {
+test_that("compute_resample_vcov_bootstrap errors when 0 valid replicates", {
   fit <- stats::lm(mpg ~ wt, data = mtcars)
   testthat::local_mocked_bindings(
-    lm = function(...) stop("synthetic lm failure"),
+    lm.wfit = function(...) stop("synthetic lm failure"),
     .package = "stats"
   )
-  vc <- suppressWarnings(spicy:::compute_lm_vcov_bootstrap(fit, boot_n = 5L))
-  expect_equal(vc, stats::vcov(fit))
+  expect_error(
+    spicy:::compute_resample_vcov_bootstrap(fit, boot_n = 5L),
+    class = "spicy_resampling_failed"
+  )
 })
 
-test_that("compute_lm_vcov_jackknife fallback returns the classical vcov when 0 valid replicates", {
+test_that("compute_resample_vcov_jackknife errors when 0 valid replicates", {
   fit <- stats::lm(mpg ~ wt, data = mtcars)
   testthat::local_mocked_bindings(
-    lm = function(...) stop("synthetic lm failure"),
+    lm.wfit = function(...) stop("synthetic lm failure"),
     .package = "stats"
   )
-  vc <- suppressWarnings(spicy:::compute_lm_vcov_jackknife(fit))
-  expect_equal(vc, stats::vcov(fit))
+  expect_error(
+    spicy:::compute_resample_vcov_jackknife(fit),
+    class = "spicy_resampling_failed"
+  )
 })
 
 test_that("compute_lm_omega2 returns NA when weights length mismatches y / when sum(w) = 0", {
@@ -3611,7 +4125,7 @@ test_that("compute_lm_omega2 returns NA when sum of weights is non-positive", {
   )
 })
 
-test_that("compute_lm_coef_inference uses qnorm CI when df is not finite (CR path)", {
+test_that("compute_coef_inference uses qnorm CI when df is not finite (CR path)", {
   fit <- stats::lm(extra ~ group, data = sleep)
   vc <- clubSandwich::vcovCR(fit, type = "CR2", cluster = sleep$ID)
   testthat::local_mocked_bindings(
@@ -3628,7 +4142,7 @@ test_that("compute_lm_coef_inference uses qnorm CI when df is not finite (CR pat
     },
     .package = "clubSandwich"
   )
-  out <- spicy:::compute_lm_coef_inference(
+  out <- spicy:::compute_coef_inference(
     fit,
     coef_idx = 2L,
     vc = vc,
@@ -3639,10 +4153,10 @@ test_that("compute_lm_coef_inference uses qnorm CI when df is not finite (CR pat
   expect_true(is.finite(out$ci_lower))
 })
 
-test_that("compute_lm_coef_inference uses qnorm CI when df.residual <= 0 (classical fallback)", {
+test_that("compute_coef_inference uses qnorm CI when df.residual <= 0 (classical fallback)", {
   # Perfect-fit lm: df.residual = 0 -> qnorm critical value branch
   fit <- stats::lm(c(1, 2, 3) ~ factor(c("a", "b", "c")))
-  out <- spicy:::compute_lm_coef_inference(
+  out <- spicy:::compute_coef_inference(
     fit,
     coef_idx = 2L,
     vc = stats::vcov(fit),
@@ -3651,14 +4165,14 @@ test_that("compute_lm_coef_inference uses qnorm CI when df.residual <= 0 (classi
   expect_equal(out$df, 0)
 })
 
-test_that("compute_lm_wald_test: clubSandwich constrain_zero failure falls through to classical Wald", {
+test_that("compute_wald_test: clubSandwich constrain_zero failure falls through to classical Wald", {
   fit <- stats::lm(Sepal.Length ~ Species, data = iris)
   vc <- clubSandwich::vcovCR(fit, type = "CR2", cluster = iris$Species)
   testthat::local_mocked_bindings(
     constrain_zero = function(...) stop("synthetic constrain_zero failure"),
     .package = "clubSandwich"
   )
-  out <- spicy:::compute_lm_wald_test(
+  out <- spicy:::compute_wald_test(
     fit,
     coef_idx_set = 2:3,
     vc = vc,
@@ -3686,7 +4200,11 @@ test_that("export_continuous_lm_table errors when required Suggests packages are
       display_df = display_df,
       output = out,
       ci_level = 0.95,
-      excel_path = if (identical(out, "excel")) tempfile(fileext = ".xlsx") else NULL,
+      excel_path = if (identical(out, "excel")) {
+        tempfile(fileext = ".xlsx")
+      } else {
+        NULL
+      },
       excel_sheet = "Sheet1",
       clipboard_delim = "\t",
       word_path = NULL
@@ -3696,4 +4214,956 @@ test_that("export_continuous_lm_table errors when required Suggests packages are
       "Install package"
     )
   }
+})
+
+# ---- ordered and labelled by (audit phase 2: findings 11/19/20/21/25/26) ----
+
+test_that("ordered by: emmeans are the group means and match an unordered-fit oracle", {
+  # sochealth$education / $age_group are ordered factors. The fit used
+  # to keep contr.poly while the prediction grid was rebuilt as a plain
+  # factor, silently multiplying treatment-coded columns against
+  # .L / .Q coefficients (findings 11 / 19).
+  cc <- !is.na(sochealth$bmi) & !is.na(sochealth$education)
+  out <- table_continuous_lm(
+    sochealth,
+    select = bmi,
+    by = education,
+    output = "long"
+  )
+  expect_identical(out$level, levels(sochealth$education))
+  # Without covariates the emmean at each level IS the group mean.
+  expect_equal(
+    out$emmean,
+    as.vector(tapply(sochealth$bmi[cc], sochealth$education[cc], mean)),
+    tolerance = 1e-12
+  )
+  # SE, CI, and omnibus F match the same model fitted on an unordered
+  # factor (the documented treatment-contrast convention).
+  d_or <- data.frame(
+    y = sochealth$bmi[cc],
+    g = factor(
+      as.character(sochealth$education[cc]),
+      levels = levels(sochealth$education)
+    )
+  )
+  fit <- stats::lm(y ~ g, data = d_or)
+  pr <- stats::predict(
+    fit,
+    newdata = data.frame(g = factor(levels(d_or$g), levels = levels(d_or$g))),
+    se.fit = TRUE
+  )
+  expect_equal(out$emmean, unname(pr$fit), tolerance = 1e-12)
+  expect_equal(out$emmean_se, unname(pr$se.fit), tolerance = 1e-12)
+  expect_equal(
+    out$p.value[1],
+    stats::anova(fit)[["Pr(>F)"]][1],
+    tolerance = 1e-12
+  )
+
+  # Second real ordered predictor: age_group.
+  cc2 <- !is.na(sochealth$bmi) & !is.na(sochealth$age_group)
+  out2 <- table_continuous_lm(
+    sochealth,
+    select = bmi,
+    by = age_group,
+    output = "long"
+  )
+  expect_equal(
+    out2$emmean,
+    as.vector(tapply(sochealth$bmi[cc2], sochealth$age_group[cc2], mean)),
+    tolerance = 1e-12
+  )
+})
+
+test_that("ordered by with weights: emmeans are the weighted group means (vignette oracle)", {
+  cc <- !is.na(sochealth$bmi) &
+    !is.na(sochealth$education) &
+    !is.na(sochealth$weight)
+  out <- table_continuous_lm(
+    sochealth,
+    select = bmi,
+    by = education,
+    weights = weight,
+    output = "long"
+  )
+  w <- sochealth$weight[cc]
+  y <- sochealth$bmi[cc]
+  g <- sochealth$education[cc]
+  oracle <- vapply(
+    levels(g),
+    function(l) sum(w[g == l] * y[g == l]) / sum(w[g == l]),
+    numeric(1)
+  )
+  expect_equal(out$emmean, unname(oracle), tolerance = 1e-12)
+  # The values published by the vignette and the Rd example.
+  expect_equal(round(out$emmean, 3), c(27.852, 25.791, 24.225))
+})
+
+test_that("2-level ordered by: displayed difference is the full mean difference (lm oracle)", {
+  # A 2-level ordered factor used to display the contr.poly .L
+  # coefficient as the difference: exactly Delta_true / sqrt(2), with
+  # the CI shrunk by the same factor but an exact p (finding 20).
+  sh <- sochealth
+  sh$edu2 <- factor(
+    ifelse(sh$education == "Tertiary", "Tertiary", "Below"),
+    levels = c("Below", "Tertiary"),
+    ordered = TRUE
+  )
+  out <- table_continuous_lm(sh, select = bmi, by = edu2, output = "long")
+  cc <- !is.na(sh$bmi) & !is.na(sh$edu2)
+  d_un <- data.frame(
+    y = sh$bmi[cc],
+    g = factor(as.character(sh$edu2[cc]), levels = c("Below", "Tertiary"))
+  )
+  fit <- stats::lm(y ~ g, data = d_un)
+  expect_equal(out$estimate[2], unname(stats::coef(fit)[2]), tolerance = 1e-12)
+  expect_equal(
+    out$estimate_se[2],
+    summary(fit)$coefficients[2, 2],
+    tolerance = 1e-12
+  )
+  expect_equal(
+    c(out$estimate_ci_lower[2], out$estimate_ci_upper[2]),
+    unname(stats::confint(fit)[2, ]),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    out$p.value[2],
+    summary(fit)$coefficients[2, 4],
+    tolerance = 1e-12
+  )
+
+  # Covariate-adjusted variant: same contract on the adjusted fit.
+  out_adj <- table_continuous_lm(
+    sh,
+    select = bmi,
+    by = edu2,
+    covariates = age,
+    output = "long"
+  )
+  cc2 <- cc & !is.na(sh$age)
+  d_adj <- data.frame(
+    y = sh$bmi[cc2],
+    g = factor(as.character(sh$edu2[cc2]), levels = c("Below", "Tertiary")),
+    age = sh$age[cc2]
+  )
+  fit2 <- stats::lm(y ~ g + age, data = d_adj)
+  expect_equal(
+    out_adj$estimate[2],
+    unname(stats::coef(fit2)[2]),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    c(out_adj$estimate_ci_lower[2], out_adj$estimate_ci_upper[2]),
+    unname(stats::confint(fit2)[2, ]),
+    tolerance = 1e-12
+  )
+})
+
+test_that("ordered by with covariates: proportional emmeans match the G-computation oracle", {
+  cc <- stats::complete.cases(
+    sochealth[, c("bmi", "education", "age", "sex")]
+  )
+  out <- table_continuous_lm(
+    sochealth,
+    select = bmi,
+    by = education,
+    covariates = c(age, sex),
+    output = "long"
+  )
+  d_cc <- data.frame(
+    y = sochealth$bmi[cc],
+    x = factor(
+      as.character(sochealth$education[cc]),
+      levels = levels(sochealth$education)
+    ),
+    age = sochealth$age[cc],
+    sex = sochealth$sex[cc]
+  )
+  fit <- stats::lm(y ~ x + age + sex, data = d_cc)
+  oracle <- vapply(
+    levels(d_cc$x),
+    function(l) {
+      nd <- d_cc
+      nd$x <- factor(l, levels = levels(d_cc$x))
+      mean(stats::predict(fit, nd))
+    },
+    numeric(1)
+  )
+  expect_equal(out$emmean, unname(oracle), tolerance = 1e-10)
+})
+
+test_that("balanced adjustment with an ordered factor covariate matches emmeans exactly", {
+  # The balanced grid used to rebuild the ordered covariate as a plain
+  # factor: treatment columns against contr.poly coefficients
+  # (finding 21). emmeans::emmeans() is the external oracle for the
+  # equal-weight estimand.
+  skip_if_not_installed("emmeans")
+  out <- table_continuous_lm(
+    sochealth,
+    select = wellbeing_score,
+    by = sex,
+    covariates = c(age, education),
+    adjustment = "balanced",
+    output = "long"
+  )
+  cc <- stats::complete.cases(
+    sochealth[, c("wellbeing_score", "sex", "age", "education")]
+  )
+  fit <- stats::lm(
+    wellbeing_score ~ sex + age + education,
+    data = sochealth[cc, ]
+  )
+  emm <- as.data.frame(emmeans::emmeans(fit, "sex"))
+  expect_equal(out$emmean, emm$emmean, tolerance = 1e-10)
+  expect_equal(out$emmean_se, emm$SE, tolerance = 1e-10)
+  expect_equal(out$emmean_ci_lower, emm$lower.CL, tolerance = 1e-10)
+  expect_equal(out$emmean_ci_upper, emm$upper.CL, tolerance = 1e-10)
+})
+
+test_that("labelled by with value labels dispatches to the categorical path", {
+  # A haven labelled numeric with value labels used to pass
+  # is.numeric() and silently produce a slope on the codes
+  # (findings 25 / 26): non-significant slope vs a highly significant
+  # 3-group ANOVA on the same data.
+  skip_if_not_installed("haven")
+  d <- data.frame(y = c(10, 12, 11, 13, 20, 22, 21, 23, 12, 14, 13, 15))
+  d$gl3 <- haven::labelled(
+    rep(c(1, 2, 3), each = 4),
+    labels = c(Low = 1, Mid = 2, High = 3)
+  )
+  out <- table_continuous_lm(d, select = y, by = gl3, output = "long")
+  expect_identical(out$predictor_type, rep("categorical", 3L))
+  expect_identical(out$level, c("1", "2", "3"))
+  expect_equal(out$emmean, c(11.5, 21.5, 13.5), tolerance = 1e-12)
+  fit <- stats::lm(d$y ~ factor(rep(c(1, 2, 3), each = 4)))
+  expect_equal(
+    out$p.value[1],
+    stats::anova(fit)[["Pr(>F)"]][1],
+    tolerance = 1e-10
+  )
+})
+
+test_that("labelled_spss by with value labels forms groups and honors user_na", {
+  skip_if_not_installed("haven")
+  d <- data.frame(y = c(5, 6, 7, 10, 11, 12, 100, 200))
+  d$grp <- haven::labelled_spss(
+    c(1, 1, 1, 2, 2, 2, 9, 9),
+    na_values = 9,
+    labels = c(Low = 1, High = 2, Refused = 9)
+  )
+  out <- table_continuous_lm(d, select = y, by = grp, output = "long")
+  expect_identical(out$predictor_type, rep("categorical", 2L))
+  expect_identical(out$level, c("1", "2"))
+  expect_equal(out$emmean, c(6, 11), tolerance = 1e-12)
+  expect_equal(out$estimate[2], 5, tolerance = 1e-12)
+  expect_identical(out$n, rep(6L, 2L))
+  # user_na = FALSE keeps the declared 9s as a third group.
+  out_keep <- table_continuous_lm(
+    d,
+    select = y,
+    by = grp,
+    user_na = FALSE,
+    output = "long"
+  )
+  expect_identical(out_keep$level, c("1", "2", "9"))
+  expect_identical(out_keep$n, rep(8L, 3L))
+})
+
+test_that("labelled by without value labels stays a continuous regressor", {
+  skip_if_not_installed("haven")
+  d <- data.frame(y = c(10, 12, 11, 13, 20, 22, 21, 23, 12, 14, 13, 15))
+  d$gn <- haven::labelled(rep(c(1, 2, 3), each = 4))
+  out <- table_continuous_lm(d, select = y, by = gn, output = "long")
+  expect_identical(out$predictor_type, "continuous")
+  expect_identical(out$estimate_type, "slope")
+  fit <- stats::lm(d$y ~ rep(c(1, 2, 3), each = 4))
+  expect_equal(out$estimate, unname(stats::coef(fit)[2]), tolerance = 1e-12)
+})
+
+test_that("a factor covariate with a declared-but-empty level fits cleanly", {
+  # Audit phase 2, finding 22 (real fix): empty declared covariate
+  # levels are dropped at fit entry, so the table comes out correct
+  # with no error. Oracle: the same lm() on droplevels()-ed data.
+  # The align_design_to_coef() guard stays as a last resort (unit
+  # test in test-cov-lm_compute.R).
+  sh <- sochealth
+  sh$edu_empty <- factor(
+    as.character(sh$education),
+    levels = c(levels(sh$education), "PhD")
+  )
+  out <- table_continuous_lm(
+    sh,
+    select = wellbeing_score,
+    by = sex,
+    covariates = edu_empty,
+    output = "long"
+  )
+  fit <- stats::lm(
+    wellbeing_score ~ sex + droplevels(edu_empty),
+    data = sh
+  )
+  d_f <- sh
+  d_f$sex <- factor("Female", levels = levels(sh$sex))
+  d_m <- sh
+  d_m$sex <- factor("Male", levels = levels(sh$sex))
+  oracle <- c(
+    mean(stats::predict(fit, d_f)),
+    mean(stats::predict(fit, d_m))
+  )
+  expect_equal(out$emmean, oracle, tolerance = 1e-10)
+  expect_equal(
+    out$estimate[2],
+    unname(stats::coef(fit)[["sexMale"]]),
+    tolerance = 1e-12
+  )
+
+  # Balanced adjustment: oracle emmeans on the droplevels()-ed fit.
+  skip_if_not_installed("emmeans")
+  out_bal <- table_continuous_lm(
+    sh,
+    select = wellbeing_score,
+    by = sex,
+    covariates = edu_empty,
+    adjustment = "balanced",
+    output = "long"
+  )
+  sh2 <- sh
+  sh2$edu_empty <- droplevels(sh2$edu_empty)
+  fit2 <- stats::lm(wellbeing_score ~ sex + edu_empty, data = sh2)
+  emm <- as.data.frame(emmeans::emmeans(fit2, "sex"))
+  expect_equal(out_bal$emmean, emm$emmean, tolerance = 1e-8)
+})
+
+test_that("NA weights are excluded from the analytic sample as documented", {
+  # Audit phase 2, finding 14: `weights` with NA used to hit the
+  # finiteness gate (`!is.finite(NA)` is TRUE) and raise a hard error,
+  # making the documented row-exclusion contract unreachable.
+  d <- data.frame(
+    y = c(1, 2, 3, NA, 5, 6, 7, 8),
+    grp = factor(c("a", "a", NA, "b", "b", "b", "a", "b")),
+    w = c(1, 2, 1, 1, NA, 2, 1, 3)
+  )
+  out <- table_continuous_lm(
+    d,
+    select = y,
+    by = grp,
+    weights = w,
+    output = "long"
+  )
+  cc <- stats::complete.cases(d$y, d$grp, d$w)
+  fit <- stats::lm(y ~ grp, data = d[cc, ], weights = d$w[cc])
+  expect_equal(out$n, rep(sum(cc), 2L))
+  expect_equal(out$weighted_n, rep(sum(d$w[cc]), 2L))
+  expect_equal(
+    out$emmean,
+    unname(c(coef(fit)[1], coef(fit)[1] + coef(fit)[2])),
+    tolerance = 1e-10
+  )
+  expect_equal(
+    out$estimate[2],
+    unname(coef(fit)[2]),
+    tolerance = 1e-12
+  )
+  # Truly non-finite weights still error.
+  d_inf <- d
+  d_inf$w[5] <- Inf
+  expect_error(
+    table_continuous_lm(d_inf, select = y, by = grp, weights = w),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("rows dropped for missing by / weights are disclosed in the note", {
+  # Audit phase 2, findings 14 + 32: the family ledger convention.
+  d <- data.frame(
+    y = c(1, 2, 3, 4, 5, 6, 7, 8),
+    grp = factor(c("a", "a", NA, "b", "b", "b", "a", "b")),
+    w = c(1, 2, 1, 1, NA, 2, 1, 3)
+  )
+  out <- table_continuous_lm(d, select = y, by = grp, weights = w)
+  expect_equal(
+    attr(out, "missing_note"),
+    "Rows with missing grp removed: 1. Rows with missing w removed: 1."
+  )
+  printed <- paste(utils::capture.output(print(out)), collapse = "\n")
+  expect_match(printed, "Rows with missing grp removed: 1.", fixed = TRUE)
+  expect_match(printed, "Rows with missing w removed: 1.", fixed = TRUE)
+  # No missing by / weights -> no ledger line.
+  clean <- table_continuous_lm(
+    data.frame(y = rnorm(10), g = factor(rep(c("a", "b"), 5))),
+    select = y,
+    by = g
+  )
+  expect_null(attr(clean, "missing_note"))
+})
+
+test_that("proportional emmeans use the case weights (Stata margins)", {
+  # Audit phase 2, finding 23: the G-computation aggregation now
+  # weights the averaged predictions by the fit weights. Oracle:
+  # manual weighted mean of predictions, pinned at 1e-8.
+  set.seed(11)
+  n <- 80
+  d <- data.frame(
+    y = rnorm(n),
+    g = factor(rep(c("A", "B"), n / 2)),
+    age = rnorm(n, 50, 8),
+    edu = factor(sample(c("lo", "hi"), n, TRUE, prob = c(0.7, 0.3))),
+    w = runif(n, 0.2, 3)
+  )
+  d$y <- d$y + 0.5 * (d$g == "B") + 0.03 * d$age + 0.4 * (d$edu == "hi")
+  out <- table_continuous_lm(
+    d,
+    select = y,
+    by = g,
+    covariates = c(age, edu),
+    weights = w,
+    output = "long"
+  )
+  fit <- stats::lm(y ~ g + age + edu, data = d, weights = d$w)
+  d_a <- transform(d, g = factor("A", levels = c("A", "B")))
+  d_b <- transform(d, g = factor("B", levels = c("A", "B")))
+  oracle <- c(
+    stats::weighted.mean(stats::predict(fit, d_a), d$w),
+    stats::weighted.mean(stats::predict(fit, d_b), d$w)
+  )
+  expect_equal(out$emmean, oracle, tolerance = 1e-8)
+  # Unweighted proportional is unchanged (plain mean of predictions).
+  out_uw <- table_continuous_lm(
+    d,
+    select = y,
+    by = g,
+    covariates = c(age, edu),
+    output = "long"
+  )
+  fit_uw <- stats::lm(y ~ g + age + edu, data = d)
+  oracle_uw <- c(
+    mean(stats::predict(fit_uw, d_a)),
+    mean(stats::predict(fit_uw, d_b))
+  )
+  expect_equal(out_uw$emmean, oracle_uw, tolerance = 1e-10)
+})
+
+test_that("adjusted omega2 CI matches effectsize's partial omega2 CI", {
+  # Audit phase 2, finding 24: the partial omega^2 CI used to be the
+  # partial eta^2 CI (inversion at the raw F). Oracle: the
+  # effectsize::omega_squared(partial = TRUE) recipe -- inversion at
+  # the F-equivalent of the omega^2 point estimate, bounds mapped
+  # through ncp / (ncp + df2) via effectsize::F_to_eta2.
+  skip_if_not_installed("effectsize")
+  set.seed(7)
+  n <- 200
+  d <- data.frame(
+    y = rnorm(n),
+    x = factor(rep(c("A", "B"), n / 2)),
+    age = rnorm(n, 50, 10),
+    edu = factor(sample(c("lo", "mid", "hi"), n, TRUE))
+  )
+  d$y <- d$y + 0.4 * (d$x == "B") + 0.02 * d$age
+  out <- table_continuous_lm(
+    d,
+    select = y,
+    by = x,
+    covariates = c(age, edu),
+    effect_size = "omega2",
+    effect_size_ci = TRUE,
+    output = "long"
+  )
+  fit <- stats::lm(y ~ x + age + edu, data = d)
+  d1 <- stats::drop1(fit, scope = ~x, test = "F")
+  f_obs <- d1[["F value"]][2]
+  df1 <- d1[["Df"]][2]
+  df2 <- stats::df.residual(fit)
+  mse <- stats::deviance(fit) / df2
+  ss_focal <- f_obs * df1 * mse
+  om_p <- max(
+    0,
+    (ss_focal - df1 * mse) / (ss_focal + (stats::nobs(fit) - df1) * mse)
+  )
+  f_om <- (om_p / df1) / ((1 - om_p) / df2)
+  oracle_ci <- effectsize::F_to_eta2(
+    f_om,
+    df1,
+    df2,
+    ci = 0.95,
+    alternative = "two.sided"
+  )
+  expect_equal(out$es_value[1], om_p, tolerance = 1e-10)
+  # The two implementations solve the same noncentrality inversion
+  # with different root-finders (uniroot tol 1e-8 vs optim abstol
+  # 1e-9), so the bounds agree to ~1e-8 absolute, not machine
+  # precision.
+  expect_equal(out$es_ci_lower[1], oracle_ci$CI_low, tolerance = 1e-4)
+  expect_equal(out$es_ci_upper[1], oracle_ci$CI_high, tolerance = 1e-4)
+  # Pinned values (seed 7): guard against silent oracle drift.
+  expect_equal(out$es_value[1], 0.04367544, tolerance = 1e-6)
+  expect_equal(out$es_ci_lower[1], 0.00507754, tolerance = 1e-5)
+  expect_equal(out$es_ci_upper[1], 0.11213591, tolerance = 1e-5)
+})
+
+test_that("non-syntactic covariate names survive formula construction", {
+  # Audit phase 2, finding 28: covariate names like "co var" used to
+  # raise a raw parse error from reformulate().
+  set.seed(3)
+  d <- data.frame(
+    a = rnorm(20),
+    b = factor(rep(c("x", "y"), 10)),
+    cv = rnorm(20)
+  )
+  names(d) <- c("out come", "grp!", "co var")
+  out <- table_continuous_lm(
+    d,
+    select = `out come`,
+    by = `grp!`,
+    covariates = "co var",
+    output = "long"
+  )
+  d2 <- d
+  names(d2) <- c("y", "g", "cv")
+  fit <- stats::lm(y ~ g + cv, data = d2)
+  expect_equal(out$estimate[2], unname(coef(fit)[2]), tolerance = 1e-12)
+})
+
+test_that("a single-level by raises a classed, actionable error", {
+  # Audit phase 2, finding 32: an all-NA row used to be printed
+  # silently.
+  expect_error(
+    table_continuous_lm(
+      data.frame(y = rnorm(8), g = factor(rep("only", 8))),
+      select = y,
+      by = g,
+      output = "long"
+    ),
+    class = "spicy_invalid_data"
+  )
+  # One observed level after NA removal counts as single-level too.
+  expect_error(
+    table_continuous_lm(
+      data.frame(y = rnorm(4), g = factor(c("a", "a", NA, NA))),
+      select = y,
+      by = g,
+      output = "long"
+    ),
+    class = "spicy_invalid_data"
+  )
+})
+
+test_that("global options(contrasts=) does not alter categorical-by results", {
+  # Audit phase 2 delta, R1/R10: afex-style sessions set
+  # options(contrasts = c("contr.sum", "contr.poly")), which used to
+  # rename the lm() dummies ("x1" instead of "xb") and abort a binary
+  # `by` with a misleading internal-invariant error. The fit now pins
+  # explicit treatment contrasts on the focal factor.
+  d2 <- data.frame(
+    y = c(1, 2, 3, 10, 11, 12),
+    g = factor(rep(c("a", "b"), each = 3))
+  )
+  d3 <- data.frame(
+    y = c(1, 2, 3, 10, 11, 12, 20, 21, 22),
+    g = factor(rep(c("a", "b", "c"), each = 3))
+  )
+  withr::with_options(
+    list(contrasts = c("contr.sum", "contr.poly")),
+    {
+      out2 <- table_continuous_lm(d2, select = y, by = g, output = "long")
+      out3 <- table_continuous_lm(d3, select = y, by = g, output = "long")
+    }
+  )
+  expect_equal(
+    out2$emmean,
+    as.vector(tapply(d2$y, d2$g, mean)),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    out2$estimate[2],
+    as.vector(diff(tapply(d2$y, d2$g, mean))),
+    tolerance = 1e-12
+  )
+  expect_equal(
+    out3$emmean,
+    as.vector(tapply(d3$y, d3$g, mean)),
+    tolerance = 1e-12
+  )
+})
+
+test_that("an outcome left with one observed group degrades loudly", {
+  # Audit phase 2 delta, R4: per-outcome complete-case filtering that
+  # leaves a single observed group used to emit a silent all-NA row
+  # whose `level = NA` grew a spurious `M (NA)` column in the wide
+  # header of ALL outcomes.
+  d <- data.frame(
+    y1 = 1:5,
+    y2 = c(1, 2, 3, NA, NA),
+    g = factor(c("a", "a", "a", "b", "b"))
+  )
+  expect_warning(
+    out <- table_continuous_lm(d, select = c(y1, y2), by = g, output = "long"),
+    regexp = "y2",
+    class = "spicy_undefined_stat"
+  )
+  y2_rows <- out[out$variable == "y2", ]
+  expect_identical(y2_rows$level, c("a", "b"))
+  expect_true(all(is.na(y2_rows$emmean)))
+  expect_true(all(is.na(y2_rows$n)))
+  expect_false(anyNA(out$level))
+  expect_equal(out$emmean[out$variable == "y1"], c(2, 4.5))
+  wide <- suppressWarnings(
+    table_continuous_lm(d, select = c(y1, y2), by = g, output = "data.frame")
+  )
+  expect_true(all(c("M (a)", "M (b)") %in% names(wide)))
+  expect_false("M (NA)" %in% names(wide))
+})
+
+test_that("a degenerate numeric by degrades loudly per outcome", {
+  # Companion to the categorical branch of R4: a slope needs variance
+  # in `by` and at least two complete observations.
+  d <- data.frame(y = c(1.2, 3.4, 2.8, 4.1), x = rep(2, 4))
+  expect_warning(
+    out <- table_continuous_lm(d, select = y, by = x, output = "long"),
+    class = "spicy_undefined_stat"
+  )
+  expect_true(all(is.na(out$estimate)))
+  d2 <- data.frame(
+    y1 = c(1.2, 3.4, 2.8, 4.1),
+    y2 = c(1.5, NA, NA, NA),
+    x = c(1, 2, 3, 4)
+  )
+  expect_warning(
+    out2 <- table_continuous_lm(
+      d2,
+      select = c(y1, y2),
+      by = x,
+      output = "long"
+    ),
+    regexp = "y2",
+    class = "spicy_undefined_stat"
+  )
+  expect_true(is.na(out2$estimate[out2$variable == "y2"]))
+  expect_false(is.na(out2$estimate[out2$variable == "y1"]))
+})
+
+test_that("a saturated fit reports NA inference with a classed warning", {
+  # Audit phase 2, finding 32: one observation per group used to
+  # display NaN SEs and a misleading "z" test label.
+  d <- data.frame(y = c(3.1, 7.2), g = factor(c("m", "f")))
+  expect_warning(
+    out <- table_continuous_lm(d, select = y, by = g, output = "long"),
+    class = "spicy_undefined_stat"
+  )
+  expect_equal(out$emmean, c(7.2, 3.1))
+  expect_equal(out$estimate[2], -4.1, tolerance = 1e-12)
+  expect_true(all(is.na(out$emmean_se)))
+  expect_true(all(is.na(out$statistic)))
+  expect_true(all(is.na(out$p.value)))
+  expect_true(all(is.na(out$test_type)))
+  expect_false(any(vapply(out, function(col) any(is.nan(col)), logical(1))))
+})
+
+test_that("table_continuous_lm() rejects bit64::integer64 columns", {
+  i64 <- structure(
+    rep(c(4.94e-324, 9.88e-324), 10),
+    class = "integer64"
+  )
+  set.seed(7)
+  d <- data.frame(
+    y = rnorm(20),
+    g = factor(rep(c("a", "b"), 10)),
+    x = rnorm(20)
+  )
+  d$code <- i64
+  expect_error(
+    table_continuous_lm(d, y, by = code),
+    "integer64",
+    class = "spicy_invalid_data"
+  )
+  expect_error(
+    table_continuous_lm(d, code, by = g),
+    class = "spicy_invalid_data"
+  )
+  expect_error(
+    table_continuous_lm(d, y, by = g, covariates = code),
+    class = "spicy_invalid_data"
+  )
+  expect_error(
+    table_continuous_lm(d, y, by = g, weights = code),
+    class = "spicy_invalid_data"
+  )
+})
+
+
+# Phase 3 matrix – vignettes-news:align-auto-removed and
+# critic:pkgrd-broom-columns-stabilising (lot T4)
+
+test_that("align = 'auto' is removed from table_continuous_lm", {
+  expect_error(
+    table_continuous_lm(mtcars, select = "mpg", by = "am", align = "auto"),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("tidy/glance column sets are frozen (stabilising contract)", {
+  skip_if_not_installed("broom")
+  out <- table_continuous_lm(mtcars, select = "mpg", by = "am")
+  expect_identical(
+    names(broom::tidy(out)),
+    c(
+      "outcome",
+      "label",
+      "term",
+      "estimate_type",
+      "estimate",
+      "std.error",
+      "conf.low",
+      "conf.high",
+      "statistic",
+      "p.value"
+    )
+  )
+  expect_identical(
+    names(broom::glance(out)),
+    c(
+      "outcome",
+      "label",
+      "predictor_type",
+      "test_type",
+      "statistic",
+      "df",
+      "df.residual",
+      "p.value",
+      "r.squared",
+      "adj.r.squared",
+      "es_type",
+      "es_value",
+      "es_ci_lower",
+      "es_ci_upper",
+      "nobs",
+      "weighted_n"
+    )
+  )
+})
+
+test_that("balanced adjustment expands logical covariates like factors (no crash)", {
+  # Wave-2 review: a logical covariate under adjustment = "balanced"
+  # crashed with base R's "contrasts can be applied only to factors" --
+  # the column was frozen at its numeric mean while lm() had encoded it
+  # as a two-level factor (a `<name>TRUE` dummy in fit$contrasts).
+  # Balanced now expands FALSE/TRUE with equal weight, the emmeans
+  # convention.
+  skip_if_not_installed("emmeans")
+  d <- sochealth
+  d$active <- d$physical_activity == "Yes"
+  out <- table_continuous_lm(
+    d,
+    select = wellbeing_score,
+    by = education,
+    covariates = c(age, active),
+    adjustment = "balanced",
+    output = "data.frame"
+  )
+  expect_s3_class(out, "data.frame")
+  fit <- stats::lm(wellbeing_score ~ education + age + active, d)
+  em <- summary(emmeans::emmeans(fit, ~education))
+  got <- as.numeric(out[
+    1L,
+    c("M (Lower secondary)", "M (Upper secondary)", "M (Tertiary)")
+  ])
+  expect_equal(got, em$emmean, tolerance = 1e-6)
+})
+
+
+test_that("missing values are disclosed in the table note (decision 14)", {
+  d <- as.data.frame(sochealth)
+  d$bmi[1:57] <- NA
+  d$age[5:16] <- NA
+  d$sex[1:3] <- NA
+  n_bmi <- sum(is.na(d$bmi))
+  n_age <- sum(is.na(d$age))
+  # Per-variable counts for outcomes AND covariates, then the by rows
+  # -- the same ledger wording as table_continuous(). The n column
+  # shows the effect of the exclusions; the note shows the cause.
+  txt <- paste(
+    capture.output(print(suppressMessages(
+      table_continuous_lm(d, select = bmi, by = sex, covariates = "age")
+    ))),
+    collapse = "\n"
+  )
+  expect_match(
+    txt,
+    sprintf("Missing values removed: bmi (%d), age (%d).", n_bmi, n_age),
+    fixed = TRUE
+  )
+  expect_match(txt, "Rows with missing sex removed: 3.", fixed = TRUE)
+  # One note, at the bottom -- not repeated.
+  expect_length(
+    gregexpr("Missing values removed", txt, fixed = TRUE)[[1L]],
+    1L
+  )
+
+  # The disclosure travels to the rich engines with the rest of the note.
+  skip_if_not_installed("tinytable")
+  tt <- suppressMessages(table_continuous_lm(
+    d,
+    select = bmi,
+    by = sex,
+    covariates = "age",
+    output = "tinytable"
+  ))
+  expect_true(any(grepl(
+    "Missing values removed",
+    unlist(tt@notes),
+    fixed = TRUE
+  )))
+})
+
+test_that("declared missing values are disclosed separately (decision 14)", {
+  d <- data.frame(y = c(5, 6, 7, 10, 11, 12, 99, NA))
+  d$y <- structure(
+    d$y,
+    na_values = 99,
+    class = c("haven_labelled_spss", "haven_labelled", "vctrs_vctr", "double")
+  )
+  d$grp <- rep(c("a", "b"), 4L)
+  txt <- paste(
+    capture.output(print(suppressMessages(
+      table_continuous_lm(d, select = y, by = grp)
+    ))),
+    collapse = "\n"
+  )
+  expect_match(txt, "Missing values removed: y (1).", fixed = TRUE)
+  expect_match(txt, "y (1)", fixed = TRUE)
+  expect_match(
+    txt,
+    "Declared missing values removed: y (1).",
+    fixed = TRUE
+  )
+})
+
+
+# ---- gt spanner ids survive a make.names() collision ----------------------
+
+test_that("two `by` levels that differ only in punctuation still render", {
+  skip_if_not_installed("gt")
+  set.seed(1)
+  d <- data.frame(
+    y = rnorm(40),
+    g = factor(rep(c("a b", "a.b"), each = 20)),
+    stringsAsFactors = FALSE
+  )
+  # The marginal-mean columns are keyed "M (a b)" / "M (a.b)", and
+  # make.names() maps BOTH to "M..a.b.". gt aborts on a duplicate
+  # spanner id, so the whole table used to be unrenderable.
+  g1 <- suppressWarnings(table_continuous_lm(
+    d,
+    select = y,
+    by = g,
+    output = "gt"
+  ))
+  html <- expect_no_error(as.character(gt::as_raw_html(g1)))
+  # Both group spanners are present, each with its own label.
+  expect_true(grepl("M (a b)", html, fixed = TRUE))
+  expect_true(grepl("M (a.b)", html, fixed = TRUE))
+
+  # Same collision through a non-ASCII level.
+  d2 <- d
+  d2$g <- factor(rep(c("R\u00B2", "R\u00B3"), each = 20))
+  expect_no_error(as.character(gt::as_raw_html(suppressWarnings(
+    table_continuous_lm(d2, select = y, by = g, output = "gt")
+  ))))
+})
+
+test_that("every gt spanner id in the family comes from a key", {
+  skip_if_not_installed("gt")
+  set.seed(2)
+  d <- data.frame(y = rnorm(40), g = rep(c("A", "B"), 20))
+  ids_at <- function(lv) {
+    h <- as.character(gt::as_raw_html(
+      table_continuous_lm(d, select = y, by = g, ci_level = lv, output = "gt"),
+      inline_css = FALSE
+    ))
+    grep(
+      "^spn_|CI",
+      unique(unlist(regmatches(
+        h,
+        gregexpr('(?<=id=")[^"]*', h, perl = TRUE)
+      ))),
+      value = TRUE
+    )
+  }
+  # The interval spanner used to be the one id gt derived from a LABEL,
+  # so it read "95% CI" and moved with `ci_level`. Every id is `spn_<key>`
+  # now, and the same set comes back at a fractional coverage.
+  expect_true("spn_CI" %in% ids_at(0.95))
+  expect_identical(ids_at(0.975), ids_at(0.95))
+  expect_false(any(grepl("%", ids_at(0.975), fixed = TRUE)))
+  # The displayed label still follows the coverage.
+  h <- as.character(gt::as_raw_html(
+    table_continuous_lm(d, select = y, by = g, ci_level = 0.975, output = "gt")
+  ))
+  expect_true(grepl(">97.5% CI<", h, fixed = TRUE))
+})
+
+test_that("the lm coverage percentage follows decimal_mark (decision 27)", {
+  set.seed(2)
+  d <- data.frame(y = rnorm(40), g = rep(c("A", "B"), 20))
+  tl <- table_continuous_lm(
+    d,
+    select = y,
+    by = g,
+    ci_level = 0.975,
+    decimal_mark = ","
+  )
+  out <- paste(capture.output(print(tl)), collapse = "\n")
+  expect_match(out, "97,5% CI LL", fixed = TRUE)
+  expect_false(grepl("97.5%", out, fixed = TRUE))
+  s <- as_structured(tl)
+  # Labels carry the comma; the frozen keys keep the period.
+  labs <- unique(unlist(lapply(s$col_meta, function(m) m$ci_label)))
+  expect_identical(labs, "97,5% CI")
+  expect_true("97.5% CI LL" %in% names(s$col_meta))
+  expect_false(any(grepl("97,5", names(s$col_meta), fixed = TRUE)))
+  # The gt spanner shows the comma over the same frozen ids.
+  skip_if_not_installed("gt")
+  h <- as.character(gt::as_raw_html(
+    table_continuous_lm(
+      d,
+      select = y,
+      by = g,
+      ci_level = 0.975,
+      decimal_mark = ",",
+      output = "gt"
+    )
+  ))
+  expect_true(grepl(">97,5% CI<", h, fixed = TRUE))
+  expect_false(grepl(">97.5% CI<", h, fixed = TRUE))
+})
+
+test_that(".lm_spanner_ids is stable where nothing collides", {
+  keys <- c("Variable", "M (Female)", "M (Male)", "p", "n")
+  ids <- spicy:::.lm_spanner_ids(keys)
+  # Named by key: the producer and the styling site read one object.
+  expect_identical(names(ids), keys)
+  # Unchanged from the plain make.names() form when there is no tie.
+  expect_identical(unname(ids), paste0("spn_", make.names(keys)))
+  # And unique when there is one.
+  tied <- spicy:::.lm_spanner_ids(c("M (a b)", "M (a.b)"))
+  expect_identical(length(unique(tied)), 2L)
+  expect_identical(unname(tied[1]), "spn_M..a.b.")
+})
+
+test_that(".lm_spanner_ids refuses keys that already repeat", {
+  # `make.unique()` breaks a tie between DERIVED ids, not between the
+  # keys themselves: repeated keys would name two entries the same, and
+  # the by-name lookup at the styling site would hand gt one id twice --
+  # the abort this helper exists to prevent. Unreachable through the
+  # public surface (the keys are unique factor levels), so the guard is
+  # asserted on the helper directly.
+  expect_error(
+    spicy:::.lm_spanner_ids(c("M (x)", "M (x)")),
+    class = "spicy_internal_invariant"
+  )
+  expect_error(
+    spicy:::.lm_spanner_ids(c("M (x)", "M (x)")),
+    "M (x)",
+    fixed = TRUE
+  )
 })

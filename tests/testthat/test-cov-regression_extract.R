@@ -1,0 +1,690 @@
+# ---------------------------------------------------------------------------
+# Targeted coverage tests for R/regression_extract.R.
+#
+# These exercise branches not hit by the broader lm / glm / AME suites:
+#   * build_b_rows() profile-CI fallback: confint() returns a non-matrix
+#     (intercept-only glm) -> spicy_fallback warning + Wald CI.
+#   * detect_factor_terms(): a factor that appears ONLY in an interaction
+#     term (not as a main effect) -> the `var %in% trms` guard `next`s it.
+#   * poly_suffix_names(): k < 2 (no contrasts) and k >= 5 (the `^4 ^5`
+#     high-degree suffixes).
+#   * poly_suffix_degree(): the `^k` high-degree branch + the NA
+#     fall-through for an unparseable suffix.
+#   * match_coef_to_factor() / detect_factor_term_meta(): interaction coefs
+#     fall through to NULL, including when a LEVEL contains ":".
+#   * .spicy_get_xlevels() class-specific reconstruction arms: fixest,
+#     nlme lme, stanreg, and the brmsfit data-NULL early return.
+#   * .spicy_fixed_coef_names() stanreg arm.
+#
+# stanreg / brmsfit are exercised through hand-built objects that match the
+# documented field contract those arms rely on (formula(), $data,
+# $coefficients) -- a real Stan fit is too slow / compiler-dependent for CI,
+# but the reconstruction logic is identical.
+# ---------------------------------------------------------------------------
+
+# ---- 1. build_b_rows(): profile-CI fallback (lines ~246-259) --------------
+
+test_that("profile CI on an intercept-only glm falls back to Wald with a warning", {
+  # MASS::confint.glm on a one-coefficient (intercept-only) glm returns a
+  # length-2 NAMED VECTOR, not a k x 2 matrix. build_b_rows() detects the
+  # non-matrix, emits a `spicy_fallback` warning, and reverts to Wald CI.
+  skip_if_not_installed("MASS")
+  fit <- glm(am ~ 1, data = mtcars, family = binomial)
+  vc <- spicy:::compute_model_vcov(
+    fit,
+    type = "classical",
+    cluster = NULL,
+    weights = NULL,
+    boot_n = 1000L
+  )
+
+  expect_warning(
+    rows <- spicy:::build_b_rows(
+      fit = fit,
+      vc = vc,
+      vcov_type = "classical",
+      cluster = NULL,
+      ci_level = 0.95,
+      model_id = "M1",
+      outcome = "am",
+      ci_method = "profile"
+    ),
+    class = "spicy_fallback"
+  )
+
+  # One coefficient row, with a finite (Wald) CI -- the fallback worked.
+  expect_identical(nrow(rows), 1L)
+  expect_true(is.finite(rows$ci_low[1L]))
+  expect_true(is.finite(rows$ci_high[1L]))
+
+  # Oracle pins: estimate / SE come straight from the classical fit, and
+  # the fallback CI must equal stats::confint.default() (the textbook
+  # Wald CI: coef +/- qnorm(0.975) * sqrt(diag(vcov))) on the link scale.
+  expect_equal(
+    rows$estimate[1L],
+    unname(stats::coef(fit)[1L]),
+    tolerance = 1e-12
+  )
+  expect_equal(rows$se[1L], sqrt(stats::vcov(fit)[1L, 1L]), tolerance = 1e-12)
+  wald_ci <- stats::confint.default(fit, level = 0.95)
+  expect_equal(
+    rows$ci_low[1L],
+    unname(wald_ci["(Intercept)", 1L]),
+    tolerance = 1e-10
+  )
+  expect_equal(
+    rows$ci_high[1L],
+    unname(wald_ci["(Intercept)", 2L]),
+    tolerance = 1e-10
+  )
+
+  # Internal consistency: the same CI re-derives from the row's own
+  # estimate +/- z * SE, which is what build_b_rows() recomputes after
+  # dropping profile.
+  est <- rows$estimate[1L]
+  se <- rows$se[1L]
+  z <- stats::qnorm(0.975)
+  expect_equal(rows$ci_low[1L], est - z * se, tolerance = 1e-8)
+  expect_equal(rows$ci_high[1L], est + z * se, tolerance = 1e-8)
+})
+
+test_that("profile CI on a multi-coef glm matches stats::confint exactly", {
+  # The SUCCESS branch of the same code path: confint() returns a k x 2
+  # matrix, so build_b_rows() overrides ci_low / ci_high per coef with the
+  # profile-likelihood bounds while estimate / SE / p stay Wald.
+  skip_if_not_installed("MASS")
+  # This near-separated logistic (n = 32) warns "fitted probabilities
+  # numerically 0 or 1" on the fit and on every profile refit -- a
+  # fixture artefact, not the contract under test (the near-separation
+  # is what makes the profile bounds differ visibly from Wald below).
+  fit <- suppressWarnings(glm(am ~ wt + hp, data = mtcars, family = binomial))
+  vc <- spicy:::compute_model_vcov(
+    fit,
+    type = "classical",
+    cluster = NULL,
+    weights = NULL,
+    boot_n = 1000L
+  )
+
+  rows <- suppressWarnings(spicy:::build_b_rows(
+    fit = fit,
+    vc = vc,
+    vcov_type = "classical",
+    cluster = NULL,
+    ci_level = 0.95,
+    model_id = "M1",
+    outcome = "am",
+    ci_method = "profile"
+  ))
+
+  # Oracle: MASS::confint.glm via stats::confint -- the identical call
+  # build_b_rows() makes, recomputed here independently.
+  oracle <- suppressWarnings(suppressMessages(
+    stats::confint(fit, level = 0.95)
+  ))
+  expect_identical(rows$term, rownames(oracle))
+  expect_equal(rows$ci_low, unname(oracle[, 1L]), tolerance = 1e-10)
+  expect_equal(rows$ci_high, unname(oracle[, 2L]), tolerance = 1e-10)
+
+  # Profile is a CI-only refinement: estimate / SE remain the Wald values
+  # from the classical fit.
+  expect_equal(rows$estimate, unname(stats::coef(fit)), tolerance = 1e-12)
+  expect_equal(rows$se, unname(sqrt(diag(stats::vcov(fit)))), tolerance = 1e-12)
+  # And the profile bounds genuinely differ from Wald here (logistic on
+  # n = 32), proving the override actually took effect.
+  wald_ci <- stats::confint.default(fit, level = 0.95)
+  expect_false(isTRUE(all.equal(
+    rows$ci_low,
+    unname(wald_ci[, 1L]),
+    tolerance = 1e-4
+  )))
+})
+
+
+# ---- 2. detect_factor_terms(): interaction-only factor (line 470) ---------
+
+test_that("detect_factor_terms skips a factor that appears only in an interaction", {
+  # `mpg ~ wt:cyl` puts `cyl` in xlevels but NOT in term.labels (which is
+  # just "wt:cyl"). The `if (!(var %in% trms)) next` guard then skips it,
+  # so no factor terms are detected.
+  d <- mtcars
+  d$cyl <- factor(d$cyl)
+  fit <- lm(mpg ~ wt:cyl, data = d)
+
+  trms <- attr(spicy:::.spicy_get_terms(fit), "term.labels")
+  expect_identical(trms, "wt:cyl")
+  expect_true("cyl" %in% names(spicy:::.spicy_get_xlevels(fit)))
+
+  expect_length(spicy:::detect_factor_terms(fit), 0L)
+})
+
+
+# ---- 3. poly_suffix_names(): k < 2 and k >= 5 (lines 522, 526) ------------
+
+test_that("poly_suffix_names returns no contrasts for k < 2", {
+  expect_identical(spicy:::poly_suffix_names(1L), character(0))
+  expect_identical(spicy:::poly_suffix_names(0L), character(0))
+})
+
+test_that("poly_suffix_names appends ^4, ^5, ... for k >= 5", {
+  # 6 levels -> 5 contrasts: .L .Q .C ^4 ^5
+  expect_identical(
+    spicy:::poly_suffix_names(6L),
+    c(".L", ".Q", ".C", "^4", "^5")
+  )
+  # 4 levels -> exactly the three named bases (the `<= 3L` short-return).
+  expect_identical(spicy:::poly_suffix_names(4L), c(".L", ".Q", ".C"))
+})
+
+
+# ---- 4. poly_suffix_degree(): ^k branch + NA fall-through (lines 756-760) -
+
+test_that("poly_suffix_degree maps named and high-degree suffixes", {
+  expect_identical(spicy:::poly_suffix_degree(".L"), 1L)
+  expect_identical(spicy:::poly_suffix_degree(".Q"), 2L)
+  expect_identical(spicy:::poly_suffix_degree(".C"), 3L)
+  expect_identical(spicy:::poly_suffix_degree("^4"), 4L)
+  expect_identical(spicy:::poly_suffix_degree("^5"), 5L)
+})
+
+test_that("poly_suffix_degree returns NA for an unparseable suffix", {
+  # `^x` enters the `startsWith("^")` branch but as.integer("x") is NA, so
+  # the inner `!is.na(n)` guard is FALSE -> trailing NA_integer_.
+  expect_true(is.na(spicy:::poly_suffix_degree("^x")))
+  # A suffix that does not start with "^" and is not .L/.Q/.C -> NA.
+  expect_true(is.na(spicy:::poly_suffix_degree("zzz")))
+})
+
+
+# ---- 5. 6-level ordered factor end to end (poly high-degree, real fit) ----
+
+test_that("table_regression on a 6-level ordered factor surfaces ^4 / ^5 trends", {
+  # Real-pipeline coverage of poly_suffix_names(6) -> "^4","^5" AND
+  # poly_suffix_degree("^4"/"^5") via detect_factor_term_meta().
+  set.seed(1)
+  n <- 120L
+  d <- data.frame(
+    y = rnorm(n),
+    g = ordered(
+      sample(c("a", "b", "c", "d", "e", "f"), n, replace = TRUE),
+      levels = c("a", "b", "c", "d", "e", "f")
+    )
+  )
+  fit <- lm(y ~ g, data = d)
+
+  meta <- spicy:::detect_factor_term_meta(fit)
+  expect_identical(meta[["g^4"]]$factor_level_pos, 4L)
+  expect_identical(meta[["g^5"]]$factor_level_pos, 5L)
+
+  out <- suppressMessages(table_regression(fit))
+  td <- broom::tidy(out)
+  expect_true(all(c("g.L", "g.Q", "g.C", "g^4", "g^5") %in% td$term))
+})
+
+
+# ---- 6. match_coef_to_factor(): interaction coefs fall through ------------
+
+test_that("match_coef_to_factor returns NULL for an interaction coef name", {
+  xl <- list(cyl = c("4", "6", "8"))
+  expect_null(spicy:::match_coef_to_factor("cyl6:wt", xl))
+  # Intercept also returns NULL (line 716), exercised alongside.
+  expect_null(spicy:::match_coef_to_factor("(Intercept)", xl))
+})
+
+test_that("match_coef_to_factor tags the longest-prefix factor (name-collision)", {
+  # Realistic prefix collision: `grp` is a prefix of `grpsize`. The suffix
+  # check already disambiguates these because "sizesmall" is not a grp level.
+  xl <- list(grp = c("A", "B", "C"), grpsize = c("small", "large"))
+  expect_identical(
+    spicy:::match_coef_to_factor("grpsizesmall", xl)$factor_term,
+    "grpsize"
+  )
+  expect_identical(spicy:::match_coef_to_factor("grpB", xl)$factor_term, "grp")
+
+  # Pathological collision: `f` is a prefix of `foo` AND the leftover suffix
+  # ("ooC") is itself a level of `f`. Longest-name-first matching must still
+  # tag `fooC` to `foo`, not mis-tag it to `f`.
+  xl2 <- list(f = c("ooB", "ooC"), foo = c("B", "C"))
+  expect_identical(spicy:::match_coef_to_factor("fooC", xl2)$factor_term, "foo")
+  expect_identical(spicy:::match_coef_to_factor("fooB", xl2)$factor_term, "foo")
+})
+
+test_that("detect_factor_term_meta maps interaction coefs to NULL", {
+  d <- mtcars
+  d$cyl <- factor(d$cyl)
+  fit <- lm(mpg ~ cyl * wt, data = d)
+  meta <- spicy:::detect_factor_term_meta(fit)
+  expect_null(meta[["cyl6:wt"]])
+  expect_null(meta[["cyl8:wt"]])
+  # Main-effect factor coefs still resolve to the factor.
+  expect_identical(meta[["cyl6"]]$factor_term, "cyl")
+})
+
+
+# ---- 7. .spicy_get_xlevels(): fixest reconstruction (line ~603) -----------
+
+test_that(".spicy_get_xlevels reconstructs xlevels for a fixest fit", {
+  skip_if_not_installed("fixest")
+  d <- mtcars
+  d$cyl <- factor(d$cyl)
+  ff <- fixest::feols(mpg ~ wt + cyl, data = d)
+  xl <- spicy:::.spicy_get_xlevels(ff)
+  expect_true("cyl" %in% names(xl))
+  expect_identical(xl$cyl, c("4", "6", "8"))
+})
+
+
+# ---- 8. .spicy_get_xlevels(): nlme lme reconstruction (line ~613) ---------
+
+test_that(".spicy_get_xlevels reconstructs xlevels for an nlme lme fit", {
+  skip_if_not_installed("nlme")
+  d <- nlme::Orthodont
+  fit <- nlme::lme(distance ~ Sex, data = d, random = ~ 1 | Subject)
+  xl <- spicy:::.spicy_get_xlevels(fit)
+  expect_true("Sex" %in% names(xl))
+  expect_setequal(xl$Sex, c("Male", "Female"))
+  # Pin the ORDER too: reconstruction goes through stats::.getXlevels(),
+  # which must preserve the factor's own level order from the data.
+  expect_identical(xl$Sex, levels(d$Sex))
+})
+
+
+# ---- 9. .spicy_get_xlevels(): stanreg arm (lines ~584-595) ----------------
+
+# rstanarm is heavy and a real fit needs a Stan compiler. The stanreg arm
+# only relies on inherits(fit, "stanreg"), fit$data, and stats::formula(fit),
+# so a hand-built object faithfully exercises the reconstruction logic.
+
+test_that(".spicy_get_xlevels extracts factor levels from a stanreg-shaped fit", {
+  d <- mtcars
+  d$cyl <- factor(d$cyl)
+  mock <- structure(
+    list(formula = mpg ~ wt + cyl, data = d),
+    class = "stanreg"
+  )
+  xl <- spicy:::.spicy_get_xlevels(mock)
+  expect_identical(names(xl), "cyl")
+  expect_identical(xl$cyl, c("4", "6", "8"))
+})
+
+test_that(".spicy_get_xlevels returns NULL for a stanreg-shaped fit with no factors", {
+  # All-numeric RHS -> the `length(out) == 0L` branch returns NULL.
+  mock <- structure(
+    list(formula = mpg ~ wt, data = mtcars),
+    class = "stanreg"
+  )
+  expect_null(spicy:::.spicy_get_xlevels(mock))
+})
+
+
+# ---- 10. .spicy_get_xlevels(): brmsfit data-NULL early return (line 572) --
+
+test_that(".spicy_get_xlevels returns NULL for a brmsfit with NULL data", {
+  # The brmsfit arm reads fit$data; when it is NULL the `if (is.null(d))`
+  # guard short-circuits to NULL.
+  mock <- structure(
+    list(formula = mpg ~ wt, data = NULL),
+    class = "brmsfit"
+  )
+  expect_null(spicy:::.spicy_get_xlevels(mock))
+})
+
+test_that(".spicy_get_xlevels unwraps a brmsformula and reads factor levels", {
+  # Exercises the `inherits(f, 'brmsformula')` unwrap + factor scan
+  # (lines ~568-579) using a genuine brmsformula but a hand-built fit.
+  skip_if_not_installed("brms")
+  d <- mtcars
+  d$cyl <- factor(d$cyl)
+  bf <- brms::brmsformula(mpg ~ wt + cyl)
+  mock <- structure(list(formula = bf, data = d), class = "brmsfit")
+  xl <- spicy:::.spicy_get_xlevels(mock)
+  expect_identical(names(xl), "cyl")
+  expect_identical(xl$cyl, c("4", "6", "8"))
+})
+
+
+# ---- 11. .spicy_fixed_coef_names(): stanreg arm (line 703) ----------------
+
+test_that(".spicy_fixed_coef_names reads $coefficients for a stanreg-shaped fit", {
+  mock <- structure(
+    list(coefficients = c("(Intercept)" = 1, wt = -2, cyl6 = 0.5, cyl8 = 1)),
+    class = "stanreg"
+  )
+  expect_identical(
+    spicy:::.spicy_fixed_coef_names(mock),
+    c("(Intercept)", "wt", "cyl6", "cyl8")
+  )
+})
+
+
+# ---- 12. .spicy_get_terms(): non-brmsfit terms() error -> NULL (line ~642) -
+
+test_that(".spicy_get_terms returns NULL for a flexsurvreg fit (terms() errors)", {
+  # For a flexsurvreg object stats::terms(fit) raises "no terms component
+  # nor attribute", so the generic tryCatch yields NULL; the fit is not a
+  # brmsfit, so the brms unwrap branch is skipped and execution falls
+  # through to the trailing NULL. This is a genuine, user-reachable path
+  # (table_regression(<flexsurvreg fit>) -> as_regression_frame.flexsurvreg
+  # -> .flexsurv_reference_rows -> detect_factor_terms -> .spicy_get_terms),
+  # so the line is not dead code.
+  skip_if_not_installed("flexsurv")
+  skip_if_not_installed("survival")
+
+  d <- survival::lung
+  d <- d[stats::complete.cases(d[, c("time", "status", "sex")]), ]
+  d$sex <- factor(d$sex)
+  fit <- flexsurv::flexsurvreg(
+    survival::Surv(time, status) ~ sex,
+    data = d,
+    dist = "weibull"
+  )
+
+  # stats::terms() really does error on the fit...
+  expect_error(stats::terms(fit))
+  # ... but the flexsurvreg branch recovers the terms from the model
+  # frame (the fix that gave flexsurv factor grouping + reference rows).
+  trms <- spicy:::.spicy_get_terms(fit)
+  expect_false(is.null(trms))
+  expect_true("sex" %in% attr(trms, "term.labels"))
+  # Downstream consequence: the factor IS introspected now.
+  fts <- spicy:::detect_factor_terms(fit)
+  expect_length(fts, 1L)
+  expect_identical(fts[[1L]]$factor_term, "sex")
+})
+
+
+# ---- 13. extract_fit_stats(): AICc uses estimated-parameter df (line ~828) -
+
+test_that("AICc for binomial/poisson glm uses k = length(coef) (fixed dispersion)", {
+  # AICc = AIC + 2k(k+1)/(n-k-1) with k = number of ESTIMATED parameters.
+  # For binomial/poisson the dispersion is fixed at 1 (NOT estimated), so
+  # k = length(coef), matching MuMIn::AICc (which uses logLik df). The old
+  # code used k = length(coef) + 1 unconditionally, inflating AICc by one
+  # spurious parameter for these families.
+
+  # Binomial logistic: 3 coefficients -> k = 3 (NOT 4).
+  fit_bin <- glm(am ~ wt + hp, data = mtcars, family = binomial)
+  k_bin <- length(stats::coef(fit_bin)) # 3, no +1 for fixed dispersion
+  n_bin <- stats::nobs(fit_bin)
+  expected_bin <- stats::AIC(fit_bin) +
+    (2 * k_bin * (k_bin + 1)) / (n_bin - k_bin - 1)
+
+  fs_bin <- spicy:::extract_fit_stats(
+    fit_bin,
+    "AICc",
+    weights = NULL,
+    model_id = "M1",
+    outcome = "am"
+  )
+  expect_equal(fs_bin$AICc, expected_bin, tolerance = 1e-8)
+  # Sanity: this is strictly LESS than the old buggy k+1 value.
+  kb <- k_bin + 1L
+  buggy_bin <- stats::AIC(fit_bin) + (2 * kb * (kb + 1)) / (n_bin - kb - 1)
+  expect_lt(fs_bin$AICc, buggy_bin)
+
+  # Poisson: 3 coefficients -> k = 3 (NOT 4).
+  set.seed(1)
+  dp <- data.frame(
+    y = stats::rpois(40, 2),
+    x1 = stats::rnorm(40),
+    x2 = stats::rnorm(40)
+  )
+  fit_pois <- glm(y ~ x1 + x2, data = dp, family = poisson)
+  k_p <- length(stats::coef(fit_pois)) # 3
+  n_p <- stats::nobs(fit_pois)
+  expected_p <- stats::AIC(fit_pois) +
+    (2 * k_p * (k_p + 1)) / (n_p - k_p - 1)
+  fs_p <- spicy:::extract_fit_stats(
+    fit_pois,
+    "AICc",
+    weights = NULL,
+    model_id = "M1",
+    outcome = "y"
+  )
+  expect_equal(fs_p$AICc, expected_p, tolerance = 1e-8)
+})
+
+test_that("AICc for lm and gaussian glm uses k = length(coef) + 1 (estimated dispersion)", {
+  # lm and dispersion-estimated glm families (gaussian/Gamma/...) DO fit a
+  # residual variance, so k = length(coef) + 1. The fix preserves this case.
+  fit_lm <- lm(mpg ~ wt + hp, data = mtcars)
+  k_lm <- length(stats::coef(fit_lm)) + 1L # 4 (3 coefs + sigma)
+  n_lm <- stats::nobs(fit_lm)
+  expected_lm <- stats::AIC(fit_lm) +
+    (2 * k_lm * (k_lm + 1)) / (n_lm - k_lm - 1)
+  fs_lm <- spicy:::extract_fit_stats(
+    fit_lm,
+    "AICc",
+    weights = NULL,
+    model_id = "M1",
+    outcome = "mpg"
+  )
+  expect_equal(fs_lm$AICc, expected_lm, tolerance = 1e-8)
+
+  # gaussian glm estimates dispersion too -> same k, same AICc as the lm.
+  fit_gg <- glm(mpg ~ wt + hp, data = mtcars, family = gaussian)
+  fs_gg <- spicy:::extract_fit_stats(
+    fit_gg,
+    "AICc",
+    weights = NULL,
+    model_id = "M1",
+    outcome = "mpg"
+  )
+  expect_equal(fs_gg$AICc, expected_lm, tolerance = 1e-8)
+})
+
+
+test_that("the two weight predicates answer two different questions", {
+  # `.has_real_weights()` asks whether the user SUPPLIED weights, and
+  # is what `extras$has_weights` and `weighted_n` are built on: a fit
+  # weighted by a constant 3 counts three times as many observations,
+  # and losing that would be losing a true number.
+  #
+  # `.weights_kind_from_fit()` asks how to NAME the variance, and there
+  # the uniform rule is the right one -- a constant factor does not
+  # change the fit, so it does not change the estimator. The divergence
+  # is deliberate, and this is the witness that keeps one from being
+  # "aligned" onto the other.
+  fit_k <- lm(mpg ~ wt, data = mtcars, weights = rep(3, nrow(mtcars)))
+  fit_v <- lm(mpg ~ wt, data = mtcars, weights = seq_len(nrow(mtcars)))
+  fit_0 <- lm(mpg ~ wt, data = mtcars)
+
+  expect_true(.has_real_weights(stats::weights(fit_k)))
+  expect_identical(.weights_kind_from_fit(fit_k), "none")
+  expect_equal(.weighted_n_or_na(stats::weights(fit_k)), 96)
+
+  expect_true(.has_real_weights(stats::weights(fit_v)))
+  expect_identical(.weights_kind_from_fit(fit_v), "case")
+
+  expect_false(.has_real_weights(stats::weights(fit_0)))
+  expect_identical(.weights_kind_from_fit(fit_0), "none")
+  expect_identical(.weighted_n_or_na(stats::weights(fit_0)), NA_real_)
+})
+
+# ---- 14. Factor levels containing ":" stay inside their block -------------
+#
+# `match_coef_to_factor()` used to reject any coef name containing ":" as an
+# interaction BEFORE trying to match it. A level may legitimately hold a
+# colon ("Part-time: 50-89%"), so those main effects escaped their factor
+# block and printed under the raw coefficient name. The matcher now lets the
+# (var, level) match decide: an interaction name never equals
+# `paste0(var, level)`, so it still falls through to NULL.
+
+colon_level_data <- function(n = 180L) {
+  set.seed(42)
+  employment <- factor(
+    sample(c("Full-time", "Part-time: 50-89%", "Part-time: <50%"), n, TRUE),
+    levels = c("Full-time", "Part-time: 50-89%", "Part-time: <50%")
+  )
+  x <- stats::rnorm(n)
+  lp <- 0.5 * x + as.numeric(employment)
+  data.frame(
+    y = 2 + lp + stats::rnorm(n),
+    yb = stats::rbinom(n, 1L, stats::plogis(lp - 2)),
+    x = x,
+    employment = employment,
+    grp = factor(sample(c("A", "B", "C"), n, TRUE))
+  )
+}
+
+COLON_LEVELS <- c("Part-time: 50-89%", "Part-time: <50%")
+
+
+test_that("lm: factor levels containing ':' stay inside the factor block", {
+  d <- colon_level_data()
+  fit <- lm(y ~ x + employment, data = d)
+  # The coefficient names really do carry a colon -- that is the whole trap.
+  expect_true(all(paste0("employment", COLON_LEVELS) %in% names(coef(fit))))
+
+  meta <- spicy:::detect_factor_term_meta(fit)
+  m1 <- meta[["employmentPart-time: 50-89%"]]
+  expect_identical(m1$factor_term, "employment")
+  expect_identical(m1$factor_level, "Part-time: 50-89%")
+  expect_identical(m1$factor_level_pos, 2L)
+  m2 <- meta[["employmentPart-time: <50%"]]
+  expect_identical(m2$factor_term, "employment")
+  expect_identical(m2$factor_level, "Part-time: <50%")
+  expect_identical(m2$factor_level_pos, 3L)
+
+  body <- as_structured(table_regression(fit))$body
+  lv <- body[body$.row_role == "level", ]
+  expect_identical(lv$.variable, rep("employment", 2L))
+  expect_identical(lv$.level, COLON_LEVELS)
+  expect_identical(
+    body$.variable[body$.row_role == "factor_header"],
+    "employment"
+  )
+  expect_identical(body$.level[body$.row_role == "reference"], "Full-time")
+  # No row is named after the raw coefficient.
+  expect_false(any(grepl("employmentPart-time", body$.variable, fixed = TRUE)))
+
+  df <- table_regression(fit, output = "data.frame")
+  expect_identical(
+    trimws(df$Variable)[3:6],
+    c("employment:", "Full-time (ref.)", COLON_LEVELS)
+  )
+  expect_false(any(grepl("employmentPart-time", df$Variable, fixed = TRUE)))
+})
+
+
+test_that("glm(binomial): colon levels stay in the block under exponentiate", {
+  d <- colon_level_data()
+  fit <- glm(yb ~ x + employment, data = d, family = binomial)
+
+  body <- as_structured(table_regression(fit, exponentiate = TRUE))$body
+  lv <- body[body$.row_role == "level", ]
+  expect_identical(lv$.variable, rep("employment", 2L))
+  expect_identical(lv$.level, COLON_LEVELS)
+  expect_identical(body$.level[body$.row_role == "reference"], "Full-time")
+  expect_false(any(grepl("employmentPart-time", body$.variable, fixed = TRUE)))
+  # The level rows carry real odds ratios, not the reference dashes.
+  expect_true(all(is.finite(lv$OR) & lv$OR > 0))
+
+  df <- table_regression(fit, exponentiate = TRUE, output = "data.frame")
+  expect_true(all(COLON_LEVELS %in% trimws(df$Variable)))
+  expect_false(any(grepl("employmentPart-time", df$Variable, fixed = TRUE)))
+})
+
+
+test_that("interaction rows are unaffected by the colon-level fix", {
+  d <- colon_level_data()
+  # Convention on a colon-FREE factor first: interaction rows are flat coef
+  # rows at indent 0, carrying the raw interaction name and no level.
+  ref <- as_structured(table_regression(lm(y ~ x * grp, data = d)))$body
+  ix_ref <- ref[ref$.variable %in% c("x:grpB", "x:grpC"), ]
+  expect_identical(nrow(ix_ref), 2L)
+  expect_identical(ix_ref$.row_role, rep("coef", 2L))
+  expect_true(all(is.na(ix_ref$.level)))
+  expect_identical(ix_ref$.indent, rep(0L, 2L))
+
+  # Same shape of model with the colon levels: main effects grouped, the
+  # interaction rows identical to the convention above.
+  body <- as_structured(table_regression(lm(y ~ x * employment, data = d)))$body
+  expect_identical(body$.level[body$.row_role == "level"], COLON_LEVELS)
+  ix <- body[body$.variable %in% paste0("x:employment", COLON_LEVELS), ]
+  expect_identical(nrow(ix), 2L)
+  expect_identical(ix$.row_role, ix_ref$.row_role)
+  expect_true(all(is.na(ix$.level)))
+  expect_identical(ix$.indent, ix_ref$.indent)
+
+  # The matcher itself: an interaction coef never equals paste0(var, level),
+  # on either side of the colon.
+  xl <- list(employment = levels(d$employment), x = c("a", "b"))
+  expect_null(spicy:::match_coef_to_factor("x:employmentPart-time: 50-89%", xl))
+  expect_null(spicy:::match_coef_to_factor("employmentPart-time: 50-89%:x", xl))
+})
+
+
+test_that("AME rows for colon levels align with the factor block", {
+  skip_if_not_installed("marginaleffects")
+  d <- colon_level_data()
+  tbl <- table_regression(
+    lm(y ~ x + employment, data = d),
+    show_columns = c("b", "ame")
+  )
+
+  body <- as_structured(tbl)$body
+  expect_true("AME" %in% names(body))
+  lv <- body[body$.row_role == "level", ]
+  expect_identical(lv$.level, COLON_LEVELS)
+  expect_true(all(is.finite(lv$AME)))
+  # One AME per NON-reference level: the reference row is present and empty.
+  ref_row <- body[body$.row_role == "reference", ]
+  expect_identical(nrow(ref_row), 1L)
+  expect_true(is.na(ref_row$AME))
+
+  long <- broom::tidy(tbl)
+  ame_terms <- long$term[long$estimate_type == "ame"]
+  expect_true(all(paste0("employment", COLON_LEVELS) %in% ame_terms))
+  expect_identical(sum(startsWith(ame_terms, "employment")), 2L)
+})
+
+
+test_that("console output indents colon levels under the factor header", {
+  d <- colon_level_data()
+  fit <- lm(y ~ x + employment, data = d)
+  out <- capture.output(print(table_regression(fit)))
+  expect_true(any(grepl("^ employment:", out)))
+  expect_true(any(grepl("^   Part-time: 50-89%", out)))
+  expect_true(any(grepl("^   Part-time: <50%", out)))
+  expect_false(any(grepl("employmentPart-time", out, fixed = TRUE)))
+})
+
+
+test_that("labels still relabel a block whose levels contain ':'", {
+  d <- colon_level_data()
+  out <- capture.output(print(table_regression(
+    lm(y ~ x + employment, data = d),
+    labels = c(employment = "Employment")
+  )))
+  expect_true(any(grepl("^ Employment:", out)))
+  expect_true(any(grepl("^   Part-time: 50-89%", out)))
+  expect_false(any(grepl("^ employment:", out)))
+  expect_false(any(grepl("employmentPart-time", out, fixed = TRUE)))
+})
+
+test_that("colon levels: the sTayS minimal reproduction (two factors, 2026-09-16)", {
+  set.seed(1)
+  n <- 300
+  gl <- c("Low: <50%", "Mid: 50-89%", "High: 90-100%")
+  hl <- c("A", "B: x", "C")
+  d <- data.frame(
+    y = rnorm(n),
+    g = factor(sample(gl, n, TRUE), levels = gl),
+    h = factor(sample(hl, n, TRUE), levels = hl)
+  )
+  m <- lm(y ~ g + h, data = d)
+  df <- table_regression(m, output = "data.frame")
+  v <- trimws(df$Variable)
+  # Every level sits under its own header, in declared order; no raw name.
+  expect_identical(
+    v[seq_len(9)],
+    c("(Intercept)",
+      "g:", "Low: <50% (ref.)", "Mid: 50-89%", "High: 90-100%",
+      "h:", "A (ref.)", "B: x", "C")
+  )
+  expect_false(any(grepl("^gMid|^gHigh|^hB", v)))
+  st <- as_structured(table_regression(m))
+  lv <- st$body[st$body$.row_role == "level", , drop = FALSE]
+  expect_setequal(lv$.level, c("Mid: 50-89%", "High: 90-100%", "B: x", "C"))
+})

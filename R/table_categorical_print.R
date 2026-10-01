@@ -5,7 +5,7 @@
 #' [spicy_print_table()].
 #'
 #' @param x A `data.frame` of class `"spicy_categorical_table"` as returned by
-#'   [table_categorical()] with `output = "default"` and `styled = TRUE`.
+#'   [table_categorical()] with `output = "default"`.
 #' @param ... Additional arguments (currently ignored).
 #'
 #' @return Invisibly returns `x`.
@@ -19,7 +19,13 @@ print.spicy_categorical_table <- function(x, ...) {
   indent_text <- attr(x, "indent_text") %||% "  "
   align <- attr(x, "align") %||% "decimal"
   decimal_mark <- attr(x, "decimal_mark") %||% "."
-  assoc_note <- attr(x, "assoc_note")
+  # drop_na = TRUE disclosure ("Missing values removed: ...") prepends
+  # the association note -- the reader sees what left the table before
+  # reading the statistics computed on what remains.
+  assoc_note <- .categorical_note(
+    attr(x, "missing_note"),
+    attr(x, "assoc_note")
+  )
 
   if (is.null(display_df)) {
     display_df <- x
@@ -37,9 +43,8 @@ print.spicy_categorical_table <- function(x, ...) {
   # HEADERS centre over the dot-aligned data (otherwise they'd be
   # right-aligned by the default in `build_ascii_table()`, which
   # makes the header sit visually disconnected from the data column).
-  # "center" puts numeric cells in `align_center_cols`. "right" /
-  # "auto" leave them in neither -> right-aligned by default,
-  # matching the legacy categorical-table behaviour.
+  # "center" puts numeric cells in `align_center_cols`. "right"
+  # leaves them in neither -> right-aligned by default.
   if (identical(align, "decimal") && length(numeric_j) > 0L) {
     for (j in numeric_j) {
       display_df[[j]] <- decimal_align_strings(
@@ -51,18 +56,39 @@ print.spicy_categorical_table <- function(x, ...) {
   } else if (identical(align, "center")) {
     align_center <- numeric_j
   } else {
-    # "right" / "auto" (legacy): default right-alignment for numeric.
+    # "right": default right-alignment for numeric.
     align_center <- integer(0)
   }
 
-  sep_rows <- integer(0)
-  first_col <- display_df[[1]]
-  for (i in seq_along(first_col)) {
-    if (
-      i > 1L && nzchar(first_col[i]) && !startsWith(first_col[i], indent_text)
-    ) {
-      sep_rows <- c(sep_rows, i)
-    }
+  # Block geometry from the typed roles when the object carries them
+  # (every table_categorical() return does); the string derivation
+  # remains only for a degraded object printed without its attributes.
+  s <- attr(x, "structured", exact = TRUE)
+  sep_rows <- if (is.null(s) || nrow(s$body) != nrow(display_df)) {
+    .categorical_var_sep_rows(display_df[[1]], indent_text)
+  } else {
+    .categorical_sep_rows_typed(s)
+  }
+
+  # The header a reader sees is the col_meta display_label, never the
+  # frozen column key (decision 13). Guarded on SHAPE like `sep_rows`
+  # above, not merely on `s` being present: `spicy_print_table()` aborts
+  # on a label vector that does not match the frame, and a degraded
+  # object that fell back to `x` (wide_raw, with `Level` / `Chi2` / `df`
+  # the typed view has not) must still print.
+  header_labels <- if (is.null(s)) {
+    NULL
+  } else {
+    labs <- c(
+      spicy_str("header_variable"),
+      vapply(
+        .struct_value_cols(s$body),
+        function(nm) s$col_meta[[nm]]$display_label %||% nm,
+        character(1),
+        USE.NAMES = FALSE
+      )
+    )
+    if (length(labs) == ncol(display_df)) labs else NULL
   }
 
   # Auto-select padding: use 0 (compact) when the default 2-char
@@ -70,11 +96,23 @@ print.spicy_categorical_table <- function(x, ...) {
   # Each column in build_ascii_table uses: 1 (gutter) + w[i] + 1
   # (gutter) chars, plus 1 char for the vertical separator after
   # column 1; `padding` is added to each w[i].
+  #
+  # Measured on what is PRINTED -- the labels, not the keys -- and
+  # measured the way `ascii_table_widths()` measures, by display width
+  # rather than character count: a header wider than its key would
+  # otherwise make this decision disagree with the renderer's own.
   padding <- 2L
+  width_headers <- header_labels %||% names(display_df)
   col_widths <- vapply(
     seq_along(display_df),
     function(i) {
-      max(nchar(c(names(display_df)[i], as.character(display_df[[i]]))))
+      max(
+        crayon::col_nchar(
+          c(width_headers[i], as.character(display_df[[i]])),
+          type = "width"
+        ),
+        na.rm = TRUE
+      )
     },
     numeric(1)
   )
@@ -84,11 +122,7 @@ print.spicy_categorical_table <- function(x, ...) {
     padding <- 0L
   }
 
-  title <- if (is.null(group_var)) {
-    "Categorical table"
-  } else {
-    paste0("Categorical table by ", group_var)
-  }
+  title <- .categorical_title(group_var)
 
   spicy_print_table(
     display_df,
@@ -97,14 +131,72 @@ print.spicy_categorical_table <- function(x, ...) {
     padding = padding,
     first_column_line = TRUE,
     row_total_line = FALSE,
-    column_total_line = FALSE,
     bottom_line = FALSE,
     align_left_cols = align_left,
     align_center_cols = align_center,
-    group_sep_rows = sep_rows
+    group_sep_rows = sep_rows,
+    display_labels = header_labels
   )
 
   invisible(x)
+}
+
+# ---- Table title ----------------------------------------------------------
+
+# Internal: the title of a categorical summary table, from the name of
+# the grouping variable (`NULL` = one-way). Single source for the
+# console header and the caption every rendering engine sets, so the
+# two can never drift apart.
+.categorical_title <- function(group_var) {
+  if (is.null(group_var)) {
+    spicy_str("title_categorical")
+  } else {
+    spicy_fmt("title_categorical_by", group_var)
+  }
+}
+
+# Internal: body rows that OPEN a variable block (all but the first) --
+# the rows the console rules off from the block above. A block opens on
+# a non-empty, non-indented row label. Legacy string derivation, kept
+# as the console printer's fallback for an object without a typed view
+# and as the independent oracle the agreement test in
+# test-structured-descriptives.R pins against the typed answer.
+.categorical_var_sep_rows <- function(labels, indent_text) {
+  keep <- nzchar(labels) & !startsWith(labels, indent_text)
+  keep[1L] <- FALSE
+  which(keep)
+}
+
+# Internal: the same block geometry, read from the typed roles of the
+# structured view instead of parsed back from the label strings. The
+# typed answer survives a variable label that starts with the indent
+# string; every rendering / export route uses these two.
+#
+# Both are now the shared predicates of `R/tables_structured.R`, which
+# every family that lays its rows out in blocks reads. Kept as names
+# because they are the vocabulary of this file's call sites, and
+# because the categorical body is the one that PROVES the two
+# definitions agree: its first row is always a factor header, and its
+# only non-header rows are the indented ones.
+.categorical_sep_rows_typed <- function(structured) {
+  .struct_block_sep_rows(structured)
+}
+
+.categorical_level_rows_typed <- function(structured) {
+  .struct_indent_rows(structured)
+}
+
+# Internal: the note of a categorical summary table -- the drop_na
+# disclosure prepended to the association-measure gloss, so the reader
+# sees what left the table before reading the statistics computed on
+# what remains. Either part may be absent; `NULL` when both are.
+.categorical_note <- function(missing_note, assoc_note) {
+  parts <- c(missing_note, assoc_note) # c() drops the absent ones
+  parts <- parts[nzchar(parts)]
+  if (length(parts) == 0L) {
+    return(NULL)
+  }
+  paste(parts, collapse = "\n")
 }
 
 # ---- Coercion to plain data.frame / tibble --------------------------------
@@ -176,9 +268,12 @@ as.data.frame.spicy_categorical_table <- function(
 #' @rdname as.data.frame.spicy_categorical_table
 #' @exportS3Method tibble::as_tibble
 as_tibble.spicy_categorical_table <- function(x, ...) {
+  # nocov start: tibble is required to dispatch this as_tibble S3 method
+  # in the first place, so the missing-package guard is unreachable here.
   if (!requireNamespace("tibble", quietly = TRUE)) {
     spicy_abort("Install package 'tibble'.", class = "spicy_missing_pkg")
   }
+  # nocov end
   tibble::as_tibble(unclass_spicy_categorical_table(x), ...)
 }
 
@@ -208,8 +303,7 @@ as_tibble.spicy_categorical_table <- function(x, ...) {
 #' @param ... Currently ignored. Present for compatibility with the
 #'   [broom::tidy()] / [broom::glance()] generics.
 #'
-#' @return A `tbl_df` (when `tibble` is installed) or a plain
-#'   `data.frame`.
+#' @return A `tbl_df`.
 #'
 #' @seealso [as.data.frame.spicy_categorical_table()] for the raw
 #'   wide-format access; [tidy.spicy_continuous_table()] for the
@@ -234,13 +328,19 @@ tidy.spicy_categorical_table <- function(x, ...) {
   }
   has_group <- "group" %in% names(long)
 
-  # Drop the synthetic "Total" group (added by `cross_tab(include_total
-  # = TRUE)`, the default). It is a marginal aggregate, not a real
-  # group level, and including it would mean `tidy()` reports each
-  # observation twice. Users who need the marginal can derive it via
-  # `dplyr::summarise()` on the tidy output.
+  # Drop the synthetic margin group (added under `include_total =
+  # TRUE`, the default). It is a marginal aggregate, not a real group
+  # level, and including it would mean `tidy()` reports each
+  # observation twice. Its key is carried by the `total_group`
+  # attribute ("Total", or the auto-renamed "Total_<i>" when a `by`
+  # level is literally called "Total"), so a user group named "Total"
+  # is never mistaken for the margin. Users who need the marginal can
+  # derive it via `dplyr::summarise()` on the tidy output.
   if (has_group) {
-    long <- long[long$group != "Total", , drop = FALSE]
+    margin_key <- attr(x, "total_group", exact = TRUE)
+    if (!is.null(margin_key)) {
+      long <- long[long$group != margin_key, , drop = FALSE]
+    }
   }
 
   pct_col <- if ("pct" %in% names(long)) {
@@ -258,7 +358,10 @@ tidy.spicy_categorical_table <- function(x, ...) {
   if (has_group) {
     cols$group <- long$group
   }
-  cols$n <- as.integer(long$n)
+  # Unweighted counts stay integer; weighted counts keep their exact
+  # fractional values (they are only rounded at display time).
+  int_like <- all(is.na(long$n) | abs(long$n - round(long$n)) < 1e-8)
+  cols$n <- if (int_like) as.integer(round(long$n)) else long$n
   cols$proportion <- pct_col / 100
 
   result <- do.call(
@@ -270,7 +373,7 @@ tidy.spicy_categorical_table <- function(x, ...) {
   if (requireNamespace("tibble", quietly = TRUE)) {
     return(tibble::as_tibble(result))
   }
-  result
+  result # nocov: tibble is a hard dep of the test/CI matrix, so this plain-data.frame fallback is never hit
 }
 
 #' @rdname tidy.spicy_categorical_table
@@ -287,10 +390,12 @@ glance.spicy_categorical_table <- function(x, ...) {
     )
   }
   # The cross-tab path stores `chi2`, `df`, `p` (added by parse_stats)
-  # plus an association-measure column whose name is the human label
-  # set by `cross_tab()` (`"Cramer's V"`, `"Phi"`, `"Gamma"`,
-  # `"Kendall's Tau-b"`, ...). Treat as the measure any column that
-  # is not in the standard set.
+  # plus an association-measure column named for the measure
+  # (`"Cramer's V"`, `"Phi"`, `"Kendall's Tau-b"`, ...). Which column
+  # that is comes from the typed view, which carries the `assoc` token
+  # on it -- the name is READ, not guessed from a list of the names it
+  # is not. The exclusion rule stays as the fallback for a degraded
+  # object stripped of its typed view.
   has_test <- "p" %in% names(long)
   std_cols <- c(
     "variable",
@@ -304,26 +409,51 @@ glance.spicy_categorical_table <- function(x, ...) {
     "p",
     "p_op",
     "ci_lower",
-    "ci_upper"
+    "ci_upper",
+    # The SMD must be listed here even though this method does not
+    # publish it: the fallback below takes the FIRST leftover column as
+    # the association measure, so an unlisted `smd` on a degraded
+    # object (one stripped of its typed view) would be published under
+    # `assoc_value` / `assoc_type` -- a balance diagnostic wearing the
+    # name of an association measure. Both spellings: the long output
+    # publishes `smd`, the attached `long_data` keeps the internal
+    # `.smd`.
+    "smd",
+    "smd_type",
+    ".smd",
+    ".smd_type"
   )
-  measure_cols <- setdiff(names(long), std_cols)
-  measure_col <- if (length(measure_cols) > 0L) measure_cols[1] else NA_character_
+  st <- attr(x, "structured", exact = TRUE)
+  measure_col <- if (!is.null(st) && !is.null(st$col_meta)) {
+    is_assoc <- vapply(
+      st$col_meta,
+      function(m) identical(m$token, "assoc"),
+      logical(1)
+    )
+    if (any(is_assoc)) names(st$col_meta)[is_assoc][[1L]] else NA_character_
+  } else {
+    measure_cols <- setdiff(names(long), std_cols)
+    if (length(measure_cols) > 0L) measure_cols[[1L]] else NA_character_
+  }
   has_assoc <- !is.na(measure_col)
   has_assoc_ci <- all(c("ci_lower", "ci_upper") %in% names(long))
 
   by_var <- split(long, long$variable, drop = FALSE)
   outcomes <- names(by_var)
+  # In a cross-tab with `include_total = TRUE` (the default), the
+  # long format also stores a synthetic margin group whose `n` are
+  # already the sum across the real groups. Its key comes from the
+  # `total_group` attribute ("Total", or the auto-renamed
+  # "Total_<i>" when a `by` level is literally called "Total");
+  # excluding those rows before summing avoids double-counting.
+  glance_margin <- attr(x, "total_group", exact = TRUE)
   n_total <- vapply(
     by_var,
     function(b) {
-      # In a cross-tab with `include_total = TRUE` (the default),
-      # the long format also stores a synthetic "Total" group whose
-      # `n` are already the sum across the real groups. Excluding
-      # those rows before summing avoids double-counting.
-      if ("group" %in% names(b)) {
-        b <- b[b$group != "Total", , drop = FALSE]
+      if ("group" %in% names(b) && !is.null(glance_margin)) {
+        b <- b[b$group != glance_margin, , drop = FALSE]
       }
-      as.integer(sum(b$n, na.rm = TRUE))
+      as.integer(round(sum(b$n, na.rm = TRUE)))
     },
     integer(1)
   )
@@ -387,5 +517,5 @@ glance.spicy_categorical_table <- function(x, ...) {
   if (requireNamespace("tibble", quietly = TRUE)) {
     return(tibble::as_tibble(result))
   }
-  result
+  result # nocov: tibble is a hard dep of the test/CI matrix, so this plain-data.frame fallback is never hit
 }

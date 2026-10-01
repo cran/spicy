@@ -36,16 +36,16 @@ test_that("all functions return scalar by default", {
 test_that("cramer_v returns correct estimate and 4-element vector", {
   res <- suppressWarnings(cramer_v(tab_3x3(), detail = TRUE))
   expect_type(res, "double")
-  expect_length(res, 4)
-  expect_named(res, c("estimate", "ci_lower", "ci_upper", "p_value"))
+  expect_length(res, 5)
+  expect_named(res, c("estimate", "se", "ci_lower", "ci_upper", "p_value"))
   expect_equal(res[["estimate"]], 0.5308655, tolerance = 1e-5)
   expect_true(res[["p_value"]] < 0.01)
 })
 
 test_that("cramer_v with detail = TRUE, conf_level = NULL returns 2 elements", {
   res <- suppressWarnings(cramer_v(tab_3x3(), detail = TRUE, conf_level = NULL))
-  expect_length(res, 2)
-  expect_named(res, c("estimate", "p_value"))
+  expect_length(res, 3)
+  expect_named(res, c("estimate", "se", "p_value"))
 })
 
 test_that("cramer_v rejects non-table input", {
@@ -123,7 +123,7 @@ test_that("uncertainty_coef returns sensible values", {
   expect_true(sym[["estimate"]] > 0 && sym[["estimate"]] < 1)
   expect_true(row[["estimate"]] > 0 && row[["estimate"]] < 1)
   expect_true(col[["estimate"]] > 0 && col[["estimate"]] < 1)
-  expect_length(sym, 4)
+  expect_length(sym, 5)
 })
 
 # ── gamma_gk ─────────────────────────────────────────────────────────────────
@@ -137,11 +137,17 @@ test_that("gamma_gk matches DescTools", {
 
 # ── kendall_tau_b ────────────────────────────────────────────────────────────
 
-test_that("kendall_tau_b matches DescTools", {
-  res <- suppressWarnings(kendall_tau_b(tab_3x3(), detail = TRUE))
+test_that("kendall_tau_b estimate matches DescTools, CI the corrected ASE1", {
+  # The point estimate matches DescTools; the CI deliberately does
+  # NOT: `DescTools::KendallTauB()` mis-scales one margin term of
+  # the ASE gradient (the same bug spicy shipped through 0.12.0),
+  # so the CI is pinned to the corrected Brown & Benedetti ASE1
+  # (estimate -/+ z * 0.1495818, the PSPP CROSSTABS ASE on this
+  # table).
+  res <- kendall_tau_b(tab_3x3(), detail = TRUE)
   expect_equal(res[["estimate"]], -0.5125435, tolerance = 1e-5)
-  expect_equal(res[["ci_lower"]], -0.8043717, tolerance = 1e-4)
-  expect_equal(res[["ci_upper"]], -0.2207153, tolerance = 1e-4)
+  expect_equal(res[["ci_lower"]], -0.8057184, tolerance = 1e-6)
+  expect_equal(res[["ci_upper"]], -0.2193686, tolerance = 1e-6)
 })
 
 # ── kendall_tau_c ────────────────────────────────────────────────────────────
@@ -177,6 +183,33 @@ test_that("somers_d symmetric matches the harmonic mean of asymmetric (SPSS / PS
   expect_equal(sym, -0.5124224, tolerance = 1e-5)
 })
 
+test_that("somers_d symmetric is 0, not NA, when C == D on a nondegenerate table", {
+  # The harmonic-mean form is 0/0 when concordant and discordant
+  # pairs are exactly equal, but the value is a well-defined 0
+  # (SAS / SPSS closed form); PSPP 2.0 prints .0000000 with a
+  # blank ASE on this table (PSPP never prints a symmetric-d ASE).
+  tu <- as.table(matrix(c(5, 5, 5, 5), 2))
+  expect_no_warning(sym <- somers_d(tu, "symmetric"))
+  expect_identical(sym, 0)
+
+  d <- somers_d(tu, "symmetric", detail = TRUE)
+  expect_identical(unname(d[["estimate"]]), 0)
+  expect_true(is.na(d[["se"]]))
+  expect_true(is.na(d[["p_value"]]))
+})
+
+test_that("somers_d symmetric still warns + NA when a direction is degenerate", {
+  # All observations in a single row: the "column" direction is
+  # undefined (denominator 0), so the symmetric value stays NA and
+  # the classed warning from the recursive call must surface.
+  degen <- as.table(matrix(c(5, 0, 3, 0), 2))
+  expect_warning(
+    res <- somers_d(degen, "symmetric"),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res, NA_real_)
+})
+
 # ── assoc_measures ───────────────────────────────────────────────────────────
 
 test_that("assoc_measures returns data.frame with correct structure", {
@@ -203,6 +236,13 @@ test_that("assoc_measures type ordinal returns ordinal measures only", {
   res <- suppressWarnings(assoc_measures(tab, type = "ordinal"))
   expect_true("Goodman-Kruskal Gamma" %in% res$measure)
   expect_true("Kendall's Tau-b" %in% res$measure)
+  # Positive control: a negative membership on a display name asserts
+  # nothing the day that name is renamed -- it simply stops matching and
+  # stays green. Pin that the string names a real measure first.
+  expect_true(
+    "Cramer's V" %in%
+      suppressWarnings(assoc_measures(tab, type = "nominal"))$measure
+  )
   expect_false("Cramer's V" %in% res$measure)
 })
 
@@ -210,6 +250,11 @@ test_that("assoc_measures type nominal returns nominal measures only", {
   tab <- tab_3x3()
   res <- suppressWarnings(assoc_measures(tab, type = "nominal"))
   expect_true("Cramer's V" %in% res$measure)
+  # Positive control, as above: prove the absent name is a real one.
+  expect_true(
+    "Goodman-Kruskal Gamma" %in%
+      suppressWarnings(assoc_measures(tab, type = "ordinal"))$measure
+  )
   expect_false("Goodman-Kruskal Gamma" %in% res$measure)
 })
 
@@ -232,10 +277,10 @@ test_that("detail = TRUE returns spicy_assoc_detail class", {
   tab <- table(c("A", "B", "A", "B"), c("X", "X", "Y", "Y"))
   res <- cramer_v(tab, detail = TRUE)
   expect_s3_class(res, "spicy_assoc_detail")
-  expect_named(res, c("estimate", "ci_lower", "ci_upper", "p_value"))
+  expect_named(res, c("estimate", "se", "ci_lower", "ci_upper", "p_value"))
   res2 <- cramer_v(tab, detail = TRUE, conf_level = NULL)
   expect_s3_class(res2, "spicy_assoc_detail")
-  expect_named(res2, c("estimate", "p_value"))
+  expect_named(res2, c("estimate", "se", "p_value"))
 })
 
 test_that("print.spicy_assoc_detail formats output", {
@@ -300,6 +345,52 @@ test_that("validation rejects non-2D table", {
   expect_error(cramer_v(t3d), "two-dimensional")
 })
 
+test_that("conf_level is validated across all 11 measures + assoc_measures", {
+  # Out-of-range values used to flow silently into `qnorm()`: e.g.
+  # `conf_level = -1` printed CI [Inf, -Inf] with no warning, and
+  # `conf_level = 95` printed NaN bounds as "--" behind an
+  # unclassed base "NaNs produced" warning.
+  tab <- tab_3x3()
+  tab2 <- tab_2x2()
+  fns_any <- list(
+    cramer_v,
+    contingency_coef,
+    lambda_gk,
+    goodman_kruskal_tau,
+    uncertainty_coef,
+    gamma_gk,
+    kendall_tau_b,
+    kendall_tau_c,
+    somers_d,
+    assoc_measures
+  )
+  for (fn in fns_any) {
+    expect_error(fn(tab, conf_level = 95), class = "spicy_invalid_input")
+  }
+  expect_error(phi(tab2, conf_level = 95), class = "spicy_invalid_input")
+  expect_error(yule_q(tab2, conf_level = 95), class = "spicy_invalid_input")
+})
+
+test_that("conf_level = 95 gets the percentage hint", {
+  expect_error(
+    cramer_v(tab_3x3(), detail = TRUE, conf_level = 95),
+    "conf_level = 0.95",
+    fixed = TRUE
+  )
+})
+
+test_that("conf_level rejects 0, 1, negatives, NA, vectors, non-numerics", {
+  tab <- tab_3x3()
+  for (bad in list(0, 1, -1, NA, NA_real_, c(0.9, 0.95), "0.95", Inf)) {
+    expect_error(
+      gamma_gk(tab, detail = TRUE, conf_level = bad),
+      class = "spicy_invalid_input"
+    )
+  }
+  # NULL stays the documented opt-out (CI omitted, no error).
+  expect_no_error(gamma_gk(tab, detail = TRUE, conf_level = NULL))
+})
+
 # ── conf_level = NULL returns without CI ───────────────────────────────────
 
 test_that("cramer_v detail with conf_level = NULL omits CI", {
@@ -358,11 +449,11 @@ test_that("NA degenerate-table return respects `detail` and `conf_level`", {
   expect_identical(scalar, NA_real_)
   detail <- suppressWarnings(yule_q(tab_yq, detail = TRUE))
   expect_s3_class(detail, "spicy_assoc_detail")
-  expect_named(detail, c("estimate", "ci_lower", "ci_upper", "p_value"))
+  expect_named(detail, c("estimate", "se", "ci_lower", "ci_upper", "p_value"))
   expect_true(all(is.na(detail)))
 
   no_ci <- suppressWarnings(yule_q(tab_yq, detail = TRUE, conf_level = NULL))
-  expect_named(no_ci, c("estimate", "p_value"))
+  expect_named(no_ci, c("estimate", "se", "p_value"))
 })
 
 test_that("gamma_gk NA path returns scalar by default and full shape with detail", {
@@ -371,7 +462,7 @@ test_that("gamma_gk NA path returns scalar by default and full shape with detail
   expect_identical(suppressWarnings(gamma_gk(tab)), NA_real_)
   d <- suppressWarnings(gamma_gk(tab, detail = TRUE))
   expect_s3_class(d, "spicy_assoc_detail")
-  expect_length(d, 4L)
+  expect_length(d, 5L)
 })
 
 
@@ -392,59 +483,156 @@ test_that("gamma_gk NA path returns scalar by default and full shape with detail
 
 test_that("PSPP oracle: mtcars 3x3 (gear x cyl)", {
   tab <- table(factor(mtcars$gear), factor(mtcars$cyl))
-  expect_equal(cramer_v(tab),                       0.5308655, tolerance = 1e-5)
-  expect_equal(contingency_coef(tab),               0.6003875, tolerance = 1e-5)
-  expect_equal(kendall_tau_b(tab),                 -0.5125435, tolerance = 1e-5)
-  expect_equal(kendall_tau_c(tab),                 -0.4833984, tolerance = 1e-5)
-  expect_equal(gamma_gk(tab),                      -0.6573705, tolerance = 1e-5)
-  expect_equal(suppressWarnings(lambda_gk(tab, "symmetric")), 0.4857143, tolerance = 1e-5)
-  expect_equal(suppressWarnings(lambda_gk(tab, "row")),       0.5294118, tolerance = 1e-5)
-  expect_equal(suppressWarnings(lambda_gk(tab, "column")),    0.4444444, tolerance = 1e-5)
-  expect_equal(goodman_kruskal_tau(tab, "row"),      0.3825603, tolerance = 1e-5)
-  expect_equal(goodman_kruskal_tau(tab, "column"),   0.3386018, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "symmetric"),   0.3504372, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "row"),         0.3587709, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "column"),      0.3424818, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "symmetric"),          -0.5124224, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "row"),                -0.5015198, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "column"),             -0.5238095, tolerance = 1e-5)
+  expect_equal(cramer_v(tab), 0.5308655, tolerance = 1e-5)
+  expect_equal(contingency_coef(tab), 0.6003875, tolerance = 1e-5)
+  expect_equal(kendall_tau_b(tab), -0.5125435, tolerance = 1e-5)
+  expect_equal(kendall_tau_c(tab), -0.4833984, tolerance = 1e-5)
+  expect_equal(gamma_gk(tab), -0.6573705, tolerance = 1e-5)
+  expect_equal(
+    suppressWarnings(lambda_gk(tab, "symmetric")),
+    0.4857143,
+    tolerance = 1e-5
+  )
+  expect_equal(
+    suppressWarnings(lambda_gk(tab, "row")),
+    0.5294118,
+    tolerance = 1e-5
+  )
+  expect_equal(
+    suppressWarnings(lambda_gk(tab, "column")),
+    0.4444444,
+    tolerance = 1e-5
+  )
+  expect_equal(goodman_kruskal_tau(tab, "row"), 0.3825603, tolerance = 1e-5)
+  expect_equal(goodman_kruskal_tau(tab, "column"), 0.3386018, tolerance = 1e-5)
+  expect_equal(uncertainty_coef(tab, "symmetric"), 0.3504372, tolerance = 1e-5)
+  expect_equal(uncertainty_coef(tab, "row"), 0.3587709, tolerance = 1e-5)
+  expect_equal(uncertainty_coef(tab, "column"), 0.3424818, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "symmetric"), -0.5124224, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "row"), -0.5015198, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "column"), -0.5238095, tolerance = 1e-5)
 })
 
 test_that("PSPP oracle: mtcars 2x2 (vs x am)", {
   tab <- table(factor(mtcars$vs), factor(mtcars$am))
-  expect_equal(phi(tab),                            0.1683451, tolerance = 1e-5)
-  expect_equal(cramer_v(tab),                       0.1683451, tolerance = 1e-5)
-  expect_equal(contingency_coef(tab),               0.1660092, tolerance = 1e-5)
-  expect_equal(kendall_tau_b(tab),                  0.1683451, tolerance = 1e-5)
-  expect_equal(kendall_tau_c(tab),                  0.1640625, tolerance = 1e-5)
-  expect_equal(gamma_gk(tab),                       0.3333333, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "symmetric"),  0.0208314, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "symmetric"),          0.1683367, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "row"),                0.1700405, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "column"),             0.1666667, tolerance = 1e-5)
+  expect_equal(phi(tab), 0.1683451, tolerance = 1e-5)
+  expect_equal(cramer_v(tab), 0.1683451, tolerance = 1e-5)
+  expect_equal(contingency_coef(tab), 0.1660092, tolerance = 1e-5)
+  expect_equal(kendall_tau_b(tab), 0.1683451, tolerance = 1e-5)
+  expect_equal(kendall_tau_c(tab), 0.1640625, tolerance = 1e-5)
+  expect_equal(gamma_gk(tab), 0.3333333, tolerance = 1e-5)
+  expect_equal(uncertainty_coef(tab, "symmetric"), 0.0208314, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "symmetric"), 0.1683367, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "row"), 0.1700405, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "column"), 0.1666667, tolerance = 1e-5)
 })
 
 test_that("PSPP oracle: HairEyeColor 4x4 (Hair x Eye marginalised)", {
   tab <- margin.table(HairEyeColor, c(1, 2))
-  expect_equal(cramer_v(tab),                       0.2790446, tolerance = 1e-5)
-  expect_equal(contingency_coef(tab),               0.4351585, tolerance = 1e-5)
-  expect_equal(kendall_tau_b(tab),                  0.2247026, tolerance = 1e-5)
-  expect_equal(kendall_tau_c(tab),                  0.2046886, tolerance = 1e-5)
-  expect_equal(gamma_gk(tab),                       0.3177721, tolerance = 1e-5)
-  expect_equal(suppressWarnings(lambda_gk(tab, "symmetric")), 0.1430678, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "symmetric"),  0.0984203, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "symmetric"),          0.2246768, tolerance = 1e-5)
+  expect_equal(cramer_v(tab), 0.2790446, tolerance = 1e-5)
+  expect_equal(contingency_coef(tab), 0.4351585, tolerance = 1e-5)
+  expect_equal(kendall_tau_b(tab), 0.2247026, tolerance = 1e-5)
+  expect_equal(kendall_tau_c(tab), 0.2046886, tolerance = 1e-5)
+  expect_equal(gamma_gk(tab), 0.3177721, tolerance = 1e-5)
+  expect_equal(
+    suppressWarnings(lambda_gk(tab, "symmetric")),
+    0.1430678,
+    tolerance = 1e-5
+  )
+  expect_equal(uncertainty_coef(tab, "symmetric"), 0.0984203, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "symmetric"), 0.2246768, tolerance = 1e-5)
 })
 
 test_that("PSPP oracle: sochealth (smoking x education)", {
   data(sochealth, package = "spicy", envir = environment())
   tab <- table(sochealth$smoking, sochealth$education)
-  expect_equal(cramer_v(tab),                       0.1356677, tolerance = 1e-5)
-  expect_equal(contingency_coef(tab),               0.1344361, tolerance = 1e-5)
-  expect_equal(kendall_tau_b(tab),                 -0.1264155, tolerance = 1e-5)
-  expect_equal(gamma_gk(tab),                      -0.2680678, tolerance = 1e-5)
-  expect_equal(uncertainty_coef(tab, "symmetric"),  0.0114876, tolerance = 1e-5)
-  expect_equal(somers_d(tab, "symmetric"),         -0.1200077, tolerance = 1e-5)
+  expect_equal(cramer_v(tab), 0.1356677, tolerance = 1e-5)
+  expect_equal(contingency_coef(tab), 0.1344361, tolerance = 1e-5)
+  expect_equal(kendall_tau_b(tab), -0.1264155, tolerance = 1e-5)
+  expect_equal(gamma_gk(tab), -0.2680678, tolerance = 1e-5)
+  expect_equal(uncertainty_coef(tab, "symmetric"), 0.0114876, tolerance = 1e-5)
+  expect_equal(somers_d(tab, "symmetric"), -0.1200077, tolerance = 1e-5)
+})
+
+test_that("PSPP oracle: tau-b ASE1 matches PSPP 2.0 CROSSTABS on six tables", {
+  # Anti-regression for the mis-scaled tau-b ASE gradient shipped
+  # through 0.12.0 (the column-margin term was multiplied by
+  # delta1 * delta2 instead of divided by delta2 / multiplied by
+  # delta1). Oracle values are PSPP 2.0 CROSSTABS /STATISTICS=BTAU
+  # ASEs printed with SET FORMAT=F12.7 (fresh runs, 2026-07, via
+  # the tools/validation harness pattern). The SPSS Statistics
+  # Algorithms closed form and an independent numeric delta-method
+  # (multinomial gradient) oracle agree with every pinned value.
+  # `DescTools::KendallTauB()` shares the old bug, so DescTools
+  # must NOT be used as the SE oracle here.
+  taub_se <- function(tab) kendall_tau_b(tab, detail = TRUE)[["se"]]
+
+  expect_equal(taub_se(tab_3x3()), 0.1495818, tolerance = 1e-6)
+  expect_equal(taub_se(tab_2x2()), 0.1753244, tolerance = 1e-6)
+  expect_equal(
+    taub_se(margin.table(HairEyeColor, c(1, 2))),
+    0.0307275,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    taub_se(as.table(matrix(c(200, 10, 15, 30), 2))),
+    0.0644886,
+    tolerance = 1e-6
+  )
+  # The two sochealth ASEs are pinned at 1e-5: PSPP prints 7
+  # decimals, and on these small ASEs the print granularity alone
+  # exceeds a 1e-6 *relative* tolerance (absolute agreement is
+  # < 5e-8 on both).
+  data(sochealth, package = "spicy", envir = environment())
+  expect_equal(
+    taub_se(table(sochealth$smoking, sochealth$education)),
+    0.0273992,
+    tolerance = 1e-5
+  )
+  expect_equal(
+    taub_se(table(sochealth$education, sochealth$self_rated_health)),
+    0.0251407,
+    tolerance = 1e-5
+  )
+})
+
+test_that("PSPP oracle: sibling ASEs pinned (tau-b fix must not leak)", {
+  # gamma / tau-c / Somers' D / lambda / uncertainty coefficient
+  # ASEs matched PSPP 2.0 to 7 decimals both before and after the
+  # tau-b ASE fix (verified byte-identical). Pin one PSPP value
+  # each on mtcars 3x3 so a future edit to the shared concordance
+  # plumbing cannot drift a sibling formula unnoticed.
+  tab <- tab_3x3()
+  expect_equal(
+    gamma_gk(tab, detail = TRUE)[["se"]],
+    0.1727847,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    kendall_tau_c(tab, detail = TRUE)[["se"]],
+    0.1320920,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    somers_d(tab, "row", detail = TRUE)[["se"]],
+    0.1407720,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    somers_d(tab, "column", detail = TRUE)[["se"]],
+    0.1605058,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    lambda_gk(tab, "symmetric", detail = TRUE)[["se"]],
+    0.1292016,
+    tolerance = 1e-6
+  )
+  expect_equal(
+    uncertainty_coef(tab, "symmetric", detail = TRUE)[["se"]],
+    0.0894061,
+    tolerance = 1e-6
+  )
 })
 
 test_that("yule_q warns when ad + bc = 0", {
@@ -497,7 +685,7 @@ test_that("lambda_gk warns + returns NA on rank-1 (constant variable) table", {
   expect_true(all(is.na(res_d)))
   expect_named(
     res_d,
-    c("estimate", "ci_lower", "ci_upper", "p_value")
+    c("estimate", "se", "ci_lower", "ci_upper", "p_value")
   )
 })
 
@@ -522,6 +710,165 @@ test_that("goodman_kruskal_tau warns + returns NA on rank-1 table", {
   expect_true(all(is.na(res_d)))
 })
 
+test_that("uncertainty_coef warns + returns NA when the predicted variable is constant", {
+  # F08: previously returned a silent, plausible-looking 0 for the
+  # undefined 0/0 form (zero marginal entropy, e.g. an unused
+  # factor level), while the rest of the family warned + NA.
+  rank1 <- matrix(c(4L, 0L, 6L, 0L), 2, 2)
+  class(rank1) <- "table"
+
+  expect_warning(
+    res <- uncertainty_coef(rank1, "row"),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res, NA_real_)
+
+  expect_warning(
+    res_d <- uncertainty_coef(rank1, "row", detail = TRUE),
+    class = "spicy_undefined_stat"
+  )
+  expect_s3_class(res_d, "spicy_assoc_detail")
+  expect_named(res_d, c("estimate", "se", "ci_lower", "ci_upper", "p_value"))
+  expect_true(all(is.na(res_d)))
+})
+
+test_that("uncertainty_coef column direction warns when the column variable is constant", {
+  rank1 <- matrix(c(4L, 6L, 0L, 0L), 2, 2)
+  class(rank1) <- "table"
+  expect_warning(
+    res <- uncertainty_coef(rank1, "column"),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res, NA_real_)
+})
+
+test_that("uncertainty_coef symmetric: genuine 0 with one constant variable, NA with two", {
+  # With a single constant variable the symmetric U = 2 * 0 / (0 + H)
+  # is a well-defined 0, not a guard case.
+  one_constant <- matrix(c(4L, 0L, 6L, 0L), 2, 2)
+  class(one_constant) <- "table"
+  expect_no_warning(sym <- uncertainty_coef(one_constant, "symmetric"))
+  expect_equal(sym, 0)
+
+  # Both variables constant (all observations in one cell): 0 / 0.
+  one_cell <- matrix(c(5L, 0L, 0L, 0L), 2, 2)
+  class(one_cell) <- "table"
+  expect_warning(
+    res <- uncertainty_coef(one_cell, "symmetric"),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res, NA_real_)
+})
+
+test_that("ordinal measures report NA p-value when the SE is zero", {
+  # F36: a perfect association has SE = 0, so the Wald z-test is
+  # undefined. gamma / tau-b previously reported p = 0 and tau-c
+  # could reach NaN; all three now gate like the rest of the family.
+  perfect <- matrix(c(5L, 0L, 0L, 5L), 2, 2)
+  class(perfect) <- "table"
+
+  for (fn in list(gamma_gk, kendall_tau_b, kendall_tau_c)) {
+    res <- fn(perfect, detail = TRUE)
+    expect_identical(res[["se"]], 0)
+    expect_true(is.na(res[["p_value"]]))
+    expect_false(is.nan(res[["p_value"]]))
+  }
+})
+
+test_that("kendall_tau_c warns + returns NA when a variable is constant", {
+  # Family degenerate contract: previously returned a silent
+  # definite 0 with SE 0 and CI [0, 0] while gamma / tau-b /
+  # Somers' D all warned + NA on the same table, and PSPP reports
+  # the statistic as missing.
+  one_cell <- as.table(matrix(c(100, 0, 0, 0), 2))
+  expect_warning(
+    res <- kendall_tau_c(one_cell),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res, NA_real_)
+  expect_warning(
+    res_d <- kendall_tau_c(one_cell, detail = TRUE),
+    class = "spicy_undefined_stat"
+  )
+  expect_s3_class(res_d, "spicy_assoc_detail")
+  expect_named(res_d, c("estimate", "se", "ci_lower", "ci_upper", "p_value"))
+  expect_true(all(is.na(res_d)))
+
+  # One constant variable is enough (all observations in a single
+  # column here) -- the same tables on which tau-b's denominator
+  # guard fires.
+  col_const <- as.table(matrix(c(2, 3, 0, 0), 2))
+  expect_warning(
+    res2 <- kendall_tau_c(col_const),
+    class = "spicy_undefined_stat"
+  )
+  expect_identical(res2, NA_real_)
+})
+
+test_that("assoc_measures reports the degenerate tau-c as an NA row", {
+  # The summary table used to print one definite "0.000 [0, 0]"
+  # tau-c row among 16 undefined "--" rows on this table.
+  one_cell <- as.table(matrix(c(100, 0, 0, 0), 2))
+  res <- suppressWarnings(assoc_measures(one_cell))
+  tauc_row <- res[res$measure == "Stuart's Tau-c", ]
+  expect_true(is.na(tauc_row$estimate))
+  expect_true(is.na(tauc_row$se))
+  expect_true(is.na(tauc_row$ci_lower))
+  expect_true(is.na(tauc_row$ci_upper))
+})
+
+test_that("assoc_measures re-emits classed warnings from undefined measures", {
+  # F15: `assoc_measures()` used to blanket-suppress the classed
+  # `spicy_undefined_stat` warnings its measures raise on degenerate
+  # tables, leaving silent `--` rows with no signal.
+  degen <- matrix(c(4L, 6L, 0L, 0L), 2, 2)
+  class(degen) <- "table"
+  suppressWarnings(
+    expect_warning(assoc_measures(degen), class = "spicy_undefined_stat")
+  )
+})
+
+test_that("assoc_measures deduplicates re-emitted warnings by message", {
+  one_cell <- matrix(c(5L, 0L, 0L, 0L), 2, 2)
+  class(one_cell) <- "table"
+  conds <- list()
+  withCallingHandlers(
+    res <- assoc_measures(one_cell),
+    warning = function(w) {
+      conds[[length(conds) + 1L]] <<- w
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_s3_class(res, "spicy_assoc_table")
+  expect_true(length(conds) > 0)
+  expect_true(all(vapply(conds, inherits, logical(1), "spicy_undefined_stat")))
+  expect_true(all(vapply(conds, inherits, logical(1), "spicy_warning")))
+  msgs <- vapply(conds, conditionMessage, character(1))
+  expect_identical(anyDuplicated(msgs), 0L)
+  # Both Somers' D directions raise this identical message on the
+  # all-in-one-cell table; it must be re-emitted exactly once.
+  expect_identical(
+    sum(msgs == "Somers' d is undefined for this table; returning NA."),
+    1L
+  )
+})
+
+test_that("assoc_measures on a well-populated table emits no warnings", {
+  expect_no_warning(assoc_measures(tab_3x3()))
+})
+
+test_that("direction defaults follow the documented per-measure conventions", {
+  # F14 (audited, kept): somers_d defaults to "row" (intrinsically
+  # asymmetric, symmetric form has no analytic SE; DescTools offers
+  # no symmetric option), while lambda_gk / uncertainty_coef default
+  # to "symmetric" (standard variants with their own ASE).
+  tab <- tab_3x3()
+  expect_identical(somers_d(tab), somers_d(tab, "row"))
+  expect_identical(lambda_gk(tab), lambda_gk(tab, "symmetric"))
+  expect_identical(uncertainty_coef(tab), uncertainty_coef(tab, "symmetric"))
+  expect_identical(goodman_kruskal_tau(tab), goodman_kruskal_tau(tab, "row"))
+})
+
 test_that("kendall_tau_c warns on 1-row table", {
   tab <- matrix(c(5L, 3L), nrow = 1)
   class(tab) <- "table"
@@ -534,12 +881,18 @@ test_that("somers_d warns when denom = 0", {
   expect_warning(somers_d(tab, "column"), "undefined")
 })
 
-test_that("print.spicy_assoc_detail formats NA as --", {
+test_that("print.spicy_assoc_detail formats NA as the undefined glyph", {
   tab <- matrix(c(5L, 0L, 3L, 2L), 2, 2)
   class(tab) <- "table"
   res <- yule_q(tab, detail = TRUE)
   out <- capture.output(print(res))
-  expect_true(any(grepl("--", out)))
+  # Decision 23: one glyph for the package, the en dash, from the
+  # registry. Pinned both ways -- the key so the site keeps reading
+  # it, the literal so the DECISION is what a reader of this test
+  # sees.
+  expect_true(any(grepl(spicy_str("cell_undefined"), out, fixed = TRUE)))
+  expect_true(any(grepl("–", out, fixed = TRUE)))
+  expect_false(any(grepl("--", out, fixed = TRUE)))
 })
 
 test_that("print.spicy_assoc_detail formats small p-values in APA style (<.001)", {
@@ -582,25 +935,25 @@ test_that(".assoc_result detail = FALSE returns scalar", {
   expect_false(inherits(res, "spicy_assoc_detail"))
 })
 
-test_that(".assoc_result conf_level = NULL with .include_se = TRUE", {
+test_that(".assoc_result conf_level = NULL keeps se, omits CI", {
   tab <- tab_3x3()
-  res <- gamma_gk(tab, detail = TRUE, conf_level = NULL, .include_se = TRUE)
+  res <- gamma_gk(tab, detail = TRUE, conf_level = NULL)
   expect_s3_class(res, "spicy_assoc_detail")
   expect_true("se" %in% names(res))
   expect_true("p_value" %in% names(res))
   expect_false("ci_lower" %in% names(res))
 })
 
-test_that("cramer_v conf_level = NULL with .include_se = TRUE", {
+test_that("cramer_v conf_level = NULL keeps se", {
   tab <- tab_3x3()
-  res <- cramer_v(tab, detail = TRUE, conf_level = NULL, .include_se = TRUE)
+  res <- cramer_v(tab, detail = TRUE, conf_level = NULL)
   expect_s3_class(res, "spicy_assoc_detail")
   expect_true("se" %in% names(res))
 })
 
-test_that("phi conf_level = NULL with .include_se = TRUE", {
+test_that("phi conf_level = NULL keeps se", {
   tab <- tab_2x2()
-  res <- phi(tab, detail = TRUE, conf_level = NULL, .include_se = TRUE)
+  res <- phi(tab, detail = TRUE, conf_level = NULL)
   expect_s3_class(res, "spicy_assoc_detail")
   expect_true("se" %in% names(res))
 })
@@ -613,14 +966,9 @@ test_that("yule_q conf_level = NULL omits CI", {
   expect_false("ci_lower" %in% names(res))
 })
 
-test_that("contingency_coef conf_level = NULL with .include_se = TRUE", {
+test_that("contingency_coef conf_level = NULL keeps se", {
   tab <- tab_3x3()
-  res <- contingency_coef(
-    tab,
-    detail = TRUE,
-    conf_level = NULL,
-    .include_se = TRUE
-  )
+  res <- contingency_coef(tab, detail = TRUE, conf_level = NULL)
   expect_s3_class(res, "spicy_assoc_detail")
   expect_true("se" %in% names(res))
 })
@@ -650,4 +998,39 @@ test_that("lambda_gk column detail covers L_col_max branch", {
   class(tab) <- "table"
   res <- lambda_gk(tab, direction = "column", detail = TRUE)
   expect_s3_class(res, "spicy_assoc_detail")
+})
+
+test_that("chi-squared measures return NA with a classed warning on zero-margin tables", {
+  tab0 <- as.table(matrix(c(4, 6, 0, 0), nrow = 2))
+  for (fn in list(cramer_v, phi, contingency_coef)) {
+    expect_warning(
+      res <- fn(tab0),
+      class = "spicy_undefined_stat"
+    )
+    expect_identical(res, NA_real_)
+    expect_warning(
+      det <- fn(tab0, detail = TRUE),
+      class = "spicy_undefined_stat"
+    )
+    expect_s3_class(det, "spicy_assoc_detail")
+    expect_true(all(is.na(as.numeric(det))))
+  }
+})
+
+test_that("assoc_measures survives a zero-margin table and re-emits the chi-squared warning once", {
+  tab0 <- as.table(matrix(c(4, 6, 0, 0), nrow = 2))
+  warns <- list()
+  res <- withCallingHandlers(
+    assoc_measures(tab0),
+    warning = function(w) {
+      warns[[length(warns) + 1L]] <<- w
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_s3_class(res, "spicy_assoc_table")
+  chi_rows <- res$measure %in% c("Phi", "Cramer's V", "Contingency Coefficient")
+  expect_true(all(is.na(res$estimate[chi_rows])))
+  msgs <- vapply(warns, conditionMessage, character(1))
+  expect_identical(sum(grepl("chi-squared statistic is NaN", msgs)), 1L)
+  expect_true(any(vapply(warns, inherits, logical(1), "spicy_undefined_stat")))
 })

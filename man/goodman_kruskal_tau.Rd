@@ -9,8 +9,7 @@ goodman_kruskal_tau(
   direction = c("row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 )
 }
 \arguments{
@@ -24,14 +23,14 @@ goodman_kruskal_tau(
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -60,6 +59,11 @@ tab <- table(sochealth$smoking, sochealth$education)
 goodman_kruskal_tau(tab)
 goodman_kruskal_tau(tab, direction = "column", detail = TRUE)
 
+}
+\references{
+Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+for cross classifications. \emph{Journal of the American Statistical
+Association}, 49(268), 732-764. \doi{10.2307/2281536}
 }
 \seealso{
 \code{\link[=lambda_gk]{lambda_gk()}}, \code{\link[=uncertainty_coef]{uncertainty_coef()}}, \code{\link[=assoc_measures]{assoc_measures()}}

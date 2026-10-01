@@ -14,7 +14,16 @@ test_that("table_continuous returns correct structure", {
       "max",
       "ci_lower",
       "ci_upper",
-      "n"
+      "median",
+      "q1",
+      "q3",
+      "iqr",
+      "med_ci_lower",
+      "med_ci_upper",
+      "n",
+      # Stable schema (decision 17): always present, NA without
+      # `weights` -- programmatic consumers get one shape, not two.
+      "weighted_n"
     )
   )
   expect_equal(nrow(out), 4L)
@@ -24,6 +33,29 @@ test_that("table_continuous returns spicy_continuous_table class when default ou
   out <- table_continuous(iris, select = c(Sepal.Length))
   expect_s3_class(out, "spicy_continuous_table")
   expect_s3_class(out, "spicy_table")
+})
+
+test_that("table_continuous returns visibly and is silent when assigned", {
+  # Decision 47: a bare call renders (capture.output() evaluates as at
+  # top level, so the visible return auto-prints); an assignment
+  # writes nothing.
+  expect_visible(table_continuous(iris, select = Sepal.Length))
+  bare <- capture.output(table_continuous(iris, select = Sepal.Length))
+  expect_true(length(bare) > 0)
+
+  assigned <- capture.output(
+    tc <- table_continuous(iris, select = Sepal.Length)
+  )
+  expect_identical(assigned, character(0))
+  expect_s3_class(tc, "spicy_continuous_table")
+  expect_identical(capture.output(print(tc)), bare)
+
+  # Same with a `by` group.
+  assigned_by <- capture.output(
+    tb <- table_continuous(iris, select = Sepal.Length, by = Species)
+  )
+  expect_identical(assigned_by, character(0))
+  expect_true(length(capture.output(print(tb))) > 0)
 })
 
 test_that("table_continuous default output object carries correct attributes", {
@@ -137,13 +169,52 @@ test_that("table_continuous n=1 gives NA for sd and CI", {
   expect_true(is.na(out$ci_upper))
 })
 
-test_that("table_continuous display uses -- for NA values", {
+test_that("the undefined glyph sets the width of the column it lands in", {
+  # Decision 23 replaced a two-character placeholder with a
+  # one-character one, and the placeholder takes part in the
+  # integer-part width `decimal_align_strings()` computes for its
+  # column. A column whose widest integer part WAS the placeholder
+  # therefore tightens by one character and every number in it shifts.
+  # That is a consequence of the decision, not a defect -- but nothing
+  # else in the suite renders a `by` table with an undefined cell, so
+  # without this the next change to the aligner moves it again unseen.
+  d <- data.frame(x = c(1, 2, 3, 42), g = factor(c("A", "A", "A", "B")))
+  line_width <- function(w) {
+    withr::with_options(
+      list(width = w),
+      max(nchar(capture.output(print(table_continuous(d, by = g)))))
+    )
+  }
+  expect_identical(
+    vapply(c(200L, 80L, 60L), line_width, integer(1)),
+    c(93L, 73L, 56L)
+  )
+
+  # And the mechanism, independent of the absolute layout: with a
+  # two-character placeholder the same table is exactly one character
+  # wider at every console width. This is what says the glyph is
+  # load-bearing for the width, rather than pinning three numbers that
+  # an unrelated layout change may legitimately move.
+  orig <- spicy_str
+  local_mocked_bindings(
+    spicy_str = function(key, ...) {
+      if (identical(key, "cell_undefined")) "--" else orig(key, ...)
+    }
+  )
+  expect_identical(
+    vapply(c(200L, 80L, 60L), line_width, integer(1)),
+    c(94L, 74L, 57L)
+  )
+})
+
+test_that("table_continuous display uses the undefined glyph for NA", {
   df <- data.frame(x = 42)
   out <- table_continuous(df)
   display <- spicy:::build_display_df(out, 2L, ".", 0.95)
-  expect_equal(display$SD[1], "--")
-  expect_equal(display[["95% CI LL"]][1], "--")
-  expect_equal(display[["95% CI UL"]][1], "--")
+  # Decision 23: the en dash, from `cell_undefined`, in every family.
+  expect_equal(display$SD[1], "–")
+  expect_equal(display[["95% CI LL"]][1], spicy_str("cell_undefined"))
+  expect_equal(display[["95% CI UL"]][1], spicy_str("cell_undefined"))
 })
 
 # ---- column selection ----
@@ -341,10 +412,45 @@ test_that("table_continuous grouped with multiple variables", {
   )
 })
 
-test_that("table_continuous grouped with character group_var sorts levels", {
+test_that("table_continuous non-factor by groups in order of appearance", {
+  # Audit phase 2, finding 17: the family convention (locked for
+  # table_categorical()) is order of first appearance for a
+  # non-factor `by`; table_continuous() used to sort.
   df <- data.frame(g = c("Z", "A", "Z", "A"), x = c(1, 2, 3, 4))
   out <- table_continuous(df, by = g, output = "data.frame")
-  expect_equal(out$group, c("A", "Z"))
+  expect_equal(out$group, c("Z", "A"))
+
+  # Numeric by, same convention, matching table_categorical().
+  set.seed(7)
+  dn <- data.frame(gnum = sample(c(1, 2, 3), 60, TRUE), xx = rnorm(60))
+  tc <- table_continuous(dn, select = xx, by = gnum, output = "long")
+  dcat <- data.frame(yy = factor(rep(c("u", "v"), 30)), gnum = dn$gnum)
+  tcat <- table_categorical(dcat, select = yy, by = gnum, output = "long")
+  expect_equal(
+    unique(tc$group),
+    setdiff(unique(tcat$group), "Total")
+  )
+})
+
+test_that("the test direction follows the displayed group order", {
+  # Companion to finding 17: the formula interface of t.test() would
+  # re-sort a bare character `by`; the statistic's sign must match
+  # the displayed first-minus-second convention.
+  df <- data.frame(
+    g = c("Z", "A", "Z", "A", "Z", "A"),
+    x = c(1, 2, 3, 4, 5, 6)
+  )
+  out <- table_continuous(
+    df,
+    by = g,
+    p_value = TRUE,
+    statistic = TRUE,
+    output = "long"
+  )
+  expect_equal(unique(out$group), c("Z", "A"))
+  tt <- stats::t.test(df$x[df$g == "Z"], df$x[df$g == "A"])
+  expect_equal(out$statistic[1], unname(tt$statistic), tolerance = 1e-12)
+  expect_equal(out$p.value[1], tt$p.value, tolerance = 1e-12)
 })
 
 # ---- p_value / statistic ----
@@ -368,6 +474,19 @@ test_that("table_continuous p_value adds p column without Test column", {
     show_statistic = FALSE
   )
   expect_true("p" %in% names(display))
+  # Positive control: "Test" has to be a header the builder can produce,
+  # or this negative stops asserting anything the day it is renamed.
+  expect_true(
+    "Test" %in%
+      names(spicy:::build_display_df(
+        out,
+        2L,
+        ".",
+        0.95,
+        show_p = TRUE,
+        show_statistic = TRUE
+      ))
+  )
   expect_false("Test" %in% names(display))
 })
 
@@ -410,6 +529,19 @@ test_that("table_continuous statistic alone shows Test column without p", {
     show_statistic = TRUE
   )
   expect_true("Test" %in% names(display))
+  # Positive control, mirroring the sibling test: "p" is a header the
+  # builder produces when asked, so its absence here means something.
+  expect_true(
+    "p" %in%
+      names(spicy:::build_display_df(
+        out,
+        2L,
+        ".",
+        0.95,
+        show_p = TRUE,
+        show_statistic = TRUE
+      ))
+  )
   expect_false("p" %in% names(display))
 })
 
@@ -640,6 +772,35 @@ test_that("table_continuous warns when test is set without p_value/statistic", {
   )
 })
 
+test_that("the test-ignored warning states the full trigger condition", {
+  expect_warning(
+    table_continuous(
+      iris,
+      select = Sepal.Length,
+      by = Species,
+      test = "student",
+      p_value = FALSE,
+      statistic = FALSE,
+      output = "data.frame"
+    ),
+    "`p_value`, `statistic`, `effect_size`, and `effect_size_ci`",
+    class = "spicy_ignored_arg"
+  )
+  # An effect-size request keeps `test` active: no warning.
+  expect_no_warning(
+    table_continuous(
+      iris,
+      select = Sepal.Length,
+      by = Species,
+      test = "student",
+      p_value = FALSE,
+      statistic = FALSE,
+      effect_size = "eta_sq",
+      output = "data.frame"
+    )
+  )
+})
+
 test_that("table_continuous nonparametric statistic display uses W and H", {
   df2 <- data.frame(g = rep(c("A", "B"), each = 20), x = rnorm(40))
   out2 <- table_continuous(
@@ -807,6 +968,90 @@ test_that("print.spicy_continuous_table returns invisible x", {
   expect_s3_class(ret$value, "spicy_continuous_table")
 })
 
+test_that("the console prints the registry header, not the column key", {
+  # At the English default the label and the key are the same string, so
+  # nothing else in the suite can tell whether the console reads the
+  # label layer at all. Mocking the resolver makes the difference
+  # visible: dropping `display_labels` from the spicy_print_table() call
+  # fails this test and only this one.
+  local_mocked_bindings(
+    .continuous_labels = function(col_keys, ci_level, decimal_mark = ".") {
+      paste0("<", col_keys, ">")
+    }
+  )
+  out <- table_continuous(iris, select = Sepal.Length)
+  txt <- capture.output(print(out))
+  expect_true(any(grepl("<Variable>", txt, fixed = TRUE)))
+  expect_true(any(grepl("<95% CI LL>", txt, fixed = TRUE)))
+  # The frozen key is gone from the header row it used to occupy.
+  expect_false(any(grepl(" Variable ", txt, fixed = TRUE)))
+})
+
+test_that("a table without `by` draws no variable separator in the console", {
+  # A one-way table has one row per variable, so the block key changes
+  # on every row and `.struct_run_sep_rows()` answers "every row". The
+  # console does not want a hairline under each of them; the engines do
+  # draw them. That is a rendering policy, and the `has_group` guard in
+  # `.continuous_console_render()` is where it is written down.
+  one_way <- capture.output(print(
+    table_continuous(iris, select = c(Sepal.Length, Sepal.Width))
+  ))
+  expect_false(any(grepl("╌", one_way, fixed = TRUE)))
+
+  by_group <- capture.output(print(
+    table_continuous(iris, select = c(Sepal.Length, Sepal.Width), by = Species)
+  ))
+  expect_true(any(grepl("╌", by_group, fixed = TRUE)))
+})
+
+test_that("a missing variable label falls back to the column name", {
+  # `nzchar(NA)` is TRUE, so a partly-labelled import used to send the
+  # attribute's NA into the table's stub. Downstream that was worse than
+  # a wrong word: `nchar(NA)` is NA, which turned the padding decision
+  # (`if (normal_width > console_w)`) into "missing value where
+  # TRUE/FALSE needed", and once that was fixed the NA reached
+  # `str_pad()`, which returns NA rather than a padded blank, leaving the
+  # row unpadded and every separator bar of the table at NA.
+  #
+  # Assertions on the RENDERED table, not on the absence of an error:
+  # the label falls back to the column name, the header rule has exactly
+  # one crossing, and every line is the same width.
+  d <- data.frame(x = c(1, 2, 3), y = c(4, 5, 6))
+  attr(d$x, "label") <- NA_character_
+  out <- table_continuous(d, select = c(x, y))
+  txt <- capture.output(print(out))
+
+  expect_false(any(grepl("NA", txt, fixed = TRUE)))
+  grid <- txt[grepl("│", txt, fixed = TRUE) | grepl("─", txt, fixed = TRUE)]
+  expect_length(grid, 4L) # header, rule, two body rows
+  expect_match(grid[3L], "^ x ")
+  expect_match(grid[4L], "^ y ")
+  # One crossing on the rule: the first-column separator. NA-desynced
+  # bars used to add a second.
+  expect_length(gregexpr("┼", grid[2L], fixed = TRUE)[[1L]], 1L)
+  # Every line the same display width: the row is padded.
+  expect_length(unique(crayon::col_nchar(grid, type = "width")), 1L)
+})
+
+test_that("a wide-character label does not overflow a narrow console", {
+  # `nchar()` counts CHARACTERS, the renderer lays out COLUMNS. A CJK
+  # label is twice as wide as it is long, so the padding decision used to
+  # under-measure it and emit a table wider than the console. Measured on
+  # the same `crayon::col_nchar(type = "width")` the renderer uses, the
+  # table fits. Eight glyphs = sixteen columns; at width 28 the old
+  # measure produced 29 columns of output.
+  d <- data.frame(x = c(1, 2, 3))
+  attr(d$x, "label") <- strrep("身", 8L)
+  txt <- withr::with_options(list(width = 28L), {
+    invisible(capture.output(
+      out <- table_continuous(d, select = x, show_columns = "m")
+    ))
+    capture.output(print(out))
+  })
+  expect_lte(max(crayon::col_nchar(txt, type = "width")), 28L)
+  expect_true(any(grepl(strrep("身", 8L), txt, fixed = TRUE)))
+})
+
 # ---- validation ----
 
 test_that("table_continuous errors on non-data-frame", {
@@ -843,7 +1088,7 @@ test_that("table_continuous validates digits", {
 
 test_that("table_continuous validates decimal_mark", {
   df <- data.frame(x = 1:5)
-  expect_error(table_continuous(df, decimal_mark = ";"), "decimal_mark")
+  expect_error(table_continuous(df, decimal_mark = "--"), "decimal_mark")
 })
 
 test_that("table_continuous validates labels", {
@@ -876,6 +1121,7 @@ test_that("table_continuous validates logical parameters", {
   expect_error(table_continuous(df, effect_size = NA), "effect_size")
   expect_error(table_continuous(df, effect_size_ci = NULL), "effect_size_ci")
   expect_error(table_continuous(df, regex = "TRUE"), "regex")
+  expect_error(table_continuous(df, drop_na = "yes"), "drop_na")
   expect_error(table_continuous(df, verbose = NA), "verbose")
 })
 
@@ -886,13 +1132,122 @@ test_that("table_continuous warns when NA present in by column", {
   )
   expect_warning(
     table_continuous(df, select = "x", by = "g", output = "data.frame"),
-    "2 observation.*excluded"
+    class = "spicy_dropped_na"
   )
   out <- suppressWarnings(
     table_continuous(df, select = "x", by = "g", output = "data.frame")
   )
   # Only A and B groups should be present
   expect_equal(sort(unique(out$group)), c("A", "B"))
+})
+
+test_that("table_continuous discloses removed NAs in a table note", {
+  df <- data.frame(x = c(1:7, NA), y = c(NA, NA, 3:8))
+  out <- table_continuous(df, select = c("x", "y"))
+  expect_equal(
+    attr(out, "missing_note"),
+    "Missing values removed: x (1), y (2)."
+  )
+  printed <- paste(capture.output(print(out)), collapse = "\n")
+  expect_match(printed, "Missing values removed: x (1), y (2).", fixed = TRUE)
+  # No NAs -> no note.
+  clean <- table_continuous(data.frame(x = 1:5), select = "x")
+  expect_null(attr(clean, "missing_note"))
+})
+
+test_that("drop_na = TRUE discloses removed missing-by rows in the note", {
+  df <- data.frame(
+    x = c(1:6, NA),
+    g = c("A", "A", "B", "B", NA, NA, "A")
+  )
+  out <- suppressWarnings(table_continuous(df, select = "x", by = "g"))
+  expect_equal(
+    attr(out, "missing_note"),
+    "Missing values removed: x (1). Rows with missing g removed: 2."
+  )
+})
+
+test_that("drop_na = FALSE displays a (Missing) group and tests the observed", {
+  df <- data.frame(
+    x = c(1, 2, 3, 4, 5, 6, 7, 8),
+    g = c("A", "A", "B", "B", "A", "B", NA, NA)
+  )
+  # No spicy_dropped_na warning: nothing is removed.
+  out <- table_continuous(
+    df,
+    select = "x",
+    by = "g",
+    drop_na = FALSE,
+    output = "data.frame"
+  )
+  expect_equal(unique(out$group), c("A", "B", "(Missing)"))
+  expect_equal(out$n[out$group == "(Missing)"], 2L)
+  # Show the missing, test the observed: same p as drop_na = TRUE.
+  ref <- suppressWarnings(
+    table_continuous(df, select = "x", by = "g", output = "data.frame")
+  )
+  expect_equal(out$p.value[1], ref$p.value[1])
+})
+
+test_that("drop_na = FALSE guards against a real (Missing) group value", {
+  df <- data.frame(
+    x = 1:6,
+    g = c("(Missing)", "(Missing)", "B", "B", NA, NA)
+  )
+  out <- table_continuous(
+    df,
+    select = "x",
+    by = "g",
+    drop_na = FALSE,
+    output = "data.frame"
+  )
+  expect_equal(unique(out$group), c("(Missing)", "B", "(Missing_1)"))
+})
+
+test_that("drop_na = FALSE guards against a declared-only (Missing) level", {
+  # Audit phase 2 delta (sibling of R2/R3/R8): the collision guard
+  # scanned only observed values, so a factor `by` DECLARING an
+  # unobserved "(Missing)" level plus real NAs used to display the
+  # missing-`by` group twice under the same duplicated label.
+  df <- data.frame(
+    y = c(1, 2, 3, 4, 5, 6),
+    g = factor(c("u", "u", "v", "v", NA, NA), levels = c("u", "v", "(Missing)"))
+  )
+  out <- table_continuous(
+    df,
+    select = "y",
+    by = "g",
+    drop_na = FALSE,
+    output = "data.frame"
+  )
+  expect_equal(unique(out$group), c("u", "v", "(Missing)", "(Missing_1)"))
+  expect_identical(out$n[out$group == "(Missing)"], 0L)
+  expect_identical(out$n[out$group == "(Missing_1)"], 2L)
+})
+
+test_that("drop_na = FALSE without by warns spicy_ignored_arg", {
+  df <- data.frame(x = c(1:4, NA))
+  expect_warning(
+    table_continuous(df, select = "x", drop_na = FALSE, output = "data.frame"),
+    class = "spicy_ignored_arg"
+  )
+})
+
+test_that("table_continuous raw outputs carry the missing_note attribute", {
+  # Reversal of the pre-0.13 contract: a raw frame that a pipeline
+  # re-renders itself must still be able to state what was removed.
+  df <- data.frame(x = c(1:7, NA))
+  out <- table_continuous(df, select = "x", output = "data.frame")
+  expect_identical(attr(out, "missing_note"), "Missing values removed: x (1).")
+  long <- table_continuous(df, select = "x", output = "long")
+  expect_identical(attr(long, "missing_note"), "Missing values removed: x (1).")
+  # Nothing removed -> nothing to disclose.
+  clean <- table_continuous(
+    data.frame(x = 1:5),
+    select = "x",
+    output = "data.frame"
+  )
+  expect_null(attr(clean, "missing_note"))
 })
 
 test_that("fmt_p uses non-breaking space in display", {
@@ -994,6 +1349,18 @@ test_that("table_continuous gt with p_value only has p spanner but not Test", {
   spanners <- out[["_spanners"]]
   labels <- unlist(spanners$spanner_label)
   expect_true("p" %in% labels)
+  # Positive control: the same table WITH `statistic` does carry a
+  # "Test" spanner, so the negative below is about the toggle and not
+  # about a label that has quietly moved.
+  with_stat <- table_continuous(
+    iris,
+    select = Sepal.Length,
+    by = Species,
+    p_value = TRUE,
+    statistic = TRUE,
+    output = "gt"
+  )
+  expect_true("Test" %in% unlist(with_stat[["_spanners"]]$spanner_label))
   expect_false("Test" %in% labels)
 })
 
@@ -1084,6 +1451,8 @@ test_that("table_continuous word output writes file", {
 })
 
 test_that("table_continuous word errors without path", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
   expect_error(
     table_continuous(iris, select = c(Sepal.Length), output = "word"),
     "word_path"
@@ -1091,6 +1460,8 @@ test_that("table_continuous word errors without path", {
 })
 
 test_that("table_continuous word errors with empty path", {
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("officer")
   expect_error(
     table_continuous(
       iris,
@@ -1106,7 +1477,13 @@ test_that("table_continuous word errors with empty path", {
 
 test_that("table_continuous clipboard output works", {
   skip_if_not_installed("clipr")
-  skip_if_not(clipr::clipr_available(), "Clipboard not available")
+  # The writer is mocked, never the real system clipboard: a test run
+  # must not overwrite what the user has copied.
+  testthat::local_mocked_bindings(
+    write_clip = function(text, ...) invisible(text),
+    clipr_available = function(...) TRUE,
+    .package = "clipr"
+  )
   expect_message(
     out <- table_continuous(
       iris,
@@ -1199,6 +1576,20 @@ test_that("build_display_df ungrouped has correct column names", {
   display <- spicy:::build_display_df(out, 2L, ".", 0.90)
   expect_true("90% CI LL" %in% names(display))
   expect_true("90% CI UL" %in% names(display))
+  # Positive control: "Group" is the header a grouped table carries, so
+  # its absence here says the ungrouped shape drops the column rather
+  # than that the header has been renamed.
+  grouped <- table_continuous(
+    data.frame(x = 1:10, g = rep(1:2, 5)),
+    by = g,
+    output = "data.frame"
+  )
+  expect_true(
+    "Group" %in%
+      names(
+        spicy:::build_display_df(grouped, 2L, ".", 0.95)
+      )
+  )
   expect_false("Group" %in% names(display))
 })
 
@@ -1273,7 +1664,11 @@ test_that("table_continuous errors when by selects multiple columns", {
 
 test_that("table_continuous clipboard with groups works", {
   skip_if_not_installed("clipr")
-  skip_if_not(clipr::clipr_available(), "Clipboard not available")
+  testthat::local_mocked_bindings(
+    write_clip = function(text, ...) invisible(text),
+    clipr_available = function(...) TRUE,
+    .package = "clipr"
+  )
   expect_message(
     out <- table_continuous(
       iris,
@@ -1281,7 +1676,8 @@ test_that("table_continuous clipboard with groups works", {
       by = Species,
       output = "clipboard"
     ),
-    "copied to clipboard"
+    "copied to clipboard",
+    class = "spicy_info"
   )
   expect_s3_class(out, "data.frame")
   expect_true("Group" %in% names(out))
@@ -1291,7 +1687,11 @@ test_that("table_continuous clipboard with groups works", {
 
 test_that("table_continuous clipboard with custom delimiter works", {
   skip_if_not_installed("clipr")
-  skip_if_not(clipr::clipr_available(), "Clipboard not available")
+  testthat::local_mocked_bindings(
+    write_clip = function(text, ...) invisible(text),
+    clipr_available = function(...) TRUE,
+    .package = "clipr"
+  )
   expect_message(
     out <- table_continuous(
       iris,
@@ -1539,6 +1939,17 @@ test_that("table_continuous effect_size=TRUE alone adds es but not test columns"
     show_effect_size = TRUE
   )
   expect_true("ES" %in% names(display))
+  # Positive control: both headers ARE produced when asked for, so the
+  # two negatives below cannot go quiet on a rename.
+  with_both <- spicy:::build_display_df(
+    out,
+    2L,
+    ".",
+    0.95,
+    show_p = TRUE,
+    show_statistic = TRUE
+  )
+  expect_true(all(c("Test", "p") %in% names(with_both)))
   expect_false("Test" %in% names(display))
   expect_false("p" %in% names(display))
 })
@@ -2215,7 +2626,7 @@ test_that("effect_size mismatched explicit choice errors clearly", {
   )
 })
 
-test_that("effect_size invalid character value rejected by match.arg", {
+test_that("effect_size invalid character value rejected with a classed error", {
   expect_error(
     table_continuous(
       sleep,
@@ -2223,7 +2634,8 @@ test_that("effect_size invalid character value rejected by match.arg", {
       by = group,
       effect_size = "bogus_metric"
     ),
-    "should be one of"
+    "`effect_size` must be one of",
+    class = "spicy_invalid_input"
   )
 })
 
@@ -2273,13 +2685,14 @@ test_that("p_digits validates and renders accordingly", {
 })
 
 test_that("align argument validates and stores the choice", {
-  for (a in c("decimal", "auto", "center", "right")) {
+  for (a in c("decimal", "center", "right")) {
     out <- table_continuous(sleep, select = extra, by = group, align = a)
     expect_equal(attr(out, "align"), a)
   }
   expect_error(
     table_continuous(sleep, select = extra, by = group, align = "bogus"),
-    "should be one of"
+    "`align` must be one of",
+    class = "spicy_invalid_input"
   )
 })
 
@@ -2291,18 +2704,30 @@ test_that("show_n = FALSE drops the n column from the rendered display df", {
     show_n = FALSE
   )
   expect_false(attr(out, "show_n"))
-  display <- spicy:::build_display_df(
-    out,
+  args <- list(
     digits = 2,
     decimal_mark = ".",
     ci_level = 0.95,
     show_p = TRUE,
     show_statistic = FALSE,
-    show_n = FALSE,
     show_ci = TRUE,
     show_effect_size = FALSE,
     show_effect_size_ci = FALSE,
     p_digits = 3L
+  )
+  display <- do.call(
+    spicy:::build_display_df,
+    c(list(out), args, list(show_n = FALSE))
+  )
+  # Positive control: the same builder DOES produce the "n" header at
+  # `show_n = TRUE`, so the negative is about the toggle rather than a
+  # header that has silently been renamed.
+  expect_true(
+    "n" %in%
+      names(do.call(
+        spicy:::build_display_df,
+        c(list(out), args, list(show_n = TRUE))
+      ))
   )
   expect_false("n" %in% names(display))
 })
@@ -2327,7 +2752,12 @@ test_that("ci = FALSE drops the CI columns from the rendered display df", {
 })
 
 test_that("output = 'long' is a synonym for output = 'data.frame'", {
-  out_df <- table_continuous(sleep, select = extra, by = group, output = "data.frame")
+  out_df <- table_continuous(
+    sleep,
+    select = extra,
+    by = group,
+    output = "data.frame"
+  )
   out_lg <- table_continuous(sleep, select = extra, by = group, output = "long")
   expect_identical(unclass(out_df), unclass(out_lg))
 })
@@ -2382,7 +2812,10 @@ test_that("tidy() returns one row per (variable x group) with broom columns", {
   )
   # estimate equals empirical mean
   setosa_sl <- td[td$outcome == "Sepal.Length" & td$group == "setosa", ]
-  expect_equal(setosa_sl$estimate, mean(iris$Sepal.Length[iris$Species == "setosa"]))
+  expect_equal(
+    setosa_sl$estimate,
+    mean(iris$Sepal.Length[iris$Species == "setosa"])
+  )
 })
 
 test_that("tidy() works without by (one row per variable)", {
@@ -2415,6 +2848,8 @@ test_that("glance() returns one row per outcome with omnibus test + ES", {
       "es_value",
       "es_ci_lower",
       "es_ci_upper",
+      "smd_type",
+      "smd_value",
       "n_total"
     )
   )
@@ -2436,6 +2871,7 @@ test_that("glance() without by returns NA test/ES, populated n_total", {
 test_that("ci = FALSE / show_n = FALSE render across every output (smoke matrix)", {
   Sys.setenv(CLIPR_ALLOW = "TRUE")
   testthat::local_mocked_bindings(
+    clipr_available = function(...) TRUE,
     write_clip = function(text, ...) invisible(text),
     .package = "clipr"
   )
@@ -2468,12 +2904,20 @@ test_that("raw data.frame / long outputs always carry analytic ci_lower / ci_upp
   # CI bounds and `n` so downstream code (broom::tidy, gtsummary, ...)
   # has access to them.
   out_df <- table_continuous(
-    sleep, select = extra, by = group,
-    ci = FALSE, show_n = FALSE, output = "data.frame"
+    sleep,
+    select = extra,
+    by = group,
+    ci = FALSE,
+    show_n = FALSE,
+    output = "data.frame"
   )
   out_lg <- table_continuous(
-    sleep, select = extra, by = group,
-    ci = FALSE, show_n = FALSE, output = "long"
+    sleep,
+    select = extra,
+    by = group,
+    ci = FALSE,
+    show_n = FALSE,
+    output = "long"
   )
   expect_true(all(c("ci_lower", "ci_upper", "n") %in% names(out_df)))
   expect_true(all(c("ci_lower", "ci_upper", "n") %in% names(out_lg)))
@@ -2483,10 +2927,15 @@ test_that("ci = FALSE structurally removes CI cols from the build_display_df out
   out <- table_continuous(sleep, select = extra, by = group, ci = FALSE)
   display <- spicy:::build_display_df(
     out,
-    digits = 2, decimal_mark = ".", ci_level = 0.95,
-    show_p = TRUE, show_statistic = FALSE,
-    show_n = TRUE, show_ci = FALSE,
-    show_effect_size = FALSE, show_effect_size_ci = FALSE,
+    digits = 2,
+    decimal_mark = ".",
+    ci_level = 0.95,
+    show_p = TRUE,
+    show_statistic = FALSE,
+    show_n = TRUE,
+    show_ci = FALSE,
+    show_effect_size = FALSE,
+    show_effect_size_ci = FALSE,
     p_digits = 3L
   )
   expect_false(any(grepl("CI", names(display))))
@@ -2494,13 +2943,29 @@ test_that("ci = FALSE structurally removes CI cols from the build_display_df out
 
 test_that("show_n = FALSE structurally removes n col from build_display_df output", {
   out <- table_continuous(sleep, select = extra, by = group, show_n = FALSE)
-  display <- spicy:::build_display_df(
-    out,
-    digits = 2, decimal_mark = ".", ci_level = 0.95,
-    show_p = TRUE, show_statistic = FALSE,
-    show_n = FALSE, show_ci = TRUE,
-    show_effect_size = FALSE, show_effect_size_ci = FALSE,
+  args <- list(
+    digits = 2,
+    decimal_mark = ".",
+    ci_level = 0.95,
+    show_p = TRUE,
+    show_statistic = FALSE,
+    show_ci = TRUE,
+    show_effect_size = FALSE,
+    show_effect_size_ci = FALSE,
     p_digits = 3L
+  )
+  display <- do.call(
+    spicy:::build_display_df,
+    c(list(out), args, list(show_n = FALSE))
+  )
+  # Positive control, as in the sibling test: the header exists at
+  # `show_n = TRUE`.
+  expect_true(
+    "n" %in%
+      names(do.call(
+        spicy:::build_display_df,
+        c(list(out), args, list(show_n = TRUE))
+      ))
   )
   expect_false("n" %in% names(display))
 })
@@ -2511,22 +2976,31 @@ test_that("ci = FALSE renders structurally without CI in tinytable / gt / flexta
   skip_if_not_installed("flextable")
   expect_true(inherits(
     table_continuous(
-      sleep, select = extra, by = group,
-      ci = FALSE, output = "tinytable"
+      sleep,
+      select = extra,
+      by = group,
+      ci = FALSE,
+      output = "tinytable"
     ),
     "tinytable"
   ))
   expect_s3_class(
     table_continuous(
-      sleep, select = extra, by = group,
-      ci = FALSE, output = "gt"
+      sleep,
+      select = extra,
+      by = group,
+      ci = FALSE,
+      output = "gt"
     ),
     "gt_tbl"
   )
   expect_s3_class(
     table_continuous(
-      sleep, select = extra, by = group,
-      ci = FALSE, output = "flextable"
+      sleep,
+      select = extra,
+      by = group,
+      ci = FALSE,
+      output = "flextable"
     ),
     "flextable"
   )
@@ -2538,22 +3012,31 @@ test_that("show_n = FALSE renders structurally without n in tinytable / gt / fle
   skip_if_not_installed("flextable")
   expect_true(inherits(
     table_continuous(
-      sleep, select = extra, by = group,
-      show_n = FALSE, output = "tinytable"
+      sleep,
+      select = extra,
+      by = group,
+      show_n = FALSE,
+      output = "tinytable"
     ),
     "tinytable"
   ))
   expect_s3_class(
     table_continuous(
-      sleep, select = extra, by = group,
-      show_n = FALSE, output = "gt"
+      sleep,
+      select = extra,
+      by = group,
+      show_n = FALSE,
+      output = "gt"
     ),
     "gt_tbl"
   )
   expect_s3_class(
     table_continuous(
-      sleep, select = extra, by = group,
-      show_n = FALSE, output = "flextable"
+      sleep,
+      select = extra,
+      by = group,
+      show_n = FALSE,
+      output = "flextable"
     ),
     "flextable"
   )
@@ -2569,14 +3052,22 @@ test_that("ci = FALSE / show_n = FALSE flow to excel and word", {
       tmp_dx <- tempfile(fileext = ".docx")
       on.exit(unlink(c(tmp_xl, tmp_dx)), add = TRUE)
       table_continuous(
-        sleep, select = extra, by = group,
-        ci = ci, show_n = sn,
-        output = "excel", excel_path = tmp_xl
+        sleep,
+        select = extra,
+        by = group,
+        ci = ci,
+        show_n = sn,
+        output = "excel",
+        excel_path = tmp_xl
       )
       table_continuous(
-        sleep, select = extra, by = group,
-        ci = ci, show_n = sn,
-        output = "word", word_path = tmp_dx
+        sleep,
+        select = extra,
+        by = group,
+        ci = ci,
+        show_n = sn,
+        output = "word",
+        word_path = tmp_dx
       )
       expect_true(file.exists(tmp_xl))
       expect_true(file.exists(tmp_dx))
@@ -2589,6 +3080,7 @@ test_that("clipboard text reflects ci = FALSE structurally", {
   Sys.setenv(CLIPR_ALLOW = "TRUE")
   captured <- new.env()
   testthat::local_mocked_bindings(
+    clipr_available = function(...) TRUE,
     write_clip = function(text, ...) {
       captured$text <- text
       invisible(text)
@@ -2596,14 +3088,20 @@ test_that("clipboard text reflects ci = FALSE structurally", {
     .package = "clipr"
   )
   table_continuous(
-    sleep, select = extra, by = group,
-    ci = FALSE, output = "clipboard"
+    sleep,
+    select = extra,
+    by = group,
+    ci = FALSE,
+    output = "clipboard"
   )
   expect_false(grepl("CI", captured$text, fixed = TRUE))
 
   table_continuous(
-    sleep, select = extra, by = group,
-    ci = TRUE, output = "clipboard"
+    sleep,
+    select = extra,
+    by = group,
+    ci = TRUE,
+    output = "clipboard"
   )
   expect_true(grepl("CI", captured$text, fixed = TRUE))
 })
@@ -2659,6 +3157,7 @@ test_that("every align value renders cleanly across every rendered engine", {
   # silent regression in any branch is caught.
   Sys.setenv(CLIPR_ALLOW = "TRUE")
   testthat::local_mocked_bindings(
+    clipr_available = function(...) TRUE,
     write_clip = function(text, ...) invisible(text),
     .package = "clipr"
   )
@@ -2667,37 +3166,73 @@ test_that("every align value renders cleanly across every rendered engine", {
     select = quote(extra),
     by = quote(group)
   )
-  for (al in c("center", "right", "auto")) {
+  for (al in c("center", "right")) {
     if (requireNamespace("tinytable", quietly = TRUE)) {
-      out <- do.call(table_continuous, c(base_args, list(
-        output = "tinytable", align = al
-      )))
+      out <- do.call(
+        table_continuous,
+        c(
+          base_args,
+          list(
+            output = "tinytable",
+            align = al
+          )
+        )
+      )
       expect_true(inherits(out, "tinytable"))
     }
     if (requireNamespace("gt", quietly = TRUE)) {
-      out <- do.call(table_continuous, c(base_args, list(
-        output = "gt", align = al
-      )))
+      out <- do.call(
+        table_continuous,
+        c(
+          base_args,
+          list(
+            output = "gt",
+            align = al
+          )
+        )
+      )
       expect_s3_class(out, "gt_tbl")
     }
     if (requireNamespace("flextable", quietly = TRUE)) {
-      out <- do.call(table_continuous, c(base_args, list(
-        output = "flextable", align = al
-      )))
+      out <- do.call(
+        table_continuous,
+        c(
+          base_args,
+          list(
+            output = "flextable",
+            align = al
+          )
+        )
+      )
       expect_s3_class(out, "flextable")
     }
     if (requireNamespace("openxlsx2", quietly = TRUE)) {
       tmp <- tempfile(fileext = ".xlsx")
       on.exit(unlink(tmp), add = TRUE)
-      do.call(table_continuous, c(base_args, list(
-        output = "excel", align = al, excel_path = tmp
-      )))
+      do.call(
+        table_continuous,
+        c(
+          base_args,
+          list(
+            output = "excel",
+            align = al,
+            excel_path = tmp
+          )
+        )
+      )
       expect_true(file.exists(tmp))
     }
     if (requireNamespace("clipr", quietly = TRUE)) {
-      do.call(table_continuous, c(base_args, list(
-        output = "clipboard", align = al
-      )))
+      do.call(
+        table_continuous,
+        c(
+          base_args,
+          list(
+            output = "clipboard",
+            align = al
+          )
+        )
+      )
     }
   }
 })
@@ -2717,10 +3252,966 @@ test_that("output = 'word' errors when officer is not installed even if flextabl
   on.exit(unlink(tmp), add = TRUE)
   expect_error(
     table_continuous(
-      sleep, select = extra, by = group,
-      output = "word", word_path = tmp
+      sleep,
+      select = extra,
+      by = group,
+      output = "word",
+      word_path = tmp
     ),
     "Install package 'officer'"
   )
 })
 
+test_that("a constant column reports exact SD 0 and a degenerate CI", {
+  # Audit phase 2, finding 16: pins the documented behavior -- the
+  # numbers are exact, "--" is reserved for undefined statistics.
+  out <- table_continuous(
+    data.frame(k = rep(5, 4)),
+    select = k,
+    output = "data.frame"
+  )
+  expect_equal(out$mean, 5)
+  expect_equal(out$sd, 0)
+  expect_equal(out$ci_lower, 5)
+  expect_equal(out$ci_upper, 5)
+  # n = 1: SD / CI undefined -> NA (rendered as "--").
+  one <- table_continuous(
+    data.frame(k = 5),
+    select = k,
+    output = "data.frame"
+  )
+  expect_true(is.na(one$sd))
+  expect_true(is.na(one$ci_lower))
+})
+
+test_that("a degenerate variable degrades per-variable, others survive", {
+  # Audit phase 2, finding 27: t.test()'s "data are essentially
+  # constant" error used to kill the whole multi-variable table.
+  d <- data.frame(
+    cst = c(5, 5, 5, 5, 7, 7, 7, 7),
+    ok = c(1.2, 2.3, 1.8, 2.9, 5.4, 6.1, 5.8, 6.3),
+    g = factor(rep(c("m", "f"), each = 4))
+  )
+  expect_warning(
+    out <- table_continuous(d, select = c(cst, ok), by = g, output = "long"),
+    class = "spicy_undefined_stat"
+  )
+  cst_rows <- out[out$variable == "cst", ]
+  ok_rows <- out[out$variable == "ok", ]
+  # Descriptives stay exact for the degenerate variable.
+  expect_equal(sort(cst_rows$mean), c(5, 7))
+  expect_true(all(is.na(cst_rows$p.value)))
+  expect_true(all(is.na(cst_rows$test_type)))
+  # The healthy variable keeps its test.
+  tt <- stats::t.test(ok ~ g, data = d)
+  expect_equal(ok_rows$p.value[1], tt$p.value, tolerance = 1e-12)
+  # The nonparametric route still works on the same data.
+  wp <- suppressWarnings(stats::wilcox.test(cst ~ g, data = d))$p.value
+  np <- table_continuous(
+    d,
+    select = cst,
+    by = g,
+    test = "nonparametric",
+    output = "long"
+  )
+  expect_equal(np$p.value[1], wp, tolerance = 1e-12)
+})
+
+test_that("an undefined effect size degrades to NA with a classed warning", {
+  # Companion to finding 27: a zero pooled SD makes Hedges' g
+  # non-finite; the cell must be NA, never a printed Inf.
+  d <- data.frame(
+    cst = c(5, 5, 5, 5, 7, 7, 7, 7),
+    g = factor(rep(c("m", "f"), each = 4))
+  )
+  warns <- character(0)
+  out <- withCallingHandlers(
+    table_continuous(
+      d,
+      select = cst,
+      by = g,
+      effect_size = "hedges_g",
+      p_value = FALSE,
+      output = "long"
+    ),
+    spicy_undefined_stat = function(w) {
+      warns <<- c(warns, class(w)[1])
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_true(length(warns) >= 1L)
+  expect_true(all(is.na(out$es_value)))
+  expect_false(any(is.infinite(out$es_value)))
+})
+
+test_that("a NaN effect size is blanked with a classed warning", {
+  # Audit phase 2 delta, R9: is.na(NaN) is TRUE, so the NA-first
+  # non-finite guard used to let a 0/0 Hedges' g (equal group means
+  # with zero pooled SD) reach the long output as NaN, unannounced.
+  d <- data.frame(cst = rep(5, 8), g = factor(rep(c("m", "f"), each = 4)))
+  msgs <- character(0)
+  out <- withCallingHandlers(
+    table_continuous(
+      d,
+      select = cst,
+      by = g,
+      effect_size = "hedges_g",
+      p_value = FALSE,
+      output = "long"
+    ),
+    spicy_undefined_stat = function(w) {
+      msgs <<- c(msgs, conditionMessage(w))
+      invokeRestart("muffleWarning")
+    }
+  )
+  expect_true(any(grepl("effect size", msgs)))
+  expect_false(any(is.nan(out$es_value)))
+  expect_true(all(is.na(out$es_value)))
+  expect_false(any(is.nan(out$es_ci_lower)))
+  expect_false(any(is.nan(out$es_ci_upper)))
+})
+
+test_that("table_continuous() rejects bit64::integer64 columns", {
+  i64 <- structure(
+    c(4.94e-324, 9.88e-324, 1.48e-323, 1.98e-323),
+    class = "integer64"
+  )
+  d <- data.frame(y = c(1.5, 2.5, 3.5, 4.5), g = factor(c("a", "a", "b", "b")))
+  d$score <- i64
+  expect_error(
+    table_continuous(d, select = score),
+    "integer64",
+    class = "spicy_invalid_data"
+  )
+  # The default select sweeps integer64 in (it passes is.numeric()).
+  expect_error(table_continuous(d), class = "spicy_invalid_data")
+  expect_error(
+    table_continuous(d, select = y, by = score),
+    class = "spicy_invalid_data"
+  )
+  # Excluding the integer64 column restores normal computation.
+  res <- table_continuous(d, exclude = score, output = "data.frame")
+  expect_s3_class(res, "data.frame")
+})
+
+
+# Phase 3 matrix – vignettes-news:align-auto-removed and
+# critic:pkgrd-broom-columns-stabilising (lot T4)
+
+test_that("align = 'auto' is removed from table_continuous", {
+  expect_error(
+    table_continuous(mtcars, select = "mpg", align = "auto"),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("tidy/glance column sets are frozen (stabilising contract)", {
+  skip_if_not_installed("broom")
+  out <- table_continuous(mtcars, select = "mpg", by = "am")
+  expect_identical(
+    names(broom::tidy(out)),
+    c(
+      "outcome",
+      "label",
+      "group",
+      "estimate",
+      "std.error",
+      "conf.low",
+      "conf.high",
+      "n",
+      "min",
+      "max",
+      "sd"
+    )
+  )
+  expect_identical(
+    names(broom::glance(out)),
+    c(
+      "outcome",
+      "label",
+      "test_type",
+      "statistic",
+      "df",
+      "df.residual",
+      "p.value",
+      "es_type",
+      "es_value",
+      "es_ci_lower",
+      "es_ci_upper",
+      "smd_type",
+      "smd_value",
+      "n_total"
+    )
+  )
+})
+
+# ---- the disclosure reaches every output route ---------------------------
+# dev/notes_perdues_hors_console.md: rows dropped for a missing `by`
+# value were signalled by a console warning and a note only print()
+# could read -- invisible in any document rendered with
+# `warning: false`.
+
+test_that("table_continuous discloses dropped rows on the rich outputs", {
+  skip_if_not_installed("tinytable")
+  skip_if_not_installed("gt")
+  skip_if_not_installed("flextable")
+  skip_if_not_installed("htmltools")
+  d <- sochealth
+  d$sex_na <- d$sex
+  d$sex_na[1:40] <- NA
+
+  x <- suppressWarnings(
+    table_continuous(d, select = age, by = sex_na, output = "tinytable")
+  )
+  expect_identical(
+    paste(unlist(x@notes), collapse = " "),
+    "Rows with missing sex_na removed: 40."
+  )
+  expect_match(
+    tinytable::save_tt(x, output = "html"),
+    "Rows with missing sex_na removed: 40.",
+    fixed = TRUE
+  )
+
+  g <- suppressWarnings(
+    table_continuous(d, select = age, by = sex_na, output = "gt")
+  )
+  expect_s3_class(g, "spicy_gt")
+  expect_identical(
+    attr(g, "spicy_note"),
+    "Rows with missing sex_na removed: 40."
+  )
+
+  f <- suppressWarnings(
+    table_continuous(d, select = age, by = sex_na, output = "flextable")
+  )
+  expect_identical(nrow(f$footer$dataset), 1L)
+  expect_match(
+    as.character(flextable::htmltools_value(f)),
+    "Rows with missing sex_na removed: 40.",
+    fixed = TRUE
+  )
+})
+
+test_that("table_continuous rich outputs carry no note when nothing is lost", {
+  skip_if_not_installed("tinytable")
+  skip_if_not_installed("gt")
+  skip_if_not_installed("flextable")
+  df <- data.frame(x = 1:6, g = rep(c("A", "B"), each = 3))
+
+  expect_length(
+    table_continuous(df, select = "x", by = "g", output = "tinytable")@notes,
+    0L
+  )
+  g <- table_continuous(df, select = "x", by = "g", output = "gt")
+  expect_false(inherits(g, "spicy_gt"))
+  f <- table_continuous(df, select = "x", by = "g", output = "flextable")
+  expect_identical(nrow(f$footer$dataset), 0L)
+})
+
+test_that("an existing table note is joined, never overwritten", {
+  # table_continuous_lm() already emits an SE-estimator note; the
+  # missing-data disclosure must be added to it, not on top of it.
+  skip_if_not_installed("tinytable")
+  d <- sochealth
+  d$sex_na <- d$sex
+  d$sex_na[1:40] <- NA
+  z <- suppressWarnings(
+    table_continuous_lm(
+      d,
+      select = age,
+      by = sex_na,
+      vcov = "HC3",
+      output = "tinytable"
+    )
+  )
+  note <- paste(unlist(z@notes), collapse = " ")
+  expect_match(note, "HC3", fixed = TRUE)
+  expect_match(note, "Rows with missing sex_na removed: 40.", fixed = TRUE)
+})
+
+# ---- show_columns: statistic selection -----------------------------------
+
+test_that("the token order and the column vocabulary declare the same set", {
+  # `.continuous_column_tokens` is the ORDER of the columns,
+  # `.continuous_token_columns()` their NAMES. Two tables that must stay
+  # equal, and nothing else can catch a drift between them: a token
+  # present in one and absent from the other silently produces a display
+  # column the structured view never sees (`display_df[[nm]]` is NULL and
+  # `as.character(NULL)[i]` is NA), which is exactly how `weighted_n`
+  # entered the display frame in two edits instead of one.
+  #
+  # The vocabulary is now the UNION of TWO orders: `table_continuous()`
+  # and its design twin share the column declarations and each selects
+  # from them, so the guard is that every family's order is a
+  # SUBSEQUENCE of the vocabulary and that the difference between the
+  # two is exactly the three design-regime tokens. A token in an order
+  # and not in the vocabulary is still the silent-NA bug above; a token
+  # in the vocabulary and in neither order is dead weight.
+  spec <- names(spicy:::.continuous_token_columns(0.95))
+  plain <- spicy:::.continuous_column_tokens
+  svy <- spicy:::.continuous_svy_column_tokens
+  expect_identical(sort(spec), sort(union(plain, svy)))
+  expect_identical(plain, spec[spec %in% plain])
+  expect_identical(svy, spec[spec %in% svy])
+  # `se` and `deff` exist only under a design; `med_ci` exists only
+  # without one (no design-based order-statistic interval).
+  expect_identical(setdiff(svy, plain), c("se", "deff"))
+  expect_identical(setdiff(plain, svy), "med_ci")
+  # Fifteen tokens, seventeen columns: `ci` and `med_ci` expand to a pair.
+  entries <- unlist(
+    spicy:::.continuous_token_columns(0.95),
+    recursive = FALSE,
+    use.names = FALSE
+  )
+  expect_length(entries, 17L)
+  # Every entry names a column and the compute-frame field behind it.
+  expect_true(all(vapply(entries, function(e) nzchar(e$name), logical(1))))
+  expect_true(all(vapply(entries, function(e) nzchar(e$field), logical(1))))
+})
+
+test_that("show_columns = NULL reproduces the historical display exactly", {
+  # The default must not move: the printed table shows M / SD / Min /
+  # Max and none of the new statistics, and its note stays empty.
+  base_no_by <- capture.output(
+    table_continuous(sleep, select = extra)
+  )
+  expect_true(any(grepl(" M ", base_no_by, fixed = TRUE)))
+  expect_false(any(grepl("Med", base_no_by, fixed = TRUE)))
+  expect_false(any(grepl("IQR", base_no_by, fixed = TRUE)))
+
+  out <- table_continuous(sleep, select = extra, by = group, output = "long")
+  expect_identical(
+    attr(out, "show_columns"),
+    c("m", "sd", "min", "max", "ci", "n")
+  )
+  expect_identical(
+    attr(
+      table_continuous(
+        sleep,
+        select = extra,
+        ci = FALSE,
+        show_n = FALSE,
+        output = "long"
+      ),
+      "show_columns"
+    ),
+    c("m", "sd", "min", "max")
+  )
+  # No gloss is appended to a default table's note.
+  expect_null(attr(out, "missing_note"))
+})
+
+test_that("median / quartile columns equal stats::median() and quantile() type 7", {
+  set.seed(101)
+  d <- data.frame(x = stats::rexp(41, 1 / 10))
+  out <- table_continuous(
+    d,
+    select = x,
+    show_columns = c("med", "q1", "q3", "iqr", "med_iqr"),
+    output = "long"
+  )
+  q <- unname(stats::quantile(d$x, probs = c(0.25, 0.75)))
+  expect_identical(out$median, stats::median(d$x))
+  expect_identical(out$q1, q[1])
+  expect_identical(out$q3, q[2])
+  expect_identical(out$iqr, q[2] - q[1])
+  expect_identical(out$iqr, stats::IQR(d$x))
+
+  # The compact column shows the INTERVAL, `iqr` shows the width.
+  printed <- capture.output(
+    table_continuous(d, select = x, show_columns = c("med_iqr", "iqr"))
+  )
+  expect_true(any(grepl("Med [Q1, Q3]", printed, fixed = TRUE)))
+  expect_true(any(grepl(
+    sprintf("%.2f [%.2f, %.2f]", stats::median(d$x), q[1], q[2]),
+    printed,
+    fixed = TRUE
+  )))
+})
+
+test_that("med_ci is the exact order-statistic interval, NA at small n", {
+  # Hand-pinned against the sign-test inversion: the tightest
+  # [x(k), x(n-k+1)] whose binomial coverage still reaches 95%.
+  #   n = 6  -> k = 1  (coverage 0.96875)
+  #   n = 10 -> k = 2  (coverage 0.97852)
+  #   n = 25 -> k = 8  (coverage 0.95671)
+  #   n = 5  -> no k reaches 95%, the interval is undefined
+  pinned <- list(c(6, 1, 6), c(10, 2, 9), c(25, 8, 18))
+  for (p in pinned) {
+    x <- as.numeric(seq_len(p[1]))
+    out <- table_continuous(
+      data.frame(x = x),
+      show_columns = c("med", "med_ci"),
+      output = "long"
+    )
+    expect_identical(out$med_ci_lower, x[p[2]])
+    expect_identical(out$med_ci_upper, x[p[3]])
+  }
+  small <- table_continuous(
+    data.frame(x = c(1, 2, 3, 4, 5)),
+    show_columns = c("med", "med_ci"),
+    output = "long"
+  )
+  expect_true(is.na(small$med_ci_lower))
+  expect_true(is.na(small$med_ci_upper))
+  printed <- capture.output(
+    table_continuous(
+      data.frame(x = c(1, 2, 3, 4, 5)),
+      show_columns = c("med", "med_ci")
+    )
+  )
+  expect_true(any(grepl("–", printed, fixed = TRUE)))
+  expect_true(any(grepl("too small for this level", printed, fixed = TRUE)))
+})
+
+test_that("med_ci matches the exact order-statistic oracle", {
+  # Oracle values PINNED from DescTools::MedianCI(method = "exact")
+  # (v0.99.60, captured 2026-08-14) on set.seed(202) draws -- pinned,
+  # not called live, per the house rule (and so the package declares
+  # no DescTools dependency; R CMD check flags undeclared '::' uses).
+  set.seed(202)
+  oracle <- list(
+    `6` = c(-14.31, -1.46),
+    `7` = c(-19.33, 11.80),
+    `10` = c(-2.58, 16.70),
+    `25` = c(-3.59, 5.97),
+    `50` = c(-1.63, 2.37)
+  )
+  for (n in c(6, 7, 10, 25, 50)) {
+    x <- round(stats::rnorm(n) * 10, 2)
+    out <- table_continuous(
+      data.frame(x = x),
+      show_columns = c("med", "med_ci"),
+      output = "long"
+    )
+    expect_equal(out$med_ci_lower, oracle[[as.character(n)]][1])
+    expect_equal(out$med_ci_upper, oracle[[as.character(n)]][2])
+  }
+})
+
+test_that("med_ci follows ci_level", {
+  x <- as.numeric(1:25)
+  # n = 25: k = 6 at 99% -> [6, 20]; k = 8 at 95% -> [8, 18].
+  wide <- table_continuous(
+    data.frame(x = x),
+    show_columns = c("med", "med_ci"),
+    ci_level = 0.99,
+    output = "long"
+  )
+  narrow <- table_continuous(
+    data.frame(x = x),
+    show_columns = c("med", "med_ci"),
+    ci_level = 0.95,
+    output = "long"
+  )
+  expect_identical(c(wide$med_ci_lower, wide$med_ci_upper), c(6, 20))
+  expect_identical(c(narrow$med_ci_lower, narrow$med_ci_upper), c(8, 18))
+})
+
+test_that("a named list gives each variable its own columns, blanks the rest", {
+  set.seed(7)
+  d <- data.frame(
+    mvpa = round(stats::rexp(60, 1 / 300)),
+    sitting = round(stats::rexp(60, 1 / 400)),
+    age = round(stats::rnorm(60, 22, 3))
+  )
+  out <- table_continuous(
+    d,
+    select = c(mvpa, sitting, age),
+    show_columns = list(
+      mvpa = c("med_iqr", "n"),
+      sitting = c("med_iqr", "n"),
+      .default = c("m", "sd", "n")
+    ),
+    output = "long"
+  )
+  expect_identical(attr(out, "show_columns"), c("m", "sd", "med_iqr", "n"))
+  display <- spicy:::build_display_df(
+    out,
+    digits = 2,
+    decimal_mark = ".",
+    ci_level = 0.95,
+    tokens_union = attr(out, "show_columns"),
+    tokens_by_var = attr(out, "show_columns_by_var")
+  )
+  expect_named(display, c("Variable", "M", "SD", "Med [Q1, Q3]", "n"))
+  # Structural blank (""), never the undefined-statistic en-dash.
+  expect_identical(display$M[1:2], c("", ""))
+  expect_identical(display[[4]][3], "")
+  expect_false(any(display$M[1:2] == "--"))
+  expect_true(all(nzchar(display$n)))
+})
+
+test_that("a variable named in show_columns but absent from the table errors", {
+  expect_error(
+    table_continuous(sleep, select = extra, show_columns = list(nope = "m")),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_continuous(sleep, select = extra, show_columns = list("m")),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_continuous(
+      sleep,
+      select = extra,
+      show_columns = list(extra = "m", extra = "sd")
+    ),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("unknown show_columns tokens error with the valid list", {
+  expect_error(
+    table_continuous(sleep, select = extra, show_columns = c("m", "mediane")),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_continuous(sleep, select = extra, show_columns = c("m", "m")),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_continuous(sleep, select = extra, show_columns = character(0)),
+    class = "spicy_invalid_input"
+  )
+  expect_error(
+    table_continuous(
+      sleep,
+      select = extra,
+      show_columns = list(extra = c("m", "q4"))
+    ),
+    class = "spicy_invalid_input"
+  )
+})
+
+test_that("a variable shown as a median is tested as one, per variable", {
+  set.seed(9)
+  d <- data.frame(
+    skewed = round(stats::rexp(60, 1 / 300)),
+    age = round(stats::rnorm(60, 22, 3)),
+    g = rep(c("a", "b"), 30)
+  )
+  out <- table_continuous(
+    d,
+    select = c(skewed, age),
+    by = g,
+    show_columns = list(skewed = c("med_iqr", "n"), age = c("m", "sd", "n")),
+    output = "long"
+  )
+  types <- out$test_type[!is.na(out$test_type)]
+  names(types) <- out$variable[!is.na(out$test_type)]
+  expect_identical(unname(types[["skewed"]]), "wilcoxon")
+  expect_identical(unname(types[["age"]]), "welch_t")
+  # Oracle: the p-values the stats:: tests give directly.
+  expect_equal(
+    out$p.value[out$variable == "skewed" & !is.na(out$p.value)],
+    stats::wilcox.test(skewed ~ g, data = d)$p.value
+  )
+  expect_equal(
+    out$p.value[out$variable == "age" & !is.na(out$p.value)],
+    stats::t.test(age ~ g, data = d)$p.value
+  )
+  # The note discloses the test per variable when they differ.
+  note <- attr(out, "missing_note")
+  expect_match(note, "Wilcoxon rank-sum test (skewed)", fixed = TRUE)
+  expect_match(note, "Welch t-test (age)", fixed = TRUE)
+
+  # Three groups: Kruskal-Wallis on the median variable.
+  d3 <- d
+  d3$g3 <- rep(c("a", "b", "c"), 20)
+  out3 <- table_continuous(
+    d3,
+    select = skewed,
+    by = g3,
+    show_columns = c("med_iqr", "n"),
+    output = "long"
+  )
+  expect_identical(out3$test_type[1], "kruskal")
+  expect_match(
+    attr(out3, "missing_note"),
+    "Group comparison: Kruskal-Wallis test.",
+    fixed = TRUE
+  )
+})
+
+test_that("the rank switch carries the rank effect size", {
+  set.seed(19)
+  d <- data.frame(
+    skewed = round(stats::rexp(60, 1 / 300)),
+    g = rep(c("a", "b"), 30)
+  )
+  out <- table_continuous(
+    d,
+    select = skewed,
+    by = g,
+    show_columns = c("med_iqr", "n"),
+    effect_size = "auto",
+    output = "long"
+  )
+  expect_identical(out$es_type[1], "r_rb")
+})
+
+test_that("an explicit test stays sovereign but raises a caveat", {
+  set.seed(21)
+  d <- data.frame(
+    skewed = round(stats::rexp(60, 1 / 300)),
+    g = rep(c("a", "b"), 30)
+  )
+  expect_warning(
+    out <- table_continuous(
+      d,
+      select = skewed,
+      by = g,
+      show_columns = c("med_iqr", "n"),
+      test = "welch",
+      output = "long"
+    ),
+    class = "spicy_caveat"
+  )
+  expect_identical(out$test_type[1], "welch_t")
+  # Sovereign means uniform: the note glosses the columns but never
+  # claims a rank test the table did not run.
+  expect_false(grepl(
+    "Group comparison",
+    attr(out, "missing_note"),
+    fixed = TRUE
+  ))
+})
+
+test_that("ci without m is dropped and points at med_ci; med_ci mirrors it", {
+  expect_warning(
+    out <- table_continuous(
+      sleep,
+      select = extra,
+      show_columns = c("med", "ci", "n"),
+      output = "long"
+    ),
+    class = "spicy_ignored_arg"
+  )
+  expect_false("ci" %in% attr(out, "show_columns"))
+  expect_warning(
+    out2 <- table_continuous(
+      sleep,
+      select = extra,
+      show_columns = c("m", "med_ci"),
+      output = "long"
+    ),
+    class = "spicy_ignored_arg"
+  )
+  expect_false("med_ci" %in% attr(out2, "show_columns"))
+  # med_iqr also displays the median, so it satisfies med_ci.
+  out3 <- table_continuous(
+    sleep,
+    select = extra,
+    show_columns = c("med_iqr", "med_ci"),
+    output = "long"
+  )
+  expect_true("med_ci" %in% attr(out3, "show_columns"))
+})
+
+test_that("show_columns overrules a contradictory show_n / ci", {
+  expect_warning(
+    out <- table_continuous(
+      sleep,
+      select = extra,
+      show_columns = c("m", "sd"),
+      show_n = TRUE,
+      output = "long"
+    ),
+    class = "spicy_ignored_arg"
+  )
+  expect_false("n" %in% attr(out, "show_columns"))
+  expect_warning(
+    table_continuous(
+      sleep,
+      select = extra,
+      show_columns = c("m", "sd"),
+      ci = TRUE,
+      output = "long"
+    ),
+    class = "spicy_ignored_arg"
+  )
+  # A consistent legacy toggle stays silent.
+  expect_silent(
+    table_continuous(
+      sleep,
+      select = extra,
+      show_columns = c("m", "sd"),
+      show_n = FALSE,
+      ci = FALSE,
+      output = "long"
+    )
+  )
+})
+
+test_that("show_columns reaches every output engine with the same columns", {
+  Sys.setenv(CLIPR_ALLOW = "TRUE")
+  testthat::local_mocked_bindings(
+    clipr_available = function(...) TRUE,
+    write_clip = function(text, ...) invisible(text),
+    .package = "clipr"
+  )
+  set.seed(33)
+  d <- data.frame(
+    skewed = round(stats::rexp(60, 1 / 300)),
+    age = round(stats::rnorm(60, 22, 3)),
+    g = rep(c("a", "b"), 30)
+  )
+  spec <- list(
+    skewed = c("med", "med_iqr", "med_ci", "n"),
+    age = c("m", "sd", "ci", "n")
+  )
+  # data.frame / long: every statistic present whatever is displayed.
+  lg <- table_continuous(
+    d,
+    select = c(skewed, age),
+    by = g,
+    show_columns = spec,
+    output = "long"
+  )
+  expect_true(all(
+    c("median", "q1", "q3", "iqr", "med_ci_lower", "med_ci_upper") %in%
+      names(lg)
+  ))
+  expect_identical(
+    attr(lg, "show_columns"),
+    c("m", "sd", "med", "med_iqr", "ci", "med_ci", "n")
+  )
+
+  display <- spicy:::build_display_df(
+    lg,
+    digits = 2,
+    decimal_mark = ".",
+    ci_level = 0.95,
+    show_p = TRUE,
+    tokens_union = attr(lg, "show_columns"),
+    tokens_by_var = attr(lg, "show_columns_by_var")
+  )
+  expect_named(
+    display,
+    c(
+      "Variable",
+      "Group",
+      "M",
+      "SD",
+      "Med",
+      "Med [Q1, Q3]",
+      "95% CI LL",
+      "95% CI UL",
+      "Med 95% CI LL",
+      "Med 95% CI UL",
+      "n",
+      "p"
+    )
+  )
+
+  for (eng in c("default", "data.frame", "clipboard")) {
+    expect_no_error(
+      table_continuous(
+        d,
+        select = c(skewed, age),
+        by = g,
+        show_columns = spec,
+        output = eng
+      )
+    )
+  }
+
+  skip_if_not_installed("tinytable")
+  tt <- table_continuous(
+    d,
+    select = c(skewed, age),
+    by = g,
+    show_columns = spec,
+    output = "tinytable"
+  )
+  expect_s4_class(tt, "tinytable")
+
+  skip_if_not_installed("flextable")
+  ft <- table_continuous(
+    d,
+    select = c(skewed, age),
+    by = g,
+    show_columns = spec,
+    output = "flextable"
+  )
+  # Both CI pairs keep their own spanner; the headers do not collide.
+  hdr <- unlist(ft$header$dataset, use.names = FALSE)
+  expect_true(any(grepl("Med 95% CI", hdr, fixed = TRUE)))
+  expect_true(any(hdr == "95% CI"))
+})
+
+test_that("the note glosses only the columns actually displayed", {
+  d <- data.frame(x = as.numeric(1:40))
+  n_iqr <- attr(
+    table_continuous(d, show_columns = c("med", "iqr"), output = "long"),
+    "missing_note"
+  )
+  expect_match(n_iqr, "IQR = interquartile range (Q3 - Q1).", fixed = TRUE)
+  expect_false(grepl("order-statistic", n_iqr, fixed = TRUE))
+
+  n_full <- attr(
+    table_continuous(
+      d,
+      show_columns = c("med_iqr", "med_ci"),
+      output = "long"
+    ),
+    "missing_note"
+  )
+  expect_match(n_full, "Med [Q1, Q3] = median", fixed = TRUE)
+  expect_match(n_full, "coverage at least 95%", fixed = TRUE)
+  expect_false(grepl("IQR = interquartile", n_full, fixed = TRUE))
+
+  # A plain M / SD selection adds nothing to the note.
+  expect_null(attr(
+    table_continuous(d, show_columns = c("m", "sd"), output = "long"),
+    "missing_note"
+  ))
+})
+
+
+test_that("the by table titles itself 'Descriptive statistics by <label>'", {
+  # Decision 4 (2026-08-13): the grouping variable is stated in the
+  # title, label resolved, like the other by tables of the family.
+  out <- capture.output(print(
+    table_continuous(sochealth, select = bmi, by = sex)
+  ))
+  expect_true(any(grepl("^Descriptive statistics by Sex$", trimws(out))))
+  out1 <- capture.output(print(table_continuous(sochealth, select = bmi)))
+  expect_true(any(grepl("^Descriptive statistics$", trimws(out1))))
+})
+
+
+# ---- the interval percentage is exact, not rounded ------------------------
+
+test_that("a fractional ci_level keeps its own percentage everywhere", {
+  d <- spicy::sochealth
+  # 97.5% was displayed as "98%" -- in the spanner, in the column names
+  # of the data.frame output, and in the median-CI gloss -- because the
+  # percentage was round()ed.
+  con <- suppressWarnings(table_continuous(
+    d,
+    select = age,
+    ci_level = 0.975,
+    show_columns = c("m", "ci", "med", "med_ci"),
+    output = "data.frame"
+  ))
+  s <- as_structured(suppressWarnings(table_continuous(
+    d,
+    select = age,
+    ci_level = 0.975,
+    show_columns = c("m", "ci", "med", "med_ci")
+  )))
+  labs <- unique(unlist(lapply(s$col_meta, function(m) m$ci_label)))
+  expect_setequal(labs, c("97.5% CI", "Med 97.5% CI"))
+  expect_false(any(grepl("98%", names(s$col_meta), fixed = TRUE)))
+  expect_true(any(grepl("97.5%", names(s$col_meta), fixed = TRUE)))
+  # The gloss reads the same producer.
+  note <- attr(con, "note") %||% ""
+  expect_false(grepl("98%", note, fixed = TRUE))
+
+  # 99.9%, the other direction from the same rounding.
+  s999 <- as_structured(suppressWarnings(table_continuous(
+    d,
+    select = age,
+    ci_level = 0.999,
+    show_columns = c("m", "ci")
+  )))
+  expect_true(any(grepl("99.9%", names(s999$col_meta), fixed = TRUE)))
+  expect_false(any(grepl("100%", names(s999$col_meta), fixed = TRUE)))
+
+  # Same in the linear-model family, key AND header.
+  lm_s <- as_structured(suppressWarnings(table_continuous_lm(
+    d,
+    select = age,
+    by = sex,
+    ci_level = 0.975
+  )))
+  expect_true(any(grepl("97.5% CI", names(lm_s$col_meta), fixed = TRUE)))
+  lm_labs <- unique(unlist(lapply(lm_s$col_meta, function(m) m$ci_label)))
+  expect_true("97.5% CI" %in% lm_labs)
+
+  # The levels with an exact integer percentage are untouched, and
+  # print no trailing zero.
+  expect_identical(spicy:::.ci_pct_str(0.95), "95")
+  expect_identical(spicy:::.ci_pct_str(0.9), "90")
+  expect_identical(spicy:::.ci_pct_str(0.99), "99")
+  expect_identical(spicy:::.ci_pct_str(0.975), "97.5")
+  expect_identical(spicy:::.ci_pct_str(0.999), "99.9")
+  # 0.29 * 100 is 28.999999999999996 in binary floating point.
+  expect_identical(spicy:::.ci_pct_str(0.29), "29")
+})
+
+
+test_that("the coverage percentage follows decimal_mark (decision 27)", {
+  d <- spicy::sochealth
+  # "97.5% CI" over cells reading "49,38": the percentage is a number in
+  # a label, so the reader who asked for the comma gets it there too.
+  tc <- suppressWarnings(table_continuous(
+    d,
+    select = age,
+    by = sex,
+    ci_level = 0.975,
+    decimal_mark = ",",
+    show_columns = c("m", "ci", "med", "med_ci")
+  ))
+  out <- paste(capture.output(print(tc)), collapse = "\n")
+  # The console header and the med-CI gloss carry the comma.
+  expect_match(out, "97,5% CI LL", fixed = TRUE)
+  expect_match(out, "coverage at least 97,5%", fixed = TRUE)
+  expect_false(grepl("97.5%", out, fixed = TRUE))
+  # The label layer the engines and inline() read carries it too ...
+  s <- as_structured(tc)
+  labs <- unique(unlist(lapply(s$col_meta, function(m) m$ci_label)))
+  expect_setequal(labs, c("97,5% CI", "Med 97,5% CI"))
+  disp <- unlist(lapply(s$col_meta, function(m) m$display_label))
+  expect_true("97,5% CI LL" %in% disp)
+  expect_setequal(
+    vapply(s$ci_pairs, function(p) p$label, character(1)),
+    c("97,5% CI", "Med 97,5% CI")
+  )
+  # ... while the frozen keys keep the period, whatever the mark.
+  expect_true("97.5% CI LL" %in% names(s$col_meta))
+  expect_false(any(grepl("97,5", names(s$col_meta), fixed = TRUE)))
+  # A real engine reads the same labels through `decimal_mark`.
+  skip_if_not_installed("flextable")
+  ft <- suppressWarnings(table_continuous(
+    d,
+    select = age,
+    by = sex,
+    ci_level = 0.975,
+    decimal_mark = ",",
+    show_columns = c("m", "ci"),
+    output = "flextable"
+  ))
+  expect_true("97,5% CI" %in% unlist(ft$header$dataset))
+
+  # An integer coverage has no decimal point: byte-identical labels
+  # under any mark -- the lot F behaviour, pinned per mark.
+  expect_identical(
+    spicy:::.continuous_labels("95% CI LL", 0.95, ","),
+    spicy:::.continuous_labels("95% CI LL", 0.95, ".")
+  )
+  # And the fractional-PERIOD case stays exactly as lot F pinned it.
+  expect_identical(
+    spicy:::.continuous_labels("97.5% CI LL", 0.975, "."),
+    "97.5% CI LL"
+  )
+})
+
+
+test_that("a user's options(OutDec) never leaks into the frozen keys", {
+  withr::local_options(OutDec = ",")
+  # The frozen-key producer must pin its own decimal mark: formatC
+  # honours OutDec otherwise, and a column NAME depending on a user
+  # option would break every [["97.5% CI LL"]] lookup.
+  expect_identical(spicy:::.ci_pct_str(0.975), "97.5")
+  tbl <- suppressWarnings(table_continuous(
+    data.frame(x = c(1.5, 2.5, 3.5, 4.5)),
+    select = x,
+    ci_level = 0.975
+  ))
+  s <- as_structured(tbl)
+  expect_true("97.5% CI LL" %in% names(s$col_meta))
+})

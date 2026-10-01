@@ -16,6 +16,32 @@
 # `table_categorical()` started reusing them, the suffix became
 # misleading. Moved here for clarity.
 
+# Internal: resolve display labels for a set of columns. One contract
+# for the whole table family (`table_categorical()`,
+# `table_continuous()`, `table_continuous_lm()`): a user-supplied
+# NAMED character vector wins, then the column's `label` attribute
+# (haven / labelled convention), then the column name itself.
+# `labels = NULL` means "no user overrides". Returns an unnamed
+# character vector parallel to `cols`.
+resolve_variable_labels <- function(data, cols, labels = NULL) {
+  vapply(
+    cols,
+    function(nm) {
+      if (!is.null(labels) && nm %in% names(labels)) {
+        return(labels[[nm]])
+      }
+      lab <- attr(data[[nm]], "label", exact = TRUE)
+      # Absent, empty, or MISSING all fall back to the column name. `NA`
+      # is a real value of the attribute in a partly-labelled import, and
+      # `nzchar(NA)` is TRUE, so it used to travel into the table's stub
+      # as the string "NA".
+      if (is.null(lab) || is.na(lab) || !nzchar(lab)) nm else lab
+    },
+    character(1L),
+    USE.NAMES = FALSE
+  )
+}
+
 # Internal: format a single numeric (or vector) with `formatC()` and
 # the configured decimal mark. NA -> "" so blank cells render
 # cleanly. Vectorised by recursion -- the per-element branch is the
@@ -56,12 +82,24 @@ format_number <- function(x, digits = 2L, decimal_mark = ".") {
   # in standard cases. Users who want sub-precision values visible
   # can request more `digits`.
   use_scientific <- is.finite(x) && x != 0 && abs_x >= 1e+7
+  # `decimal.mark` pinned: `formatC()` reads `options(OutDec)`
+  # otherwise, and a session set to `OutDec = ","` then beat a typed
+  # `decimal_mark = "."` -- the substitution below is a no-op under a
+  # point, so the comma survived all the way to the cell, and the
+  # leading-zero strip (which looks for the mark it was told) stopped
+  # firing with it. This function is the package's MAIN producer of a
+  # rendered number, and the one every family's cells go through; a
+  # handful of local producers (the `table_categorical` /
+  # `table_continuous` formatters, the significant-digit columns, the
+  # `assoc` prints, `format_signed()`) pin `decimal.mark` the same way
+  # for the same reason. Wherever it is written, the mark is the
+  # argument's, never the session's.
   if (use_scientific) {
     # `formatC(format = "e")` gives "1.75e+11" with `digits` mantissa
     # decimals. Honour the user's `digits` (2 by default).
-    out <- formatC(x, digits = digits, format = "e")
+    out <- formatC(x, digits = digits, format = "e", decimal.mark = ".")
   } else {
-    out <- formatC(x, digits = digits, format = "f")
+    out <- formatC(x, digits = digits, format = "f", decimal.mark = ".")
   }
   if (!identical(decimal_mark, ".")) {
     out <- chartr(".", decimal_mark, out)
@@ -69,13 +107,52 @@ format_number <- function(x, digits = 2L, decimal_mark = ".") {
   out
 }
 
-# Internal: APA-style *p*-value formatter. `digits` controls both
+# The sprintf() twin, for the FOOTER SENTENCES that migrated off
+# literal sprintf("%.Nf") forms. Their contract is byte-identity with
+# the form they replaced, at every magnitude and for every input --
+# and format_number() breaks it twice: it switches to scientific at
+# abs(x) >= 1e+7 (a flexsurvreg scale on a seconds axis is a real
+# case: "scale = 61060822.37" must not become "scale = 6.11e+07"),
+# and it renders NA as "" (a footer must say "shape = NA", never a
+# dangling "shape = ,"). Fixed decimals always, non-finites spelled
+# the way sprintf spelled them, the mark pinned like everywhere else.
+.footer_num <- function(x, digits = 2L, decimal_mark = ".") {
+  out <- formatC(x, digits = digits, format = "f", decimal.mark = decimal_mark)
+  # `formatC()` pads a non-finite to `" NA"`; sprintf printed `"NA"`.
+  bad <- !is.finite(x)
+  if (any(bad)) {
+    out[bad] <- trimws(out[bad])
+  }
+  out
+}
+
+# Internal: the shared *p*-value formatter. `digits` controls both
 # the displayed precision AND the small-`p` threshold: with
 # `digits = 3` the rendering is `.045` for ordinary p and `<.001`
-# below threshold; `digits = 4` gives `.0451` and `<.0001`. Leading
-# zeros are always stripped, the configured `decimal_mark` is
-# honoured. NA -> "".
-format_p_value <- function(p, decimal_mark = ".", digits = 3L) {
+# below threshold; `digits = 4` gives `.0451` and `<.0001`. The
+# configured `decimal_mark` is honoured, and it also decides the
+# leading zero: dropped under a point (the APA form spicy defaults
+# to), kept under a comma (`0,045`, the only form the SI brochure
+# admits). NA -> "".
+#
+# A journal style (`R/spicy_style.R`) may override three of those
+# choices for the duration of a table call: how many decimals this
+# p-value gets (banded, or by significant figures), where the "<"
+# floor sits, and whether the leading zero is kept. With no style
+# active every hook returns the value computed here, so the output
+# is byte-identical to the pre-style formatter.
+#
+# `leading_zero` settles the third question outright for a caller that
+# wants no part of either rule -- `cross_tab()`, whose only typographic
+# lever is `decimal_mark`, states its own guarantee here. `NULL` (the
+# default) asks the style and then the mark, which is what every other
+# caller does.
+format_p_value <- function(
+  p,
+  decimal_mark = ".",
+  digits = 3L,
+  leading_zero = NULL
+) {
   if (is.na(p)) {
     return("")
   }
@@ -83,15 +160,69 @@ format_p_value <- function(p, decimal_mark = ".", digits = 3L) {
   if (!is.finite(digits) || digits < 1L) {
     digits <- 3L
   }
-  threshold <- 10^(-digits)
+  threshold <- .style_p_floor(digits)
+  keep_zero <- if (is.null(leading_zero)) {
+    .style_p_leading_zero(decimal_mark)
+  } else {
+    isTRUE(leading_zero)
+  }
   if (p < threshold) {
     # "<.001" for digits=3, "<.0001" for digits=4, "<.01" for digits=2
-    return(paste0("<", decimal_mark, strrep("0", digits - 1L), "1"))
+    return(paste0(
+      "<",
+      .strip_leading_zero(
+        .format_p_floor(threshold, decimal_mark),
+        decimal_mark,
+        keep_zero
+      )
+    ))
   }
-  out <- format_number(p, digits, decimal_mark)
-  out <- sub("^0(?=[\\.,])", "", out, perl = TRUE)
-  out <- sub("^-0(?=[\\.,])", "-", out, perl = TRUE)
-  out
+  out <- format_number(p, .style_p_decimals(p, digits), decimal_mark)
+  .strip_leading_zero(out, decimal_mark, keep_zero)
+}
+
+# Internal: render the "<" floor of a p-value at exactly the precision
+# the floor itself has -- 0.001 -> "0.001", 0.0001 -> "0.0001",
+# 0.05 -> "0.05" -- so a style-set floor is never shown rounded.
+.format_p_floor <- function(threshold, decimal_mark) {
+  nd <- 0L
+  while (nd < 15L && !isTRUE(all.equal(round(threshold, nd), threshold))) {
+    nd <- nd + 1L
+  }
+  format_number(threshold, nd, decimal_mark)
+}
+
+# Internal: put a plain rendered number under the table's decimal
+# mark. For the quantities that reach a note through `sprintf("%s")`
+# rather than `format_number()` -- a `round()`ed value whose English
+# rendering is `as.character()`'s and must not move by a byte. Under
+# `"."` this IS `as.character()`.
+.mark_decimal <- function(x, decimal_mark) {
+  out <- as.character(x)
+  # `as.character()` on a double reads `options(OutDec)` too, so a
+  # session set to "," handed back "2,84" for a note that asked for a
+  # point. Normalise to the dot this function is written against; under
+  # the default OutDec the substitution never fires and this IS
+  # `as.character()`, to the byte.
+  od <- getOption("OutDec", ".")
+  if (is.character(od) && length(od) == 1L && nchar(od) == 1L && od != ".") {
+    out <- chartr(od, ".", out)
+  }
+  if (identical(decimal_mark, ".")) {
+    return(out)
+  }
+  chartr(".", decimal_mark, out)
+}
+
+# Internal: drop the leading zero of a decimal fraction ("0.03" ->
+# ".03", "-0.03" -> "-.03") unless `keep` says to keep it. Works with
+# any single-character decimal mark.
+.strip_leading_zero <- function(x, decimal_mark, keep = FALSE) {
+  if (isTRUE(keep)) {
+    return(x)
+  }
+  dm <- gsub("([.^$*+?()\\[\\]{}|\\\\])", "\\\\\\1", decimal_mark, perl = TRUE)
+  sub(paste0("^(-?)0(?=", dm, ")"), "\\1", x, perl = TRUE)
 }
 
 # Internal: decimal-point alignment for a vector of formatted numeric
@@ -131,15 +262,15 @@ safe_glyph_width <- function(x) {
 # so it is robust to formats like "<.001", "f^2 = 0.18 [0.07, 0.30]",
 # and any decimal_mark.
 #
-# Non-decimal cells (em-dash, "NA", "N/A", etc.) are positioned so
+# Non-decimal cells (en-dash, "NA", "N/A", etc.) are positioned so
 # the glyph centres on the decimal-mark column. For a single-char
-# glyph this lines the em-dash up exactly with the `.` of the other
+# glyph this lines the en-dash up exactly with the `.` of the other
 # rows -- the convention recommended by APA Manual 7 Section 7.13
 # ("use a dash in the cell position where a number would otherwise
 # appear"), Stata `esttab`, `modelsummary`, and Hochuli typography
 # guidelines. Multi-char placeholders are centred around the
 # decimal-mark position with bias-left for even widths.
-decimal_align_strings <- function(values, decimal_mark = ".") {
+decimal_align_strings <- function(values, decimal_mark = ".", pad_char = " ") {
   if (length(values) == 0L) {
     return(character(0))
   }
@@ -150,6 +281,18 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
   if (all(is_blank)) {
     return(values)
   }
+
+  # `pad_char` controls the padding character used to make every
+  # string in a column share the same width with the decimal mark at
+  # the same internal position. Defaults to ASCII space U+0020 for
+  # ASCII / clipboard / data.frame output (`trimws()` strips it
+  # naturally). HTML / Word renderers (`gt`, `tinytable`,
+  # `flextable`, `word`) should pass `"\u2007"` (FIGURE SPACE,
+  # digit-width): HTML collapses runs of ASCII space and markdown
+  # table cells strip leading / trailing ASCII whitespace, which
+  # silently undoes the padding; U+2007 is preserved by both HTML
+  # and markdown parsers and is the same convention used by
+  # `.pad_for_decimal_align()` in `table_regression()`.
 
   dot_pos <- regexpr(decimal_mark, values, fixed = TRUE)
   has_dot <- dot_pos != -1L
@@ -173,18 +316,18 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
     seq_along(values),
     function(i) {
       if (is_blank[i]) {
-        return(strrep(" ", total_width))
+        return(strrep(pad_char, total_width))
       }
       v <- values[i]
       if (has_dot[i]) {
-        pad_l <- strrep(" ", max_before - before[i])
-        pad_r <- strrep(" ", max_after - after[i])
+        pad_l <- strrep(pad_char, max_before - before[i])
+        pad_r <- strrep(pad_char, max_after - after[i])
         return(paste0(pad_l, v, pad_r))
       }
       if (max_after == 0L) {
         # Pure integer column (no decimals anywhere) -- left-pad to
         # right-align the value, no decimal mark to align against.
-        return(paste0(strrep(" ", max_before - before[i]), v))
+        return(paste0(strrep(pad_char, max_before - before[i]), v))
       }
       # Non-decimal cell in a column that has decimals elsewhere.
       # Two sub-cases:
@@ -192,20 +335,20 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
       #       for a negative count) -- right-align with the
       #       integer parts of the decimal rows so its rightmost
       #       digit lines up with their last integer digit.
-      #   (b) Non-numeric placeholder (em-dash, "NA", "N/A") --
+      #   (b) Non-numeric placeholder (en-dash, "NA", "N/A") --
       #       centre the glyph on the decimal-mark column
       #       position so it visually replaces the `.` of the
       #       absent value. APA Manual 7 Section 7.13 / Stata
       #       esttab / modelsummary convention.
       if (grepl("^-?[0-9]+$", v)) {
-        pad_l <- strrep(" ", max_before - before[i])
-        pad_r <- strrep(" ", 1L + max_after)
+        pad_l <- strrep(pad_char, max_before - before[i])
+        pad_r <- strrep(pad_char, 1L + max_after)
         return(paste0(pad_l, v, pad_r))
       }
       g <- safe_glyph_width(v)
       pad_l <- max(0L, max_before - (g - 1L) %/% 2L)
       pad_r <- max(0L, max_after - (g %/% 2L))
-      paste0(strrep(" ", pad_l), v, strrep(" ", pad_r))
+      paste0(strrep(pad_char, pad_l), v, strrep(pad_char, pad_r))
     },
     character(1)
   )
@@ -218,7 +361,56 @@ decimal_align_strings <- function(values, decimal_mark = ".") {
 # European convention is to switch to a semicolon in that case
 # (`"0,18 [0,07; 0,30]"`).
 ci_bracket_separator <- function(decimal_mark) {
-  if (identical(decimal_mark, ",")) "; " else ", "
+  .style_ci_sep(if (identical(decimal_mark, ",")) "; " else ", ")
+}
+
+# Internal: the coverage percentage of an interval, as it enters both
+# the frozen column key ("95% CI LL") and the header a reader sees
+# ("95% CI"). One producer for the five families that display one.
+#
+# `round()` -- what the two descriptive families used -- turned
+# `ci_level = 0.975` into "98%": a 97.5% interval labelled 98%, in the
+# spanner, in the column names of the `data.frame` output, and in the
+# note. %g prints the percentage exactly and still drops trailing
+# zeros, so every level that HAS an exact integer percentage keeps it:
+# 0.9 -> "90", 0.95 -> "95", 0.99 -> "99". It also absorbs the binary
+# representation (`0.29 * 100` is 28.999999999999996, not 29).
+#
+# "fg" rather than "g": the same fixed notation with the same
+# significant-digit rule, minus %g's switch to scientific for a very
+# small number. `ci_level` is validated only as `0 < x < 1`, so
+# `ci_level = 1e-6` reached %g's threshold and wrote "1e-04" -- a
+# percentage no consumer can parse, and one the pattern that recognises
+# a companion header cannot match. This form is unconditionally digits
+# with at most one decimal point, which is what that pattern is built
+# for. Identical to "g" on every level above 1e-6 (swept: 21014 levels,
+# 4 differ, all of them the scientific ones).
+.ci_pct_str <- function(level) {
+  # decimal.mark pinned: formatC honours options(OutDec) otherwise,
+  # and this is the FROZEN-KEY producer -- a user's OutDec must never
+  # leak into a column name (.ci_pct_display() owns the reader-facing
+  # mark).
+  formatC(level * 100, format = "fg", decimal.mark = ".")
+}
+
+# Internal: the coverage percentage as a READER sees it -- in a header,
+# a spanner, a note -- with its decimal point following `decimal_mark`
+# (decision 27): "97.5% CI" over cells reading "49,38" becomes
+# "97,5% CI", and the Lancet midline dot carries through
+# ("97[U+00B7]5%").
+# The percentage is a number in a label, so the reader who asked for a
+# mark gets it there too. Only the DISPLAY layer reads this producer:
+# the frozen column keys ("97.5% CI LL") keep `.ci_pct_str()`'s period,
+# like every other programmatic name. `.ci_pct_str()` writes at most
+# one decimal point (fixed "fg", no scientific branch), so one fixed
+# substitution is exact, and every level with an integer percentage is
+# byte-identical under any mark.
+.ci_pct_display <- function(level, decimal_mark = ".") {
+  out <- .ci_pct_str(level)
+  if (identical(decimal_mark, ".")) {
+    return(out)
+  }
+  sub(".", decimal_mark, out, fixed = TRUE)
 }
 
 # Internal: decimal-align the LL and UL inside a column of
@@ -232,23 +424,36 @@ ci_bracket_separator <- function(decimal_mark) {
 # decimal point, and the right bracket all sit in fixed columns.
 #
 # Inputs are the formatted cell strings (already a vector of
-# `"[LL, UL]"` or blank / em-dash strings). NA / blank / em-dash
+# `"[LL, UL]"` or blank / en-dash strings). NA / blank / en-dash
 # cells pass through and are padded to the same total width as
 # the aligned CI cells so the column stays rectangular.
-align_ci_strings <- function(values, decimal_mark = ".") {
+align_ci_strings <- function(values, decimal_mark = ".", pad_char = " ") {
   if (length(values) == 0L) {
     return(character(0))
   }
   values <- as.character(values)
   values[is.na(values)] <- ""
-  is_ci <- grepl("^\\[", values) & grepl("\\]\\s*$", values)
+  # Build regexes that escape regex metacharacters in `sep` and in the
+  # bracket pair. The only non-trivial cases here are "," and "; "
+  # (literal text); escape defensively because a style may set either
+  # the separator or the brackets to anything.
+  esc <- function(s) gsub("([.|()\\^{}+$*?\\[\\]])", "\\\\\\1", s, perl = TRUE)
+  brackets <- .style_ci_brackets()
+  open_re <- esc(brackets[[1L]])
+  close_re <- esc(brackets[[2L]])
+  is_ci <- grepl(paste0("^", open_re), values) &
+    grepl(paste0(close_re, "\\s*$"), values)
   sep <- ci_bracket_separator(decimal_mark)
-  # Build a regex that escapes regex metacharacters in `sep`. The
-  # only non-trivial cases here are "," and "; " (literal text);
-  # escape defensively in case `sep` is ever extended.
-  sep_re <- gsub("([.|()\\^{}+$*?])", "\\\\\\1", sep, perl = TRUE)
-  pattern <- paste0("^\\[\\s*(.*?)\\s*", sep_re,
-                    "\\s*(.*?)\\s*\\]\\s*$")
+  sep_re <- esc(sep)
+  pattern <- paste0(
+    "^",
+    open_re,
+    "\\s*(.*?)\\s*",
+    sep_re,
+    "\\s*(.*?)\\s*",
+    close_re,
+    "\\s*$"
+  )
   parts <- regmatches(values, regexec(pattern, values))
 
   lls <- rep(NA_character_, length(values))
@@ -260,12 +465,22 @@ align_ci_strings <- function(values, decimal_mark = ".") {
     }
   }
 
-  aligned_lls <- decimal_align_strings(lls, decimal_mark)
-  aligned_uls <- decimal_align_strings(uls, decimal_mark)
+  aligned_lls <- decimal_align_strings(lls, decimal_mark, pad_char)
+  aligned_uls <- decimal_align_strings(uls, decimal_mark, pad_char)
 
-  ci_cells <- paste0("[", aligned_lls, sep, aligned_uls, "]")
+  ci_cells <- paste0(
+    brackets[[1L]],
+    aligned_lls,
+    sep,
+    aligned_uls,
+    brackets[[2L]]
+  )
   ci_width <- if (length(ci_cells)) max(nchar(ci_cells)) else 0L
 
+  # `pad_char` is the same character passed to decimal_align_strings()
+  # for the LL / UL slots, so blank / en-dash placeholder cells share
+  # the same padding character and the column stays rectangular under
+  # the HTML / markdown / ASCII contracts of the chosen engine.
   out <- character(length(values))
   for (i in seq_along(values)) {
     if (is_ci[i] && length(parts[[i]]) == 3L) {
@@ -273,19 +488,44 @@ align_ci_strings <- function(values, decimal_mark = ".") {
     } else {
       raw <- trimws(values[i])
       if (!nzchar(raw)) {
-        out[i] <- strrep(" ", ci_width)
+        out[i] <- strrep(pad_char, ci_width)
       } else {
-        # Center single-glyph fallback (e.g., em-dash "--") within
-        # the CI column width so reference / blank rows stay
+        # Center single-glyph fallback (the undefined-cell en dash)
+        # within the CI column width so reference / blank rows stay
         # rectangular and visually anchored. `safe_glyph_width()`
         # falls back to byte length when the locale cannot resolve
         # display width.
         glyph_w <- safe_glyph_width(raw)
         side <- max(0L, (ci_width - glyph_w) %/% 2L)
         right <- max(0L, ci_width - glyph_w - side)
-        out[i] <- paste0(strrep(" ", side), raw, strrep(" ", right))
+        out[i] <- paste0(strrep(pad_char, side), raw, strrep(pad_char, right))
       }
     }
   }
   out
+}
+
+# Internal: deepen the indentation of the rows a block table indents,
+# for the two engines that have no indent style of their own.
+#
+# Excel and the clipboard render a plain string, so their indentation
+# IS the label: the base prefix the console uses is swapped for a
+# wider one. `rows` are the rows to indent, read from the typed roles
+# of the structured view -- never sniffed back from the prefix, so a
+# variable label that happens to start with `base_indent` keeps its
+# label.
+#
+# That argument is load-bearing in the other direction too:
+# `substring()` strips `nchar(base_indent)` leading characters from
+# every row it is handed, so handing it a row that carries no prefix
+# eats the row's own first letters.
+#
+# Shared by `table_categorical()` and `table_outcome()`; it captures
+# nothing beyond its four arguments.
+make_stronger_indent <- function(x, base_indent, strong_indent, rows) {
+  if (length(rows)) {
+    suffix <- substring(x[rows], nchar(base_indent) + 1L)
+    x[rows] <- paste0(strong_indent, suffix)
+  }
+  x
 }

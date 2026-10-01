@@ -2,11 +2,18 @@ varlist_title <- function(expr, selectors_used = FALSE) {
   source <- varlist_expr_source(expr)
 
   if (is.null(source)) {
-    return("vl: <data>")
+    return(spicy_str("title_varlist_anonymous"))
   }
 
   transformed <- selectors_used || source$transformed
-  paste("vl:", if (transformed) paste0(source$name, "*") else source$name)
+  spicy_fmt(
+    "title_varlist",
+    if (transformed) {
+      paste0(source$name, spicy_str("marker_varlist_transformed"))
+    } else {
+      source$name
+    }
+  )
 }
 
 
@@ -97,7 +104,10 @@ varlist_call_name <- function(fun) {
 
   parts <- as.character(fun)
   if (length(parts) == 0L) {
+    # nocov start: as.character() of any call object is always length >= 1
+    # (at minimum the function name/operator), so this guard is never hit.
     return(NULL)
+    # nocov end
   }
 
   if (length(parts) >= 3L && parts[[1L]] %in% c("::", ":::")) {
@@ -116,36 +126,81 @@ varlist_call_name <- function(fun) {
 varlist_data_first_calls <- function() {
   c(
     # Base R
-    "as.data.frame", "droplevels", "head", "na.omit", "subset",
-    "tail", "within",
+    "as.data.frame",
+    "droplevels",
+    "head",
+    "na.omit",
+    "subset",
+    "tail",
+    "within",
     # tibble
-    "as_tibble", "rownames_to_column", "column_to_rownames",
+    "as_tibble",
+    "rownames_to_column",
+    "column_to_rownames",
     # dplyr core verbs
-    "arrange", "distinct", "filter", "group_by", "mutate",
-    "relocate", "rename", "rename_with", "select", "slice",
-    "summarise", "summarize", "transmute", "ungroup",
+    "arrange",
+    "distinct",
+    "filter",
+    "group_by",
+    "mutate",
+    "relocate",
+    "rename",
+    "rename_with",
+    "select",
+    "slice",
+    "summarise",
+    "summarize",
+    "transmute",
+    "ungroup",
     # dplyr slice family
-    "slice_head", "slice_tail", "slice_min", "slice_max",
+    "slice_head",
+    "slice_tail",
+    "slice_min",
+    "slice_max",
     "slice_sample",
     # dplyr counts
-    "count", "tally", "add_count", "add_tally",
+    "count",
+    "tally",
+    "add_count",
+    "add_tally",
     # dplyr joins (first arg is `x`, not `data` -- introspection misses these)
-    "inner_join", "left_join", "right_join", "full_join",
-    "semi_join", "anti_join", "nest_join", "cross_join",
+    "inner_join",
+    "left_join",
+    "right_join",
+    "full_join",
+    "semi_join",
+    "anti_join",
+    "nest_join",
+    "cross_join",
     # dplyr binds (first arg is `...` -- introspection misses these)
-    "bind_rows", "bind_cols",
+    "bind_rows",
+    "bind_cols",
     # dplyr misc
     "rowwise",
     # tidyr reshape
-    "pivot_longer", "pivot_wider", "gather", "spread",
+    "pivot_longer",
+    "pivot_wider",
+    "gather",
+    "spread",
     # tidyr nest / unnest
-    "nest", "unnest", "unnest_longer", "unnest_wider", "unnest_auto",
+    "nest",
+    "unnest",
+    "unnest_longer",
+    "unnest_wider",
+    "unnest_auto",
     # tidyr cleaning
-    "drop_na", "complete", "fill", "replace_na",
+    "drop_na",
+    "complete",
+    "fill",
+    "replace_na",
     # tidyr separate / unite
-    "separate", "unite", "separate_rows",
-    "separate_wider_delim", "separate_wider_position",
-    "separate_wider_regex", "separate_longer_delim",
+    "separate",
+    "unite",
+    "separate_rows",
+    "separate_wider_delim",
+    "separate_wider_position",
+    "separate_wider_regex",
+    "separate_longer_delim",
     "separate_longer_position"
   )
 }
@@ -175,8 +230,11 @@ varlist_is_data_first <- function(call_name) {
       next
     }
     first <- names(formals(f))[1L]
-    if (length(first) && !is.na(first) &&
-          first %in% c("data", ".data", ".tbl", "tbl")) {
+    if (
+      length(first) &&
+        !is.na(first) &&
+        first %in% c("data", ".data", ".tbl", "tbl")
+    ) {
       return(TRUE)
     }
   }

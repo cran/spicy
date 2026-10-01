@@ -32,13 +32,22 @@
 # must be contiguous (the renderer centers one label over one
 # continuous range; gaps would require multiple spanner rows).
 .validate_spanners <- function(spanners, n_cols) {
-  if (is.null(spanners)) return(NULL)
-  if (!is.list(spanners) || is.null(names(spanners)) ||
-        any(!nzchar(names(spanners)))) {
+  if (is.null(spanners)) {
+    return(NULL)
+  }
+  if (
+    !is.list(spanners) ||
+      is.null(names(spanners)) ||
+      any(!nzchar(names(spanners)))
+  ) {
     spicy_abort(
-      c(paste0("`spanners` must be a named list (label \u2192 ",
-                "integer column indices)."),
-        "i" = "Example: `list(\"Step 1\" = 2:5, \"Step 2\" = 6:9)`."),
+      c(
+        paste0(
+          "`spanners` must be a named list (label \u2192 ",
+          "integer column indices)."
+        ),
+        "i" = "Example: `list(\"Step 1\" = 2:5, \"Step 2\" = 6:9)`."
+      ),
       class = "spicy_invalid_input"
     )
   }
@@ -46,19 +55,18 @@
   used <- integer(0)
   for (lbl in names(spanners)) {
     idx <- suppressWarnings(as.integer(spanners[[lbl]]))
-    if (length(idx) == 0L || any(is.na(idx)) ||
-          any(idx < 1L) || any(idx > n_cols)) {
+    if (
+      length(idx) == 0L || any(is.na(idx)) || any(idx < 1L) || any(idx > n_cols)
+    ) {
       spicy_abort(
-        sprintf("`spanners[[\"%s\"]]` must be integers in 1..%d.",
-                lbl, n_cols),
+        sprintf("`spanners[[\"%s\"]]` must be integers in 1..%d.", lbl, n_cols),
         class = "spicy_invalid_input"
       )
     }
     idx <- sort(unique(idx))
     if (any(diff(idx) != 1L)) {
       spicy_abort(
-        sprintf("`spanners[[\"%s\"]]` must be a contiguous column range.",
-                lbl),
+        sprintf("`spanners[[\"%s\"]]` must be a contiguous column range.", lbl),
         class = "spicy_invalid_input"
       )
     }
@@ -109,8 +117,8 @@
 #'   instead. Passing a string raises an actionable error.
 #' @param first_column_line Logical. If `TRUE` (the default), a vertical separator
 #'   is drawn after the first column (useful for separating categories from data).
-#' @param row_total_line,column_total_line Logical. Control horizontal rules
-#'   before total rows or columns. Both default to `TRUE`.
+#' @param row_total_line Logical. Controls the horizontal rule drawn
+#'   before a total row. Defaults to `TRUE`.
 #' @param bottom_line Logical. If `FALSE` (the default), no closing line is drawn.
 #'   If `TRUE`, draws a closing line at the bottom of the table.
 #' @param lines_color Character. Color used for table separators. Defaults to `"darkgrey"`.
@@ -164,29 +172,16 @@
 #' A single character string containing the full ASCII-formatted table,
 #' suitable for direct printing with `cat()`.
 #'
-#' @examples
-#' # Internal usage example (for developers)
-#' df <- data.frame(
-#'   Category = c("Valid", "", "Missing", "Total"),
-#'   Values = c("Yes", "No", "NA", ""),
-#'   Freq. = c(12, 8, 1, 21),
-#'   Percent = c(57.1, 38.1, 4.8, 100.0)
-#' )
-#'
-#' cat(build_ascii_table(df, padding = 0L))
-#'
 #' @seealso
 #' [spicy_print_table()] for a user-facing wrapper that adds titles and notes.
 #'
 #' @keywords internal
-#' @export
 
 build_ascii_table <- function(
   x,
   padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
-  column_total_line = TRUE,
   bottom_line = FALSE,
   lines_color = "darkgrey",
   align_left_cols = c(1L, 2L),
@@ -198,12 +193,27 @@ build_ascii_table <- function(
   display_labels = NULL,
   ...
 ) {
-  stopifnot(is.data.frame(x))
+  if (!is.data.frame(x)) {
+    spicy_abort(
+      "`x` must be a data.frame.",
+      class = "spicy_invalid_data"
+    )
+  }
   padding <- .validate_padding(padding)
   spanners <- .validate_spanners(spanners, ncol(x))
 
   df <- as.data.frame(x, check.names = FALSE)
-  df[] <- lapply(df, as.character)
+  # A missing cell is an EMPTY cell. `stringr::str_pad(NA, w)` returns NA
+  # rather than a padded blank, and `build_line()` then adds NA to its
+  # running position, so a single missing value used to leave the row
+  # unpadded AND put every separator bar of the table at NA -- a header
+  # rule with two crossings, columns out of register. Normalised once,
+  # here, for every family that reaches the ASCII renderer.
+  df[] <- lapply(df, function(z) {
+    z <- as.character(z)
+    z[is.na(z)] <- ""
+    z
+  })
 
   # `display_labels`, when supplied, override `colnames(df)` for the
   # printed header text. The data.frame's actual colnames are still
@@ -213,9 +223,30 @@ build_ascii_table <- function(
   # bare label ("95% CI", "p") in both blocks of a B + AME table
   # rather than the data-layer's deduplicated `"95% CI.2"` / `"p.2"`.
   if (!is.null(display_labels)) {
-    stopifnot(length(display_labels) == ncol(df))
+    if (length(display_labels) != ncol(df)) {
+      spicy_abort(
+        sprintf(
+          "`display_labels` must have one label per column of `x` (%d), not %d.",
+          ncol(df),
+          length(display_labels)
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
     names(df) <- as.character(display_labels)
   }
+  # The header text is padded by the same `str_pad()` as the cells and
+  # breaks the same way, so it is normalised at the same door -- AFTER
+  # `display_labels`, which is the second route in. A missing column
+  # name (`names(x)` carrying NA, or an NA in `display_labels`) used to
+  # reach `build_line()` and desync every rule of every panel, exactly
+  # as a missing cell did. Audited alongside: the other cell routes are
+  # already clean. The typed view's `display_cells` overrides and the
+  # engine fill loops go through the families' own formatters, which
+  # emit "" or the undefined-cell glyph, never NA -- measured on the
+  # regression string body, the padded body, and the descriptive
+  # display frames.
+  names(df)[is.na(names(df))] <- ""
 
   w <- ascii_table_widths(df, padding)
 
@@ -228,7 +259,9 @@ build_ascii_table <- function(
   data_widths <- vapply(
     seq_along(df),
     function(i) {
-      if (nrow(df) == 0L) return(0L)
+      if (nrow(df) == 0L) {
+        return(0L)
+      }
       max(crayon::col_nchar(df[[i]], type = "width"), na.rm = TRUE)
     },
     integer(1)
@@ -271,15 +304,20 @@ build_ascii_table <- function(
       } else {
         "right"
       }
-      cell <- if (identical(col_align, "header-center") &&
-                    data_widths[i] > 0L &&
-                    data_widths[i] <= widths[i]) {
+      cell <- if (
+        identical(col_align, "header-center") &&
+          data_widths[i] > 0L &&
+          data_widths[i] <= widths[i]
+      ) {
         # Center the header within the data region, then right-pad
         # to the full cell width so the data's left margin is
         # preserved. Visual result: header sits above the data's
         # geometric centre, not the padded cell's centre.
-        centered_in_data <- pad_cell(values[i], data_widths[i],
-                                      align = "center")
+        centered_in_data <- pad_cell(
+          values[i],
+          data_widths[i],
+          align = "center"
+        )
         pad_cell(centered_in_data, widths[i], align = "right")
       } else {
         pad_cell(values[i], widths[i], align = col_align)
@@ -347,7 +385,8 @@ build_ascii_table <- function(
   light_rule <- style(make_light_rule(full_width, bar_positions))
 
   # --- Colorize vertical bars if supported
-  if (crayon::has_color()) { # nocov start
+  if (crayon::has_color()) {
+    # nocov start
     header_txt <- gsub("\u2502", style("\u2502"), header_txt, fixed = TRUE)
     rows_txt <- gsub("\u2502", style("\u2502"), rows_txt, fixed = TRUE)
   } # nocov end
@@ -366,14 +405,14 @@ build_ascii_table <- function(
     # widths[i]-wide region, excluding its left/right gutters and any
     # separator).
     col_starts <- integer(length(w))
-    col_ends   <- integer(length(w))
+    col_ends <- integer(length(w))
     pos <- 0L
     for (i in seq_along(w)) {
-      pos <- pos + 1L           # left gutter
+      pos <- pos + 1L # left gutter
       col_starts[i] <- pos + 1L # next char is the first cell char
-      pos <- pos + w[i]         # cell content
+      pos <- pos + w[i] # cell content
       col_ends[i] <- pos
-      pos <- pos + 1L           # right gutter
+      pos <- pos + 1L # right gutter
       if (i %in% sep_after) pos <- pos + 1L
     }
 
@@ -382,11 +421,24 @@ build_ascii_table <- function(
     for (lbl in names(spanners)) {
       cols <- spanners[[lbl]]
       span_start <- col_starts[min(cols)]
-      span_end   <- col_ends[max(cols)]
+      span_end <- col_ends[max(cols)]
       span_width <- span_end - span_start + 1L
-      if (span_width <= 0L) next
+      if (span_width <= 0L) {
+        next
+      }
       lab_disp <- if (nchar(lbl, type = "width") > span_width) {
-        substr(lbl, 1L, span_width)   # truncate over-wide labels
+        # Truncation must be VISIBLE: a silently cut label ("Inactive
+        # vs Employ" for "Inactive vs Employed") reads as a complete
+        # -- and wrong -- label. Trade one more character for an
+        # ellipsis whenever there is room for it.
+        if (span_width >= 2L) {
+          paste0(
+            substr(lbl, 1L, span_width - 1L),
+            spicy_str("marker_truncation_ellipsis")
+          )
+        } else {
+          substr(lbl, 1L, span_width)
+        }
       } else {
         lbl
       }
@@ -397,7 +449,9 @@ build_ascii_table <- function(
       for (k in seq_along(lab_chars)) {
         spanner_chars[lab_pos + k - 1L] <- lab_chars[k]
       }
-      for (p in span_start:span_end) underline_chars[p] <- "\u2500"
+      for (p in span_start:span_end) {
+        underline_chars[p] <- "\u2500"
+      }
     }
     spanner_line <- paste(spanner_chars, collapse = "")
     underline_line <- style(paste(underline_chars, collapse = ""))
@@ -590,10 +644,16 @@ ascii_table_panels <- function(
 #'   the migration note from the pre-0.11.0 string enum.
 #' @param first_column_line Logical. If `TRUE` (the default), adds a vertical separator
 #'   after the first column.
-#' @param row_total_line,column_total_line,bottom_line Logical flags controlling
-#'   the presence of horizontal lines before total rows/columns or at the bottom
-#'   of the table.
-#'   Both `row_total_line` and `column_total_line` default to `TRUE`;
+#' @details
+#' The layout arguments `spanners`, `display_labels`,
+#' `fit_stats_start`, `total_row_idx` and `group_sep_rows` are
+#' plumbing consumed by spicy's own print methods; they are
+#' documented for completeness and are rarely useful when calling
+#' this function directly.
+#'
+#' @param row_total_line,bottom_line Logical flags controlling the
+#'   horizontal line before a total row and the closing line at the
+#'   bottom of the table. `row_total_line` defaults to `TRUE`;
 #'   `bottom_line` defaults to `FALSE`.
 #' @param lines_color Character. Color for table separators. Defaults to `"darkgrey"`.
 #'   Only applied if the output supports ANSI colors (see [crayon::has_color()]).
@@ -623,6 +683,23 @@ ascii_table_panels <- function(
 #'   Sliced per panel when the table is split across stacked panels.
 #'   Forwarded to [build_ascii_table()]; see that function for full
 #'   semantics. Defaults to `NULL`.
+#' @param fit_stats_start Optional 1-based index of the first
+#'   model-level statistics row (the block below the dashed rule in
+#'   regression tables). When the table splits into stacked panels,
+#'   continuation panels drop the rows of that block whose every
+#'   visible data cell is blank -- model-level statistics print once,
+#'   under the panel that carries their values, instead of leaving
+#'   empty `n` / `AIC` stub rows on every continuation panel. `NULL`
+#'   (default) keeps all rows on all panels.
+#' @param qualify_companions Logical. When the table splits into stacked
+#'   panels, should a companion column (`SE`, `p`, an interval) that a
+#'   width split separated from its carrier name that carrier in its
+#'   header -- `95% CI` becoming `95% CI (B)`? Set it `TRUE` only for a
+#'   layout where those headers really are companions of the estimate
+#'   column on their left, as in a coefficient table. In a layout whose
+#'   `p` is the omnibus test of a whole block it has no carrier, and
+#'   qualifying it would attribute it to whichever column happened to
+#'   sit before it. Defaults to `FALSE`.
 #' @param ... Additional arguments passed to [build_ascii_table()].
 #'
 #' @return
@@ -655,7 +732,6 @@ spicy_print_table <- function(
   padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
-  column_total_line = TRUE,
   bottom_line = FALSE,
   lines_color = "darkgrey",
   align_left_cols = NULL,
@@ -665,9 +741,16 @@ spicy_print_table <- function(
   group_sep_rows = integer(0),
   total_row_idx = attr(x, "total_row_idx"),
   display_labels = NULL,
+  fit_stats_start = NULL,
+  qualify_companions = FALSE,
   ...
 ) {
-  stopifnot(is.data.frame(x))
+  if (!is.data.frame(x)) {
+    spicy_abort(
+      "`x` must be a data.frame.",
+      class = "spicy_invalid_data"
+    )
+  }
   padding <- .validate_padding(padding)
   spanners <- .validate_spanners(spanners, ncol(x))
 
@@ -694,7 +777,16 @@ spicy_print_table <- function(
   # (not name lookup), so the resulting duplicate names ("p", "p") are
   # harmless here.
   if (!is.null(display_labels)) {
-    stopifnot(length(display_labels) == ncol(x))
+    if (length(display_labels) != ncol(x)) {
+      spicy_abort(
+        sprintf(
+          "`display_labels` must have one label per column of `x` (%d), not %d.",
+          ncol(x),
+          length(display_labels)
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
     names(x) <- as.character(display_labels)
   }
 
@@ -708,8 +800,9 @@ spicy_print_table <- function(
   )
 
   txt <- vapply(
-    panel_cols,
-    function(cols) {
+    seq_along(panel_cols),
+    function(panel_i) {
+      cols <- panel_cols[[panel_i]]
       # Remap spanners to per-panel column indices. When a model's
       # columns are split across panels, each panel displays the
       # spanner label over the surviving subset (matches modelsummary
@@ -726,8 +819,10 @@ spicy_print_table <- function(
             # data cols of the same model would break contiguity --
             # that doesn't arise in practice because the Variable
             # column is never in a spanner).
-            if (length(local_idx) == 1L ||
-                all(diff(local_idx) == 1L)) {
+            if (
+              length(local_idx) == 1L ||
+                all(diff(local_idx) == 1L)
+            ) {
               panel_spanners[[lbl]] <- local_idx
             }
           }
@@ -739,6 +834,55 @@ spicy_print_table <- function(
       # names that the print method handed us.
       sub <- x[, cols, drop = FALSE]
       names(sub) <- names(x)[cols]
+      # Continuation panels: a companion column (SE / p / a CI label)
+      # separated from its carrier by the width split used to repeat
+      # only its generic header ("95% CI") -- silently ambiguous when
+      # another CI column sits in the main panel (wave-2 review;
+      # dev/registre_rendu_estimands_spec.md). Suffix the carrier's
+      # name so the orphan column names its estimand. Companions whose
+      # carrier made it into the same panel keep their short header.
+      # Continuation panels: model-level statistics (n / AIC / R2 ...)
+      # live once, under the columns that carry their values -- for a
+      # single-model table split by width, that is panel 1 only. Drop
+      # the fit-stat rows whose every visible data cell is blank here,
+      # so continuation panels do not end with empty stub rows. The
+      # block sits at the TAIL of the table, so dropping keeps every
+      # other row index (group_sep_rows, spanners) stable; the dashed
+      # boundary rule is removed with the block only when the whole
+      # block goes.
+      panel_group_sep <- group_sep_rows
+      if (
+        panel_i > 1L &&
+          !is.null(fit_stats_start) &&
+          fit_stats_start >= 1L &&
+          fit_stats_start <= nrow(sub)
+      ) {
+        fit_rows <- fit_stats_start:nrow(sub)
+        data_cols_local <- which(!(cols %in% align_left_cols))
+        if (length(data_cols_local)) {
+          blank <- vapply(
+            fit_rows,
+            function(r) {
+              all(
+                !nzchar(trimws(as.character(
+                  unlist(sub[r, data_cols_local], use.names = FALSE)
+                )))
+              )
+            },
+            logical(1)
+          )
+          if (any(blank)) {
+            sub <- sub[-fit_rows[blank], , drop = FALSE]
+            if (all(blank)) {
+              # group_sep_rows semantics: rule drawn BEFORE the given
+              # row index, so the fit boundary is fit_stats_start
+              # itself.
+              panel_group_sep <-
+                setdiff(panel_group_sep, fit_stats_start)
+            }
+          }
+        }
+      }
       # Slice display_labels to the same panel columns so each panel
       # gets its own header text.
       panel_display_labels <- if (!is.null(display_labels)) {
@@ -746,19 +890,75 @@ spicy_print_table <- function(
       } else {
         NULL
       }
+      # Continuation panels: a companion column (SE / p / a CI label)
+      # separated from its carrier by the width split used to repeat
+      # only its generic header ("95% CI") -- silently ambiguous when
+      # another CI column sits in the main panel (wave-2 review;
+      # dev/registre_rendu_estimands_spec.md). Suffix the carrier's
+      # display name so the orphan column names its estimand; a
+      # companion whose carrier made it into the same panel keeps its
+      # short header. Duplicate columns arrive uniquified ("95% CI.2"),
+      # so matching goes through the base name; the display label (what
+      # build_ascii_table actually prints) is edited when present.
+      #
+      # Opt-in, because "the column on my left" is only the carrier in a
+      # coefficient layout. In a descriptive table the `p` is the
+      # omnibus test of the whole block and belongs to no column at all,
+      # and the search silently attributed it to whichever neighbour the
+      # split had left behind -- "p (Total %)", "p (Test)",
+      # "p (Total DEff)". A statistic of a block named after a column is
+      # a false claim about what was tested, so those families leave
+      # this off (register n. 89).
+      if (panel_i > 1L && isTRUE(qualify_companions)) {
+        base_nm <- function(nm) sub("[.][0-9]+$", "", nm)
+        shown <- if (!is.null(panel_display_labels)) {
+          as.character(panel_display_labels)
+        } else {
+          names(sub)
+        }
+        companion_rx <- .companion_header_pattern()
+        is_companion <- function(nm) {
+          grepl(companion_rx, base_nm(nm))
+        }
+        all_shown <- if (!is.null(display_labels)) {
+          as.character(display_labels)
+        } else {
+          names(x)
+        }
+        for (k in which(is_companion(shown))) {
+          carrier <- NA_integer_
+          for (j in rev(seq_len(cols[k] - 1L))) {
+            if (!is_companion(all_shown[j]) && !(j %in% align_left_cols)) {
+              carrier <- j
+              break
+            }
+          }
+          if (!is.na(carrier) && !(carrier %in% cols)) {
+            relabeled <- spicy_fmt(
+              "header_companion_qualified",
+              base_nm(shown[k]),
+              base_nm(all_shown[carrier])
+            )
+            if (!is.null(panel_display_labels)) {
+              panel_display_labels[k] <- relabeled
+            } else {
+              names(sub)[k] <- relabeled
+            }
+          }
+        }
+      }
       build_ascii_table(
         sub,
         padding = padding,
         first_column_line = first_column_line,
         row_total_line = row_total_line,
-        column_total_line = column_total_line,
         bottom_line = bottom_line,
         lines_color = lines_color,
         align_left_cols = which(cols %in% align_left_cols),
         align_center_cols = which(cols %in% align_center_cols),
         center_headers = center_headers,
         spanners = panel_spanners,
-        group_sep_rows = group_sep_rows,
+        group_sep_rows = panel_group_sep,
         total_row_idx = total_row_idx,
         display_labels = panel_display_labels,
         ...

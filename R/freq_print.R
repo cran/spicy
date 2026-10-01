@@ -5,7 +5,7 @@
 #' table using [spicy_print_table()].
 #'
 #' @param x A `data.frame` of class `"spicy_freq_table"` as returned
-#'   by [freq()] (with the default `styled = TRUE`). Rendering
+#'   by [freq()] (with the default `output = "default"`). Rendering
 #'   metadata is read from attributes set by `freq()`.
 #' @param ... Additional arguments (currently ignored).
 #'
@@ -30,10 +30,24 @@ print.spicy_freq_table <- function(x, ...) {
   var_name_clean <- sub("^.*\\$", "", var_name)
   data_name_clean <- sub("\\$.*$", "", data_name)
 
-  valid_block <- df[!is.na(df$value), , drop = FALSE]
-  missing_block <- df[is.na(df$value), , drop = FALSE]
+  # Declared-missing rows (user_na_rows attribute set by freq()) carry
+  # their value labels but belong to the Missing block, ahead of the
+  # system-NA row.
+  user_na_rows <- attr(df, "user_na_rows")
+  is_missing_row <- is.na(df$value)
+  if (length(user_na_rows) > 0L) {
+    is_missing_row[user_na_rows] <- TRUE
+  }
+  valid_block <- df[!is_missing_row, , drop = FALSE]
+  missing_block <- df[is_missing_row, , drop = FALSE]
 
-  show_valid_col <- nrow(missing_block) > 0
+  # Valid Percent (and Cum. Valid Percent) columns appear only when
+  # valid percentages were actually computed: with `valid = FALSE`
+  # (or a table with zero valid observations) `valid_prop` is an
+  # all-NA placeholder, and printing an NA column whose Total row
+  # asserts 100.0 would claim a computation that never happened.
+  has_valid_pct <- !is.null(df$valid_prop) && any(!is.na(df$valid_prop))
+  show_valid_col <- nrow(missing_block) > 0 && has_valid_pct
 
   # Use the shared `format_number()` helper from R/table_helpers.R for
   # locale-aware decimal-mark support, matching cross_tab() and the
@@ -54,14 +68,10 @@ print.spicy_freq_table <- function(x, ...) {
     if (!nrow(block)) {
       return(NULL)
     }
-    # Each block is homogeneous: `valid_block` has no NA in `value`, and
-    # `missing_block` has only NA. Branch once on the whole block instead
-    # of running a vectorized `ifelse` that is dead code on the valid path.
-    values <- if (anyNA(block$value)) {
-      rep("NA", nrow(block))
-    } else {
-      block$value
-    }
+    # `valid_block` has no NA in `value`; `missing_block` mixes
+    # declared-missing rows (labelled values) with the system-NA row,
+    # which displays as the literal "NA".
+    values <- ifelse(is.na(block$value), "NA", block$value)
     out <- data.frame(
       Category = c(category, rep("", nrow(block) - 1L)),
       Values = values,
@@ -84,13 +94,17 @@ print.spicy_freq_table <- function(x, ...) {
     out
   }
 
-  rows_valid <- build_rows(valid_block, "Valid", show_valid_col)
-  rows_missing <- build_rows(missing_block, "Missing", FALSE)
+  rows_valid <- build_rows(valid_block, spicy_str("row_valid"), show_valid_col)
+  rows_missing <- build_rows(
+    missing_block,
+    spicy_str("row_missing_block"),
+    FALSE
+  )
 
   pct_100 <- format_number(100, digits = digits, decimal_mark = decimal_mark)
 
   total_row <- data.frame(
-    Category = "Total",
+    Category = spicy_str("label_total"),
     Values = "",
     `Freq.` = fmt_int(sum(df$n)),
     Percent = pct_100,
@@ -143,24 +157,26 @@ print.spicy_freq_table <- function(x, ...) {
       !is.na(var_label) &&
       nzchar(var_label)
   ) {
-    footer_lines <- c(footer_lines, paste0("Label: ", var_label))
+    footer_lines <- c(footer_lines, spicy_fmt("note_label", var_label))
   }
 
   footer_lines <- c(
     footer_lines,
-    paste("Class:", class_name),
-    paste("Data:", data_name_clean)
+    spicy_fmt("note_class", class_name),
+    spicy_fmt("note_data", data_name_clean)
   )
 
   if (weighted) {
     weight_line <- if (!is.null(weight_var) && nzchar(weight_var)) {
-      paste("Weight:", weight_var)
+      spicy_fmt("note_weight", weight_var)
     } else {
-      "Weight: (applied)"
+      spicy_str("note_weight_applied")
     }
 
     if (isTRUE(rescaled)) {
-      weight_line <- paste(weight_line, "(rescaled)")
+      # The leading space lives in the literal (one spelling across the
+      # package), so the assembly is a plain paste0 here and in cross_tab().
+      weight_line <- paste0(weight_line, spicy_str("note_weight_rescaled"))
     }
 
     footer_lines <- c(footer_lines, weight_line)
@@ -168,11 +184,36 @@ print.spicy_freq_table <- function(x, ...) {
 
   note_text <- paste(footer_lines, collapse = "\n")
 
+  # `disp` keeps stable ASCII column names (they are lookup keys inside this
+  # method and the probe `spicy_print_table()` uses to detect a freq layout);
+  # the header text the reader sees is substituted at render time. Same rule
+  # as the regression family: the name is a key, the label is a label.
+  header_labels <- c(
+    "Category" = spicy_str("header_category"),
+    "Values" = spicy_str("label_values"),
+    "Freq." = spicy_str("header_freq"),
+    "Percent" = spicy_str("header_percent"),
+    "Valid Percent" = spicy_str("header_valid_percent"),
+    "Cum. Percent" = spicy_str("header_cum_percent"),
+    "Cum. Valid Percent" = spicy_str("header_cum_valid_percent")
+  )
+
   spicy_print_table(
     disp,
-    title = paste("Frequency table:", var_name_clean),
+    title = spicy_fmt("title_freq", var_name_clean),
     note = note_text,
     align_left_cols = c(1L, 2L),
-    bottom_line = FALSE
+    bottom_line = FALSE,
+    # The totals row is the last one, always. Told explicitly so the renderer
+    # never has to grep the formatted text for the word "Total" -- which
+    # mis-fires on a user level literally named "Total" and would break
+    # outright once the label is translated.
+    total_row_idx = nrow(disp),
+    display_labels = unname(header_labels[names(disp)])
   )
+
+  # The documented S3 print contract: return the object printed, not
+  # the internally rebuilt display frame `disp` that
+  # `spicy_print_table()` returns. Matches every sibling print method.
+  invisible(x)
 }

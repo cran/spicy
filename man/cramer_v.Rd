@@ -4,13 +4,7 @@
 \alias{cramer_v}
 \title{Cramer's V}
 \usage{
-cramer_v(
-  x,
-  detail = FALSE,
-  conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
-)
+cramer_v(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -19,22 +13,22 @@ cramer_v(
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 When \code{detail = FALSE}: a single numeric value (the
 estimate).
 When \code{detail = TRUE} and \code{conf_level} is non-\code{NULL}:
-\code{c(estimate, ci_lower, ci_upper, p_value)}.
+\code{c(estimate, se, ci_lower, ci_upper, p_value)}.
 When \code{detail = TRUE} and \code{conf_level = NULL}:
-\code{c(estimate, p_value)}.
+\code{c(estimate, se, p_value)}.
 The p-value tests the null hypothesis of no association
 (Pearson chi-squared test).
 }
@@ -62,6 +56,11 @@ cramer_v(tab, detail = TRUE, conf_level = NULL)
 }
 \references{
 Agresti, A. (2002). \emph{Categorical Data Analysis} (2nd ed.). Wiley.
+
+Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+tests for correlation in two-way contingency tables. \emph{Journal of
+the American Statistical Association}, 72(358), 309-315.
+\doi{10.1080/01621459.1977.10480995}
 
 Liebetrau, A. M. (1983). \emph{Measures of Association}. Sage.
 

@@ -3,8 +3,10 @@
 #' Computes row-wise means across selected numeric columns of a
 #' `data.frame` or `matrix`. Missing values are handled per row via
 #' `min_valid` (an integer count or proportion of non-`NA` values
-#' required); rows that fail the rule return `NA`. Non-numeric
-#' columns are dropped silently (set `verbose = TRUE` to see which).
+#' required); rows that fail the rule return `NA`, and rows with no
+#' valid values at all return `NA` even when `min_valid = 0`.
+#' Non-numeric columns are dropped silently (set `verbose = TRUE` to
+#' see which).
 #' Designed to flow inside `dplyr::mutate()`: when called without
 #' an explicit `data` argument, the current data context is used.
 #'
@@ -25,6 +27,11 @@
 #'
 #'   Non-integer values `>= 1` (e.g. `1.5`) and counts greater than
 #'   `ncol(x)` raise an actionable error.
+#'
+#'   Rows with zero valid values always return `NA`, even when
+#'   `min_valid = 0`: an empty row-wise summary is undefined, so the
+#'   raw `rowMeans()` / `rowSums()` identities (`NaN` / `0`) are never
+#'   returned.
 #' @param digits Optional non-negative integer giving the number of
 #'   decimal places to round the result to. Defaults to `NULL` (no
 #'   rounding).
@@ -32,6 +39,13 @@
 #'   If `TRUE`, the `select` argument is treated as a regular expression.
 #' @param verbose Logical. If `FALSE` (the default), messages are suppressed.
 #'   If `TRUE`, prints a message about non-numeric columns excluded.
+#' @param user_na Logical. If `TRUE` (the default), declared missing
+#'   values count as missing -- both in the computed summary and in the
+#'   `min_valid` valid-count gate. If `FALSE`, the declared codes are
+#'   treated as ordinary numbers. See the "Declared missing values"
+#'   section of [freq()].
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @return A numeric vector of row-wise means.
 #'
@@ -129,7 +143,8 @@ mean_n <- function(
   min_valid = NULL,
   digits = NULL,
   regex = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE
 ) {
   .row_apply_n(
     data = data,
@@ -141,6 +156,7 @@ mean_n <- function(
     regex = regex,
     verbose = verbose,
     fn = rowMeans,
-    fn_label = "mean_n"
+    fn_label = "mean_n",
+    user_na = user_na
   )
 }

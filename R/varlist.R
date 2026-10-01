@@ -49,7 +49,18 @@
 #' @param factor_levels Character. Controls how factor values are displayed
 #'   in `Values`. `"observed"` (the default; [code_book()] uses `"all"`)
 #'   shows only levels present in the data, preserving factor level order.
-#'   `"all"` shows all declared levels, including unused levels.
+#'   `"all"` shows all declared levels, including unused levels. An
+#'   explicit `NA` level (e.g. from [addNA()]) is displayed as `<NA>`
+#'   among the declared levels.
+#' @param user_na Logical. If `TRUE` (the default), declared missing
+#'   values count as missing in `N_valid`, `NAs`, and `N_distinct`
+#'   (all three columns share one missing definition). If `FALSE`,
+#'   they count as valid. Either way, the declared codes remain listed
+#'   in `Values` (with their value labels when declared) -- a codebook
+#'   documents the full coding scheme. See the "Declared missing
+#'   values" section of [freq()].
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @returns
 #' A tibble with one row per selected variable, containing the following
@@ -64,6 +75,8 @@
 #'   `labelled::to_factor(levels = "prefixed")`.
 #'   For factors, levels are displayed according to `factor_levels`.
 #'   Matrix and array columns are summarized by their dimensions.
+#'   `difftime` values are annotated with their units, e.g.
+#'   `1.5, 2.5 (hours)`.
 #'   Missing value markers (`<NA>`, `<NaN>`) are optionally appended at the
 #'   end (controlled via `include_na`). Literal strings `"NA"`, `"NaN"`, and
 #'   `""` are quoted to distinguish them from missing markers.
@@ -115,7 +128,8 @@ varlist <- function(
   values = FALSE,
   tbl = FALSE,
   include_na = FALSE,
-  factor_levels = c("observed", "all")
+  factor_levels = c("observed", "all"),
+  user_na = TRUE
 ) {
   varlist_impl(
     x = x,
@@ -124,6 +138,7 @@ varlist <- function(
     tbl = tbl,
     include_na = include_na,
     factor_levels = factor_levels,
+    user_na = user_na,
     raw_expr = substitute(x)
   )
 }
@@ -136,6 +151,7 @@ varlist_impl <- function(
   tbl = FALSE,
   include_na = FALSE,
   factor_levels = c("observed", "all"),
+  user_na = TRUE,
   raw_expr = substitute(x)
 ) {
   if (!is.data.frame(x)) {
@@ -149,6 +165,7 @@ varlist_impl <- function(
   validate_varlist_logical(values, "values")
   validate_varlist_logical(tbl, "tbl")
   validate_varlist_logical(include_na, "include_na")
+  validate_varlist_logical(user_na, "user_na")
   factor_levels <- match_varlist_factor_levels(factor_levels)
 
   selectors <- if (missing(...)) {
@@ -178,9 +195,10 @@ varlist_impl <- function(
       return(res)
     }
 
-    if (interactive()) { # nocov start
+    if (interactive()) {
+      # nocov start
       tryCatch(
-        tibble::view(res, title = "vl: (no columns selected)"),
+        tibble::view(res, title = spicy_str("title_varlist_empty")),
         error = function(e) {
           message("tibble::view() failed: ", e$message)
           message("Displaying result in console instead:")
@@ -196,6 +214,10 @@ varlist_impl <- function(
 
   x <- x[selectors]
 
+  # `USE.NAMES = FALSE` everywhere: the variable names already live in
+  # the `Variable` column, and stray names attributes on the other
+  # columns would change `identical()` / snapshot comparison semantics
+  # depending on which column is compared.
   res <- list(
     Variable = names(x),
     Label = vapply(
@@ -209,20 +231,36 @@ varlist_impl <- function(
           as.character(lbl)
         }
       },
-      character(1)
+      character(1),
+      USE.NAMES = FALSE
     ),
     Class = vapply(
       x,
       function(col) paste(class(col), collapse = ", "),
-      character(1)
+      character(1),
+      USE.NAMES = FALSE
     ),
     N_distinct = vapply(
       x,
       varlist_n_distinct,
-      integer(1)
+      integer(1),
+      user_na = user_na,
+      USE.NAMES = FALSE
     ),
-    N_valid = vapply(x, varlist_n_valid, integer(1)),
-    NAs = vapply(x, varlist_n_missing, integer(1))
+    N_valid = vapply(
+      x,
+      varlist_n_valid,
+      integer(1),
+      user_na = user_na,
+      USE.NAMES = FALSE
+    ),
+    NAs = vapply(
+      x,
+      varlist_n_missing,
+      integer(1),
+      user_na = user_na,
+      USE.NAMES = FALSE
+    )
   )
 
   res$Values <- vapply(
@@ -251,7 +289,8 @@ varlist_impl <- function(
 
   if (tbl) {
     return(res)
-  } else if (interactive()) { # nocov start
+  } else if (interactive()) {
+    # nocov start
     title_txt <- varlist_title(expr = raw_expr, selectors_used = !missing(...))
 
     tryCatch(
@@ -290,7 +329,8 @@ vl <- function(
   values = FALSE,
   tbl = FALSE,
   include_na = FALSE,
-  factor_levels = c("observed", "all")
+  factor_levels = c("observed", "all"),
+  user_na = TRUE
 ) {
   varlist_impl(
     x = x,
@@ -299,6 +339,7 @@ vl <- function(
     tbl = tbl,
     include_na = include_na,
     factor_levels = factor_levels,
+    user_na = user_na,
     raw_expr = substitute(x)
   )
 }

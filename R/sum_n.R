@@ -3,12 +3,16 @@
 #' Computes row-wise sums across selected numeric columns of a
 #' `data.frame` or `matrix`. Missing values are handled per row via
 #' `min_valid` (an integer count or proportion of non-`NA` values
-#' required); rows that fail the rule return `NA`. Non-numeric
-#' columns are dropped silently (set `verbose = TRUE` to see which).
+#' required); rows that fail the rule return `NA`, and rows with no
+#' valid values at all return `NA` even when `min_valid = 0`.
+#' Non-numeric columns are dropped silently (set `verbose = TRUE` to
+#' see which).
 #' Designed to flow inside `dplyr::mutate()`: when called without
 #' an explicit `data` argument, the current data context is used.
 #'
 #' @inheritParams mean_n
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @return A numeric vector of row-wise sums.
 #'
@@ -106,7 +110,8 @@ sum_n <- function(
   min_valid = NULL,
   digits = NULL,
   regex = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE
 ) {
   .row_apply_n(
     data = data,
@@ -118,6 +123,7 @@ sum_n <- function(
     regex = regex,
     verbose = verbose,
     fn = rowSums,
-    fn_label = "sum_n"
+    fn_label = "sum_n",
+    user_na = user_na
   )
 }

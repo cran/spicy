@@ -6,12 +6,12 @@
 \usage{
 table_categorical(
   data,
-  select,
+  select = tidyselect::everything(),
   by = NULL,
   labels = NULL,
   levels_keep = NULL,
   include_total = TRUE,
-  drop_na = TRUE,
+  drop_na = FALSE,
   weights = NULL,
   rescale = FALSE,
   correct = FALSE,
@@ -22,8 +22,9 @@ table_categorical(
   v_digits = 2,
   assoc_measure = "auto",
   assoc_ci = FALSE,
+  smd = FALSE,
   decimal_mark = ".",
-  align = c("decimal", "auto", "center", "right"),
+  align = c("decimal", "center", "right"),
   output = c("default", "data.frame", "long", "tinytable", "gt", "flextable", "excel",
     "clipboard", "word"),
   indent_text = "  ",
@@ -31,49 +32,68 @@ table_categorical(
   add_multilevel_header = TRUE,
   blank_na_wide = FALSE,
   excel_path = NULL,
-  excel_sheet = "Categorical",
+  excel_sheet = NULL,
   clipboard_delim = "\\t",
-  word_path = NULL
+  word_path = NULL,
+  user_na = TRUE,
+  style = NULL
 )
 }
 \arguments{
 \item{data}{A data frame.}
 
 \item{select}{Columns to include as row variables. Supports tidyselect
-syntax and character vectors of column names.}
+syntax and character vectors of column names. When omitted,
+defaults to every eligible categorical column in \code{data}: factor,
+character, logical, and labelled (\code{haven} / \code{labelled}) columns,
+excluding the \code{by} column -- matching the select-less defaults of
+\code{\link[=table_continuous]{table_continuous()}} and \code{\link[=table_continuous_lm]{table_continuous_lm()}}. An explicit
+\code{select} is taken verbatim (numeric columns included), so
+numeric-coded categorical variables can still be tabulated by
+naming them.}
 
 \item{by}{Optional grouping column used for columns/groups. Accepts an
-unquoted column name or a single character column name.}
+unquoted column name or a single character column name. Factor
+levels keep their declared order; any other \code{by} (character,
+numeric, haven labelled) forms group columns in order of first
+appearance in the data -- the same convention as
+\code{\link[=table_continuous]{table_continuous()}}. For a haven labelled \code{by}, the group
+headers are the raw codes (value labels are not used for group
+headers -- the family convention shared with \code{\link[=table_continuous]{table_continuous()}}
+and \code{\link[=table_continuous_lm]{table_continuous_lm()}}); declared missing values follow
+\code{user_na} as usual.}
 
-\item{labels}{Optional display labels for the variables. Two
-forms are accepted (matching \code{\link[=table_continuous]{table_continuous()}} and
-\code{\link[=table_continuous_lm]{table_continuous_lm()}}):
-\itemize{
-\item A \strong{named character vector} whose names match column names
-in \code{data} (e.g. \code{c(bmi = "Body mass index")}); only listed
-columns are relabelled, others fall back to attribute-based
-labels or the column name. \strong{Recommended form}.
-\item A \strong{positional character vector} of the same length as
-\code{select}, in the same order. Backward-compatible with the
-spicy < 0.11.0 API.
-}
-
-When \code{NULL} (the default), column names are used as-is. If a
-variable label attribute is present (e.g. from \code{haven}), it is
-\emph{not} picked up here -- pass \code{labels = c(...)} explicitly. (The
-continuous companions auto-detect attribute labels; the
-categorical function is conservative because the indented row
-labels expect predictable text.)}
+\item{labels}{An optional \strong{named character vector} of variable
+labels whose names match column names in \code{data} (e.g.
+\code{c(smoking = "Current smoker")}) -- the same contract as
+\code{\link[=table_continuous]{table_continuous()}} and \code{\link[=table_continuous_lm]{table_continuous_lm()}}. Only listed
+columns are relabelled. For the remaining columns (and when
+\code{labels = NULL}, the default), labels are auto-detected from the
+variable's label attribute (e.g. from \code{haven}); if none is found,
+the column name is used. Unnamed (positional) label vectors,
+accepted before 0.13.0, now raise an error.}
 
 \item{levels_keep}{Optional character vector of levels to keep/order for row
-modalities. If \code{NULL}, all observed levels are kept.}
+modalities. If \code{NULL}, all observed levels are kept. Entries must
+match the level strings the table displays (for labelled columns
+these are the \code{"[code] label"} strings, not the bare label
+text). When nothing matches
+for a selected variable, that variable is dropped from the table
+with a classed warning (\code{spicy_no_selection}) listing the
+available level strings.}
 
 \item{include_total}{Logical. If \code{TRUE} (the default), includes a \code{Total} group
 when available.}
 
-\item{drop_na}{Logical. If \code{TRUE} (the default), removes rows with \code{NA} in the
-row/group variable before each cross-tabulation. If \code{FALSE}, missing values
-are displayed as a dedicated \code{"(Missing)"} level.}
+\item{drop_na}{Logical. If \code{FALSE} (the default), missing values are
+displayed as a dedicated \code{"(Missing)"} level (and, under \code{by}, a
+\code{"(Missing)"} group column) -- the field convention for descriptive
+tables (gtsummary's "Unknown" row, janitor's \code{NA} row; see the
+Epidemiologist R Handbook, Descriptive tables). If \code{TRUE}, rows with
+\code{NA} in the tabulated variable (and in \code{by}, when supplied) are
+removed BEFORE each cross-tabulation, and the removal is disclosed
+in a table note ("Missing values removed: ...") rather than silent.
+Before 0.13.0 the default was \code{TRUE} with no disclosure.}
 
 \item{weights}{Optional weights. Either \code{NULL} (the default), a numeric vector
 of length \code{nrow(data)}, or a single column in \code{data} supplied as an
@@ -81,7 +101,9 @@ unquoted name or a character string.}
 
 \item{rescale}{Logical. If \code{FALSE} (the default), weights are used as-is.
 If \code{TRUE}, rescales weights so total weighted N matches raw N.
-Passed to \code{spicy::cross_tab()}.}
+Passed to \code{spicy::cross_tab()}. When the argument is not supplied,
+the default is read from \code{options(spicy.rescale)} (falling back to
+\code{FALSE}), matching \code{\link[=cross_tab]{cross_tab()}}.}
 
 \item{correct}{Logical. If \code{FALSE} (the default), no continuity correction is
 applied. If \code{TRUE}, applies Yates correction in 2x2 chi-squared contexts.
@@ -146,6 +168,17 @@ In rendered formats (\code{"gt"}, \code{"tinytable"}, \code{"flextable"},
 \code{"word"}), the CI is shown inline (e.g., \code{.14 [.08, .19]}).
 Defaults to \code{FALSE}.}
 
+\item{smd}{Logical. If \code{TRUE}, adds an \code{SMD} column holding the
+standardized mean difference between the two groups of \code{by},
+the balance diagnostic of the Table 1 literature. Requires
+exactly two groups; the value sits on the variable row beside
+\code{p}, never on a level row. Signed for a two-category variable
+(group 1 minus group 2 on the second category), unsigned for
+three or more, where it is a distance. No confidence interval
+and no p-value, by design. Rounded with \code{v_digits}. See the
+"Standardized mean difference" section below. Defaults to
+\code{FALSE}.}
+
 \item{decimal_mark}{Decimal separator (\code{"."} or \code{","}). Defaults to \code{"."}.}
 
 \item{align}{Horizontal alignment of numeric columns in the
@@ -155,28 +188,35 @@ is always left-aligned. One of:
 \itemize{
 \item \code{"decimal"} (default): align numeric columns on the decimal
 mark, the standard scientific-publication convention used by
-SPSS, SAS, LaTeX \code{siunitx}, and the native primitives of
-\code{\link[gt:cols_align_decimal]{gt::cols_align_decimal()}} and \code{tinytable::style_tt(align = "d")}.
-For engines without a native primitive (\code{flextable}, \code{word},
-\code{clipboard}, ASCII print), numeric cells are pre-padded with
-leading and trailing spaces so the dots line up vertically;
-the body of the \code{flextable}/\code{word} output additionally uses
-a monospace font (\code{Consolas}) to make character widths uniform.
+SPSS, SAS, and LaTeX \code{siunitx}. Numeric cells are pre-padded
+with figure-spaces (U+2007, digit-width) so every string in a
+column has the same width with the decimal mark at the same
+internal position; centring those uniform-width strings then
+stacks the decimal points vertically. The same pad-then-centre
+strategy is applied on every rendering engine (\code{gt},
+\code{tinytable}, \code{flextable}, \code{word}, ASCII print) for a
+homogeneous rendering, matching \code{table_regression()} and
+\code{table_continuous_lm()}. The \code{clipboard} output is delimited
+text meant to be parsed rather than read at a fixed width, so
+its cells travel unpadded (a padded number pastes as text
+next to an unpadded number).
 \item \code{"center"}: center-align all numeric columns.
 \item \code{"right"}: right-align all numeric columns.
-\item \code{"auto"}: legacy uniform right-alignment used in spicy < 0.11.0.
 }
 
-The \code{excel} output uses the engine's default alignment in any
-case: cell-string padding does not align decimals under
-proportional fonts, and Excel's native right-alignment combined
-with the per-column \code{numfmt} already produces dot-aligned
-columns. Same default and semantics as \code{\link[=table_continuous]{table_continuous()}} /
-\code{\link[=table_continuous_lm]{table_continuous_lm()}}.}
+In the \code{excel} output, \code{"center"} centres the numeric columns and
+\code{"right"} is the same rendering as the default: cell-string padding
+does not align decimals under a proportional font, so \code{"decimal"}
+right-aligns instead, which combined with the per-column \code{numfmt}
+already produces dot-aligned columns. Same default and same three
+values as \code{\link[=table_continuous]{table_continuous()}} / \code{\link[=table_continuous_lm]{table_continuous_lm()}}, whose
+workbooks resolve \code{"decimal"} differently: \code{table_continuous()}
+right-aligns only the counts and the \emph{p}-value there, and
+\code{table_continuous_lm()} applies that convention at every \code{align}.}
 
 \item{output}{Output format. One of:
 \itemize{
-\item \code{"default"} (a printed ASCII table, returned invisibly)
+\item \code{"default"} (an ASCII table object, printed when the call is bare)
 \item \code{"data.frame"} (a wide numeric \code{data.frame})
 \item \code{"long"} (a long numeric \code{data.frame})
 \item \code{"tinytable"} (requires \code{tinytable})
@@ -194,26 +234,59 @@ Defaults to \code{"  "} (two spaces).}
 clipboard exports. Defaults to six non-breaking spaces.}
 
 \item{add_multilevel_header}{Logical. If \code{TRUE} (the default), merges top
-headers in Excel export.}
+headers in Excel export. Only consulted for \code{output = "excel"} on a
+grouped table (\code{by} supplied); like the other output-scoped
+presentation arguments (\code{excel_sheet}, \code{clipboard_delim}, ...), it
+is silently unused in every other output and in one-way tables,
+which have a single header row to begin with.}
 
 \item{blank_na_wide}{Logical. If \code{FALSE} (the default), \code{NA} values are kept
 as-is in wide raw output. If \code{TRUE}, replaces them with empty strings.}
 
 \item{excel_path}{Path for \code{output = "excel"}. Defaults to \code{NULL}.}
 
-\item{excel_sheet}{Sheet name for Excel export. Defaults to \code{"Categorical"}.}
+\item{excel_sheet}{Sheet name for Excel export. \code{NULL} (the
+default) uses \code{"Categorical"}.}
 
-\item{clipboard_delim}{Delimiter for clipboard text export. Defaults to \code{"\\t"}.}
+\item{clipboard_delim}{Delimiter for clipboard text export. Defaults
+to \code{"\\t"}. A cell holding the delimiter itself, a double quote or
+a line break is quoted RFC 4180-style, so the grid survives
+whatever delimiter you choose.}
 
-\item{word_path}{Path for \code{output = "word"} or optional save path when
-\code{output = "flextable"}. Defaults to \code{NULL}.}
+\item{word_path}{File path for \code{output = "word"}. Defaults to
+\code{NULL}. Before 0.13.0, supplying it with \code{output = "flextable"}
+also wrote a \code{.docx} as a side effect; it is now used exclusively
+by \code{output = "word"} (the contract shared with the rest of the
+table family) and is ignored, with a warning, under
+\code{output = "flextable"}.}
+
+\item{user_na}{Logical. If \code{TRUE} (the default), declared missing
+values in the row variables and in \code{by} are treated as missing:
+they join the \code{"(Missing)"} level under \code{drop_na = FALSE}, and
+under \code{drop_na = TRUE} they are removed with a dedicated
+disclosure line (\verb{Declared missing values removed: ...}). If
+\code{FALSE}, the declared codes stay valid categories. See the
+"Declared missing values" section of \code{\link[=freq]{freq()}}.}
+
+\item{style}{A journal style: a theme name (\code{"jama"}, \code{"nejm"},
+\code{"lancet"}, \code{"annals"}, \code{"apa"}, \code{"aer"}), a
+\code{\link[=spicy_style]{spicy_style()}} object, or \code{NULL} (the default). A style only
+changes DEFAULTS -- any argument you pass explicitly wins over it.
+Set \code{options(spicy.style = )} for document-wide scope. A theme
+covers numeric formatting conformity only, not full editorial
+conformity; \code{?spicy_style} lists the exact rules each one encodes
+and the official document they come from. An unknown name is an
+error.}
 }
 \value{
 Depends on \code{output}:
 \itemize{
-\item \code{"default"}: prints a styled ASCII table and returns the
-underlying \code{data.frame} invisibly (S3 class
-\code{"spicy_categorical_table"}).
+\item \code{"default"}: the underlying \code{data.frame} carrying the
+rendering metadata as attributes (S3 class
+\code{"spicy_categorical_table"}). The object is returned visibly, so
+a bare \code{table_categorical(...)} call auto-prints the styled ASCII
+table at the console while \code{t <- table_categorical(...)} stays
+silent (print \code{t} to display the table).
 \item \code{"data.frame"}: a wide \code{data.frame} with one row per
 variable--level combination.
 When \code{by} is used, the columns are \code{Variable}, \code{Level}, and one
@@ -222,8 +295,17 @@ pair of \code{n} / \verb{\\\%} columns per group level (plus \code{Total} when
 association measure column.
 When \code{by = NULL}, the columns are \code{Variable}, \code{Level}, \code{n}, \verb{\\\%}.
 \item \code{"long"}: a long \code{data.frame} with columns \code{variable},
-\code{level}, \code{group}, \code{n}, \code{percent} (and \code{chi2}, \code{df}, \code{p},
-association measure columns when \code{by} is used).
+\code{level}, \code{n}, \code{pct} (plus \code{group}, \code{chi2}, \code{df}, \code{p} when \code{by} is
+used). The association measure is always called \code{effect_size},
+whichever measure it is, and \code{effect_size_type} names that measure
+per row (\code{"cramer_v"}, \code{"phi"}, ...), or is \code{NA} on the rows of a
+variable given \code{assoc_measure = "none"}. The wide outputs instead
+name the column after the measure, or \verb{Effect size} when the row
+variables do not share one. With \code{smd = TRUE} this output also
+carries \code{smd} and \code{smd_type} (\code{"binary"} or \code{"multinomial"},
+the kernel the value came from); the wide outputs name that
+column \code{SMD}. Like the association columns, both are ABSENT
+when the statistic is not requested.
 \item \code{"tinytable"}: a \code{tinytable} object.
 \item \code{"gt"}: a \code{gt_tbl} object.
 \item \code{"flextable"}: a \code{flextable} object.
@@ -232,6 +314,20 @@ path invisibly.
 \item \code{"clipboard"}: copies the table and returns the display
 \code{data.frame} invisibly.
 }
+
+The \code{drop_na = TRUE} disclosure travels with the table on every
+route, not just the console: \code{"default"} prints it under the ASCII
+table, \code{"tinytable"} / \code{"gt"} / \code{"flextable"} / \code{"word"} carry it as
+a table note, \code{"excel"} writes it below the body, and
+\code{"data.frame"} keeps the sentence verbatim in the
+\code{missing_note} attribute (\code{attr(x, "missing_note")}, \code{NULL} when
+nothing was removed) so a pipeline that renders the numbers itself
+can still state what left the table. On the \code{"tinytable"} route the
+note is set one size down; \code{options(spicy.note_style)} governs that
+(see \code{\link[=table_regression]{table_regression()}}).
+
+The Excel sheet carries the same title the console prints on its
+first row; the table itself starts on row 3.
 }
 \description{
 Builds a publication-ready frequency or cross-tabulation table for one
@@ -265,10 +361,122 @@ For descriptive (empirical) comparisons on continuous outcomes, see
 \code{\link[=table_continuous]{table_continuous()}}.
 }
 
+\section{Standardized mean difference}{
+\code{smd = TRUE} adds an \code{SMD} column with the balance diagnostic of
+the Table 1 literature, on the variable row beside \code{p}. For a
+two-category variable it is the Bernoulli form,
+
+\deqn{\mathrm{SMD} = \frac{p_1 - p_2}{\sqrt{(p_1(1-p_1) +
+p_2(1-p_2)) / 2}}}
+
+with \eqn{p} the proportion of the SECOND category, \strong{signed},
+group 1 minus group 2 in the order the table displays them. Note
+the denominator: the Bernoulli variance \eqn{p(1-p)} at \emph{n}, not
+\code{var()} at \eqn{n-1}, which would be 19\% off on a small table.
+
+"Second category" is the order the table shows, which is worth
+knowing for a \strong{logical} variable: spicy displays \code{TRUE} then
+\code{FALSE}, so the sign is taken on \code{FALSE}, where \code{tableone} and
+\code{cobalt} coerce with \code{factor()} (\code{FALSE}, \code{TRUE}) and take it on
+\code{TRUE} -- the same magnitude with the opposite sign. Convert to a
+factor with the level order you want if the direction matters.
+
+For three or more categories it is the multivariate form of Yang
+and Dalton (2012, SAS Global Forum 335-2012),
+
+\deqn{\mathrm{SMD} = \sqrt{T' S^{-} T}}
+
+with \eqn{T} the difference of the two profiles of proportions
+(first category dropped) and \eqn{S} the mean of their multinomial
+covariance matrices. This is a Mahalanobis distance: it is
+\strong{unsigned}, it is \strong{not bounded by 1}, and \eqn{S^{-}} is a
+pseudo-inverse, because a declared-but-unobserved category makes
+\eqn{S} singular and \code{solve()} would abort where the
+pseudo-inverse returns exactly the value that category's absence
+implies. Which kernel a row took is published as \code{smd_type} in the
+\code{"long"} output, and the unsigned reading is stated in the table
+note whenever a variable has more than two categories. The
+\code{MASS} package is needed for this arm only.
+
+Two profiles with \strong{no category in common} have an infinite
+standardized distance. The pseudo-inverse would quietly publish a
+finite number there, so the cell is an en-dash and a classed
+warning says why. The same applies when each group is constant on
+a different category, where the naive route publishes \code{0} --
+"perfectly balanced" for the most imbalanced variable possible.
+
+Conventions shared with \code{\link[=table_continuous]{table_continuous()}}: exactly two groups
+(three or more are refused, not averaged over pairs); complete
+cases on the observed groups, so a \code{drop_na = FALSE} "(Missing)"
+level is displayed and never enters the diagnostic; no confidence
+interval and no p-value, by design. Under \code{weights} the profiles
+are the weighted proportions, which makes this column agree with
+both the frequency and the survey-design readings -- a profile of
+proportions is invariant to a global rescaling of the weights, so
+\code{rescale} cannot move it. (Only the continuous arm has a
+convention to choose there.)
+
+The \code{SMD} cell keeps its leading zero where the association cell
+drops it: the APA strip belongs to a bounded measure, and this one
+is not bounded. The two columns therefore print \code{0.45} and \code{.45}
+side by side, on purpose.
+
+Two limits of the current grammar. This function has no \code{p_value}
+argument, so the p column cannot be switched off here as it can in
+\code{\link[=table_continuous]{table_continuous()}}; a complete balance table mixing continuous
+and categorical variables will show a categorical p beside a
+continuous column you removed. And \code{\link[=inline]{inline()}} cannot quote this
+\code{SMD} cell: like \code{p} and the association measure, it lives on the
+variable row, which \code{inline()} cannot address on a variable that
+has levels. The continuous \code{SMD} cell is quotable
+(\code{inline(tbl, x, "A", column = "smd")}); for the categorical one,
+read \code{output = "long"}.
+}
+
 \section{Display conventions}{
 Decimal alignment, \emph{p}-value formatting, and required suggested
 packages per output engine are documented under \verb{@param align},
 \verb{@param p_digits}, and \verb{@param output} respectively.
+
+Counts are displayed as integers: weighted counts are rounded
+(ties half to even, the R convention) at display time only, in
+cells and margins alike -- the SPSS Crosstabs convention. Cells
+and margins are rounded independently, so small display
+discrepancies are possible (e.g. two cells of exactly 0.5 each
+display as \code{0} while their \code{Total} of 1.0 displays as \code{1}). The
+machine outputs (\code{"data.frame"}, \code{"long"}) carry the exact
+weighted counts and full-precision percentages.
+}
+
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
 }
 
 \examples{

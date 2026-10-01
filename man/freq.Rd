@@ -15,10 +15,11 @@ freq(
   na_val = NULL,
   labelled_levels = c("prefixed", "labels", "values"),
   factor_levels = c("observed", "all"),
-  rescale = TRUE,
+  rescale = FALSE,
   decimal_mark = ".",
-  styled = TRUE,
-  ...
+  output = c("default", "data.frame"),
+  user_na = TRUE,
+  styled
 )
 }
 \arguments{
@@ -29,13 +30,20 @@ vectors, \code{data} is ignored with a warning.}
 \item{x}{A variable from \code{data} (unquoted).}
 
 \item{weights}{Optional numeric vector of weights (same length as \code{x}).
+A logical vector is also accepted and coerced to 1/0
+(include / exclude).
 The variable may be referenced as a bare name when it belongs to \code{data},
 or as a qualified expression like \code{other$w} (evaluated in the calling
 environment), which always takes precedence over \code{data} lookup.
 Observations with \code{NA} weights are dropped from the table with a
 warning; see \code{Details}.}
 
-\item{digits}{Number of decimal digits to display for percentages (default: \code{1}).}
+\item{digits}{Number of decimal digits to display for percentages
+(default: \code{1}). Same role as \code{digits} in \code{\link[=cross_tab]{cross_tab()}}, where the
+\code{NULL} default resolves to the same \code{1} decimal whenever
+percentages are shown. Displayed values round ties half to even
+(the R / IEC 60559 convention, shared with Stata), so an exact
+tie like 6.25 prints as \code{6.2} where SPSS would print \code{6.3}.}
 
 \item{valid}{Logical. If \code{TRUE} (default), display valid percentages
 (excluding missing values).}
@@ -50,7 +58,13 @@ If \code{TRUE}, adds cumulative percentages.}
 \item \code{"-"} - decreasing frequency
 \item \code{"name+"} - alphabetical A-Z
 \item \code{"name-"} - alphabetical Z-A
-}}
+}
+
+For labelled variables displayed with their codes
+(\code{labelled_levels} \code{"prefixed"} or \code{"values"}), \code{"name+"} /
+\code{"name-"} sort by the underlying code (so \verb{[10]} follows \verb{[2]},
+as in SPSS), not by the display string. With
+\code{labelled_levels = "labels"}, labels sort alphabetically.}
 
 \item{na_val}{Atomic vector of numeric or character values to be treated as missing (\code{NA}).
 
@@ -73,29 +87,54 @@ values are displayed:
 
 \item{factor_levels}{Character. Controls how factor and labelled values
 are displayed in the frequency table. \code{"observed"} (the default;
-matches Stata's \code{tab}) shows only levels present in the data.
-\code{"all"} (matches SPSS \code{FREQUENCIES} and \code{\link[=code_book]{code_book()}}'s default)
-keeps every declared level, including unused ones, which appear
-with \code{n = 0}.}
+matches Stata's \code{tab} and SPSS \code{FREQUENCIES}, which both list
+only values present in the data) shows only levels present in
+the data. \code{"all"} (\code{\link[=code_book]{code_book()}}'s default) keeps every declared
+level, including unused ones, which appear with \code{n = 0}.}
 
-\item{rescale}{Logical. If \code{TRUE} (default), rescale weights so that their
-total equals the unweighted sample size (\code{length(weights)}). See
-\code{Details} for the interaction with \code{NA} weights.}
+\item{rescale}{Logical. If \code{FALSE} (the default), weights are used
+as-is. If \code{TRUE}, rescale weights so that their total equals the
+unweighted sample size (\code{length(weights)}). When the argument is
+not supplied, the default can be set globally with
+\code{options(spicy.rescale = TRUE)}, which is read by both \code{freq()}
+and \code{\link[=cross_tab]{cross_tab()}}. See \code{Details} for the interaction with \code{NA}
+weights.}
 
 \item{decimal_mark}{Character used as the decimal mark in printed
-percentages. Either \code{"."} (the default) or \code{","}. Matches the
-\code{decimal_mark} argument of \code{\link[=cross_tab]{cross_tab()}} and the three
-\verb{table_*()} helpers, so European-locale users get a consistent
-experience across the package.}
+percentages. Either \code{"."} or \code{","}. The default follows the
+language: \code{options(spicy.language = "fr")} gives the comma here
+and in \code{\link[=cross_tab]{cross_tab()}}, exactly as it does in the reporting
+\verb{table_*()} families. An argument you type wins, so
+\code{decimal_mark = "."} under a French language gives French words
+and a decimal point. The resolved mark is frozen on the object
+when it is built: a table built under a French language still
+prints its commas when it is printed later with the language
+option cleared. Its words are not -- \code{freq()} resolves its labels
+at print time -- so that table prints English headings over French
+numbers.}
 
-\item{styled}{Logical. If \code{TRUE} (default), print the formatted spicy table.
-If \code{FALSE}, return a plain \code{data.frame} with frequency values.}
+\item{output}{Output format. \code{"default"} (the default) returns a
+\code{spicy_freq_table} object that auto-prints as a formatted spicy
+table; \code{"data.frame"} returns a plain \code{data.frame} with frequency
+values. The values match the \code{output} argument of the \verb{table_*()}
+family; the rendered engines that family also accepts
+(\code{"tinytable"}, \code{"gt"}, \code{"flextable"}, ...) are not available in
+\code{freq()}.}
 
-\item{...}{Additional arguments passed to \code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}.}
+\item{user_na}{Logical. If \code{TRUE} (the default), declared missing
+values are treated as missing: each observed declared value
+becomes its own row of the Missing block (with its value label),
+and valid percentages exclude those observations. If \code{FALSE},
+the declaration is ignored and the declared codes tabulate as
+valid categories. See the "Declared missing values" section.}
+
+\item{styled}{Defunct. \code{styled = TRUE} is now \code{output = "default"}
+(the default) and \code{styled = FALSE} is now \code{output = "data.frame"};
+supplying \code{styled} is an error.}
 }
 \value{
-With \code{styled = FALSE}, a plain \code{data.frame} with no extra attributes
-and columns:
+With \code{output = "data.frame"}, a plain \code{data.frame} with no extra
+attributes and columns:
 \itemize{
 \item \code{value} - unique values or factor levels
 \item \code{n} - frequency count (weighted if applicable)
@@ -104,21 +143,24 @@ and columns:
 \item \code{cum_prop}, \code{cum_valid_prop} - cumulative percentages (if \code{cum = TRUE})
 }
 
-With \code{styled = TRUE} (default), prints the formatted table to the
-console and invisibly returns a \code{spicy_freq_table} object: the same
+With \code{output = "default"} (the default), a \code{spicy_freq_table} object: the same
 \code{data.frame} carrying rendering metadata as attributes (\code{digits},
 \code{data_name}, \code{var_name}, \code{var_label}, \code{class_name}, \code{n_total},
 \code{n_valid}, \code{weighted}, \code{rescaled}, \code{weight_var}) used by
-\code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}.
+\code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}}. The object is returned visibly, so a
+bare \code{freq(...)} call auto-prints at the console while
+\code{f <- freq(...)} stays silent (print \code{f} to display the table).
 }
 \description{
 Creates a frequency table for a vector or variable from a data frame, with
 options for weighting, sorting, handling \emph{labelled} data, defining custom
 missing values, and displaying cumulative percentages.
 
-When \code{styled = TRUE}, the function prints a spicy-formatted ASCII table
-using \code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}} and \code{\link[=spicy_print_table]{spicy_print_table()}}; otherwise, it
-returns a \code{data.frame} containing frequencies and proportions.
+With \code{output = "default"}, the function returns a
+\code{spicy_freq_table} object that auto-prints as a spicy-formatted ASCII
+table via \code{\link[=print.spicy_freq_table]{print.spicy_freq_table()}} and \code{\link[=spicy_print_table]{spicy_print_table()}}; with
+\code{output = "data.frame"}, it returns a plain \code{data.frame} containing
+frequencies and proportions.
 }
 \details{
 Designed to mimic common frequency procedures from SPSS or Stata
@@ -140,6 +182,37 @@ weighted N is the actual sum of non-\code{NA} weights.
 For schema-level inspection without computing frequencies, use
 \code{\link[=varlist]{varlist()}} or \code{\link[=code_book]{code_book()}}.
 }
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
+}
+
 \examples{
 # Frequency table with labelled ordered factor
 freq(sochealth, education)
@@ -170,8 +243,9 @@ freq(x_lbl, labelled_levels = "labels", cum = TRUE)
 # Display values only, sorted descending
 freq(x_lbl, labelled_levels = "values", sort = "-")
 
-# Show all declared factor levels, including unused ones (SPSS-style).
-# The default "observed" mirrors Stata's `tab` and drops unused levels.
+# Show all declared factor levels, including unused ones (n = 0).
+# The default "observed" mirrors Stata's `tab` and SPSS FREQUENCIES,
+# which both drop unused levels.
 f <- factor(c("Yes", "No", "Yes"), levels = c("Yes", "No", "Maybe"))
 freq(f, factor_levels = "all")
 
@@ -181,11 +255,11 @@ df <- data.frame(
   weight = c(12, 8, 10, 15, 7, 9)
 )
 
-# Weighted frequencies (normalized)
-freq(df, sex, weights = weight, rescale = TRUE)
+# Weighted frequencies (raw weighted counts, the default)
+freq(df, sex, weights = weight)
 
-# Weighted frequencies (without rescaling)
-freq(df, sex, weights = weight, rescale = FALSE)
+# Weighted frequencies rescaled so the total matches the sample size
+freq(df, sex, weights = weight, rescale = TRUE)
 
 # Base R style, with weights and cumulative percentages
 freq(df$sex, weights = df$weight, cum = TRUE)
@@ -196,8 +270,8 @@ df |> freq(sex, sort = "name-")
 # European decimal mark (matches `cross_tab()` and the `table_*()` family)
 freq(sochealth, education, decimal_mark = ",")
 
-# Non-styled return (for programmatic use)
-f <- freq(df, sex, styled = FALSE)
+# Plain data.frame return (for programmatic use)
+f <- freq(df, sex, output = "data.frame")
 head(f)
 
 }

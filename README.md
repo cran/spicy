@@ -1,5 +1,5 @@
 
-# spicy: frequency tables, cross-tabulations, and summary tables in R <a href="https://amaltawfik.github.io/spicy/"><img src="man/figures/logo.png" align="left" height="139" alt="spicy website" /></a>
+# spicy: frequency tables, cross-tabulations, summary and regression tables in R <a href="https://amaltawfik.github.io/spicy/"><img src="man/figures/logo.png" align="left" height="139" alt="spicy website" /></a>
 
 <!-- badges: start -->
 
@@ -7,7 +7,6 @@
 status](https://www.r-pkg.org/badges/version-ago/spicy)](https://CRAN.R-project.org/package=spicy)
 [![r-universe](https://amaltawfik.r-universe.dev/badges/spicy)](https://amaltawfik.r-universe.dev/spicy)
 [![R-CMD-check](https://github.com/amaltawfik/spicy/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/amaltawfik/spicy/actions/workflows/R-CMD-check.yaml)
-[![R-hub](https://github.com/amaltawfik/spicy/actions/workflows/rhub.yaml/badge.svg)](https://github.com/amaltawfik/spicy/actions/workflows/rhub.yaml)
 [![Codecov](https://codecov.io/gh/amaltawfik/spicy/branch/main/graph/badge.svg)](https://app.codecov.io/gh/amaltawfik/spicy)
 [![Project Status:
 Active](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
@@ -18,59 +17,150 @@ License](https://img.shields.io/badge/license-MIT-blue.svg?style=flat)](https://
 downloads](https://cranlogs.r-pkg.org/badges/grand-total/spicy)](https://cranlogs.r-pkg.org/badges/grand-total/spicy)
 <!-- badges: end -->
 
-spicy is an R package for frequency tables, cross-tabulations,
-association measures, summary tables, and labelled survey data
-workflows.
+spicy is an R package for publication-ready tables: frequency tables and
+cross-tabulations, association measures, categorical and continuous
+summary tables, regression tables for 30+ model classes, and labelled
+survey data workflows.
 
-## What is spicy?
+## Features
 
-spicy helps you explore categorical, continuous, and labelled survey
-data in R. It provides readable, console-first outputs for survey
-research, descriptive statistics, and reporting workflows, including
-frequency tables, cross-tabulations with chi-squared tests and effect
-sizes, categorical and continuous summary tables, variable inspection,
-and codebooks.
+Every spicy table prints as readable text in the console and exports to
+gt, tinytable, flextable, Excel, Word, or the clipboard, following
+rigorous reporting conventions – APA by default, with named journal
+styles. Around the tables, spicy provides the survey-data tools that
+feed them: variable inspection, codebooks, label extraction, and
+row-wise summaries.
 
-With spicy, you can:
-
-- **Inspect variables** with `varlist()` and `vl()` for names, labels,
-  values, classes, and missing data.
-- **Create frequency tables in R** with `freq()`.
-- **Create cross-tabulations in R** with `cross_tab()`, including
-  percentages, chi-squared tests, and effect sizes.
-- **Measure associations** with `cramer_v()`, `phi()`, `gamma_gk()`,
-  `kendall_tau_b()`, `somers_d()` and 6 other coefficients; use
-  `assoc_measures()` to compute the full set at once.
-- **Build categorical summary tables in R** with `table_categorical()`
-  for console, gt, tinytable, flextable, Excel, Word, or clipboard
-  output.
-- **Build continuous summary tables in R** with `table_continuous()` for
-  console, gt, tinytable, flextable, Excel, Word, or clipboard output.
-- **Build model-based continuous summary tables in R** with
-  `table_continuous_lm()` for linear regression reporting: classical /
-  HC\* / cluster-robust / bootstrap / jackknife variance, four
-  effect-size families (f², Cohen’s d, Hedges’ g, Hays’ omega²) with
-  noncentral CIs, optional **additive covariate adjustment** with
-  G-computation (Stata `margins` style) or equal-weight (`emmeans`
-  style) marginal means, weighted comparisons, and console, gt,
-  tinytable, flextable, Excel, Word, or clipboard output.
-- **Build regression coefficient tables in R** with `table_regression()`
-  for one or more `lm` or `glm` fits side by side: classical / HC\* /
-  cluster-robust / bootstrap / jackknife variance, four standardisation
-  methods (plus `pseudo` for `glm`), family-aware `exponentiate` (OR /
-  IRR / HR / RR / MR), Wald or profile-likelihood CIs, average marginal
-  effects on the response scale, partial *f²* / *η²* / *ω²* / *χ²*
-  effect sizes, pseudo-*R²* family, hierarchical model comparisons,
-  multiple-comparison adjustment, and the same console / gt / tinytable
-  / flextable / Excel / Word / clipboard output.
-- **Generate interactive and exportable codebooks** with `code_book()`
-  for labelled and survey-style datasets.
-- **Extract variable labels** with `label_from_names()`, including
+- **Frequency tables** with `freq()`.
+- **Cross-tabulations** with `cross_tab()`: percentages, weights,
+  chi-squared tests, and effect sizes.
+- **Association measures**: `cramer_v()`, `phi()`, `gamma_gk()`,
+  `kendall_tau_b()`, `somers_d()` and 6 other coefficients;
+  `assoc_measures()` computes the full set at once.
+- **Categorical and continuous summary tables** with
+  `table_categorical()` and `table_continuous()`, overall or by group.
+- **Outcome-first summary tables** with `table_outcome()`: one
+  continuous outcome described across several groupings, one block of
+  rows per grouping variable, a group comparison per block, and a
+  marginal `Overall` row – the transpose of `table_continuous()`, with
+  the same statistic vocabulary and output engines.
+- **Design-based summary tables** with `table_continuous_svy()` and
+  `table_categorical_svy()` on a `survey::svydesign` object: estimates,
+  SEs and CIs from the `survey` package (Taylor linearization or
+  replicate weights), design degrees of freedom, observed and weighted
+  counts – the design twins of the two families above, with the same
+  statistic vocabulary and output engines.
+- **Model-based continuous summary tables** with `table_continuous_lm()`
+  for linear-model reporting: classical / HC\* / cluster-robust /
+  bootstrap / jackknife variance, four effect-size families (f², Cohen’s
+  d, Hedges’ g, Hays’ omega²) with noncentral CIs, additive covariate
+  adjustment with G-computation (Stata `margins` style) or equal-weight
+  (`emmeans` style) marginal means, and weighted comparisons.
+- **Regression tables** with `table_regression()` for one or more fitted
+  models side by side, across 30+ model classes (see *Supported models*
+  below): classical / heteroskedasticity-robust / cluster-robust /
+  bootstrap / jackknife variance with each class’s field-standard
+  backend, standardized coefficients, family-aware `exponentiate` (OR /
+  IRR / HR / RR / MR, link-gated), Wald or profile-likelihood CIs,
+  average marginal effects (per-category for ordinal and multinomial
+  models), partial *f²* / *η²* / *ω²* / *χ²* effect sizes, class-aware
+  fit statistics (pseudo-*R²*, Nakagawa marginal / conditional *R²*,
+  ICC), hierarchical model comparisons with the correct nested test per
+  class, and multiple-comparison adjustment. Mixed models report their
+  random effects as table rows with an optional boundary-correct
+  per-term test; ordinal models report their thresholds; zero-inflated
+  and hurdle models report every model component. Survival models go
+  beyond hazard ratios: adjusted restricted-mean-survival-time and risk
+  differences by g-computation (`tau` / `at_time`), for `coxph` fits
+  (stratified included) and `survreg` AFT fits, in single tables and in
+  the univariable screen.
+- **Univariable screening** with `table_regression_uv()`:
+  one-predictor-at-a-time models merged with the multivariable fit,
+  per-predictor N and events, for `glm`, `lm`, and Cox outcomes.
+- **Journal styles** with `spicy_style()`: `style = "jama"`, `"nejm"`,
+  `"lancet"`, `"annals"`, `"apa"`, or `"aer"` restyles any table, every
+  rule sourced from each style’s published guidelines. For a French
+  table, `options(spicy.language = "fr")` gives the words and the French
+  typography together.
+- **Variable inspection** with `varlist()` and `vl()`: names, labels,
+  values, classes, distinct values (`N_distinct`), valid observations
+  (`N_valid`), and missing data.
+- **Codebooks** with `code_book()`: interactive and exportable, for
+  labelled and survey-style datasets.
+- **Label extraction** with `label_from_names()`, including
   LimeSurvey-style headers.
+- **Row-wise summaries** with `mean_n()`, `sum_n()`, and `count_n()`,
+  with explicit control over missing values.
 
 Works with `labelled`, `factor`, `ordered`, `Date`, `POSIXct`, and other
-common variable types. For a full introduction, see [Getting started
-with spicy](https://amaltawfik.github.io/spicy/articles/spicy.html).
+common variable types – and honors **declared missing values** (haven’s
+`na_values`/`na_range`, tagged NAs) across the descriptive functions,
+with disclosure notes and a `user_na` escape hatch. For a full
+introduction, see [Getting started with
+spicy](https://amaltawfik.github.io/spicy/articles/spicy.html).
+
+## What makes the tables dependable
+
+- **One table, every output, verified.** The console rendering and the
+  gt, tinytable, flextable, Word, Excel, and clipboard outputs are kept
+  cell-for-cell identical by dedicated parity test batteries –
+  significance stars, `events/N` counts, reference rows, block
+  structure, captions, and disclosure notes included. What you publish
+  is what you saw.
+- **Numbers validated against reference implementations.** Estimates,
+  standard errors, and association measures are pinned, to the digit,
+  against independent software and packages (SPSS/PSPP conventions for
+  contingency measures, Stata conventions for cluster-robust variance,
+  `survival::concordance()`, exact order-statistic confidence intervals
+  for medians), and each convention is documented where the number is
+  produced.
+- **Disclosure by default.** Whatever affects the numbers is stated in
+  the table’s own notes, on every output: removed missing values,
+  estimation samples, standard-error types, test choices,
+  multiple-comparison families.
+- **A typed, versioned table contract.** `as_structured()` returns the
+  complete typed view of a regression table – values, precisions,
+  significance markers, row roles – with an explicit contract version,
+  so custom renderers and downstream pipelines can detect changes
+  instead of silently mis-reading them.
+- **Hard errors over silent guesses.** Requests a model class cannot
+  honor are refused with a classed, actionable error – never rendered as
+  an empty column or a silently substituted statistic.
+
+## Supported models
+
+`table_regression()` accepts a single fit or a list of fits from any of
+these classes, and renders them with the conventions of each model
+family:
+
+| Family | Engines |
+|----|----|
+| Linear and generalized linear | `stats::lm()`, `stats::glm()`, `MASS::glm.nb()`, `MASS::rlm()`, `stats::nls()` |
+| Robust, IV, quantile, panel | `estimatr::lm_robust()`, `estimatr::iv_robust()`, `AER::ivreg()`, `AER::tobit()`, `quantreg::rq()`, `fixest::feols()`, `fixest::feglm()`, `fixest::fepois()`, `fixest::fenegbin()` |
+| Mixed effects | `lme4::lmer()`, `lme4::glmer()`, `glmmTMB::glmmTMB()`, `nlme::lme()`, `nlme::gls()` |
+| Ordinal and categorical | `MASS::polr()`, `ordinal::clm()` (incl. partial proportional odds), `nnet::multinom()`, `mlogit::mlogit()` |
+| Counts, two-part models | `pscl::hurdle()`, `pscl::zeroinfl()`, `glmmTMB::glmmTMB()` (zero-inflation and dispersion components) |
+| Survival | `survival::coxph()`, `survival::survreg()`, `rms::cph()`, `flexsurv::flexsurvreg()` |
+| Survey-weighted | `survey::svyglm()` (design-based SEs) |
+| Population-averaged (GEE) | `geepack::geeglm()` (native sandwich SEs, working correlation disclosed) |
+| Additive, proportions, selection | `mgcv::gam()`, `mgcv::bam()`, `betareg::betareg()`, `sampleSelection::selection()` |
+| rms | `rms::ols()`, `rms::lrm()`, `rms::Glm()` |
+| Bayesian | `rstanarm::stan_glm()`, `rstanarm::stan_glmer()`, `brms::brm()` (posterior median, credible intervals, no p-values) |
+
+Class-specific structure renders as labelled blocks in the same table:
+random effects (with SE and CI on each variance component, and an
+optional boundary-correct per-term likelihood-ratio test), ordinal
+thresholds, non-proportional effects, zero-inflation and dispersion
+components. Robust variance requests use each class’s field-standard
+backend and are refused with a clear message when no valid backend
+exists.
+
+The full capability map – each family’s marginal-effects estimand,
+`exponentiate` semantics, robust-variance backends and
+standardized-coefficient support – is the [Supported
+models](https://amaltawfik.github.io/spicy/articles/table-regression-supported-models.html)
+article; `table_regression_models()` returns the same registry as a data
+frame.
 
 ## Installation
 
@@ -104,6 +194,13 @@ Install the development version from GitHub with `pak`:
 pak::pak("amaltawfik/spicy")
 ```
 
+Or with `remotes`:
+
+``` r
+# install.packages("remotes")
+remotes::install_github("amaltawfik/spicy")
+```
+
 ------------------------------------------------------------------------
 
 ## Quick tour
@@ -112,7 +209,7 @@ The examples below use the bundled `sochealth` dataset.
 
 ### Inspect variables
 
-<img src="man/figures/animation_varlist.gif" alt="varlist demo with labelled data" width="100%">
+<img src="https://raw.githubusercontent.com/amaltawfik/spicy/main/man/figures/animation_varlist.gif" alt="varlist demo with labelled data" width="100%">
 
 ``` r
 varlist(sochealth, tbl = TRUE)
@@ -141,8 +238,8 @@ code_book(
 )
 ```
 
-See [Explore variables and build codebooks in
-R](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
+See [Explore variables and build
+codebooks](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
 for more on `varlist()`, `vl()`, and `code_book()`.
 
 ### Frequency tables and cross-tabulations
@@ -178,10 +275,11 @@ cross_tab(sochealth, smoking, education, percent = "col")
 #> 
 #> Chi-2(2) = 21.6, p <.001
 #> Cramer's V = 0.14
+#> Missing values removed: smoking (25).
 ```
 
-See [Frequency tables and cross-tabulations in
-R](https://amaltawfik.github.io/spicy/articles/frequency-tables.html)
+See [Frequency tables and
+cross-tabulations](https://amaltawfik.github.io/spicy/articles/frequency-tables.html)
 for `freq()`, `cross_tab()`, percentages, weights, and tests.
 
 ### Association measures
@@ -195,12 +293,12 @@ cramer_v(tbl)
 
 # Detailed result with CI and p-value
 cramer_v(tbl, detail = TRUE)
-#> Estimate  CI lower  CI upper      p
-#>    0.176     0.120     0.231  <.001
+#> Estimate  SE  CI lower  CI upper      p
+#>    0.176   –     0.120     0.231  <.001
 ```
 
-See [Cramer’s V, Phi, and association measures in
-R](https://amaltawfik.github.io/spicy/articles/association-measures.html)
+See [Cramer’s V, Phi, and association
+measures](https://amaltawfik.github.io/spicy/articles/association-measures.html)
 for a guide on choosing the right measure.
 
 ### Summary tables
@@ -219,8 +317,9 @@ table_categorical(
 #>  Variable            │   n      %    
 #> ─────────────────────┼───────────────
 #>  Current smoker      │               
-#>    No                │  926    78.8  
-#>    Yes               │  249    21.2  
+#>    No                │  926    77.2  
+#>    Yes               │  249    20.8  
+#>    (Missing)         │   25     2.1  
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  Physical activity   │               
 #>    No                │  650    54.2  
@@ -242,8 +341,9 @@ table_categorical(
 #>  Variable          │ Lower secondary n  Lower secondary %  Upper secondary n 
 #> ───────────────────┼─────────────────────────────────────────────────────────
 #>  Current smoker    │                                                         
-#>    No              │        179               69.6                415        
-#>    Yes             │         78               30.4                112        
+#>    No              │        179               68.6                415        
+#>    Yes             │         78               29.9                112        
+#>    (Missing)       │          4                1.5                 12        
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  Physical activity │                                                         
 #>    No              │        177               67.8                310        
@@ -252,8 +352,9 @@ table_categorical(
 #>  Variable          │ Upper secondary %  Tertiary n  Tertiary %  Total n 
 #> ───────────────────┼────────────────────────────────────────────────────
 #>  Current smoker    │                                                    
-#>    No              │       78.7            332         84.9       926   
-#>    Yes             │       21.3             59         15.1       249   
+#>    No              │       77.0            332         83.0       926   
+#>    Yes             │       20.8             59         14.8       249   
+#>    (Missing)       │        2.2              9          2.2        25   
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  Physical activity │                                                    
 #>    No              │       57.5            163         40.8       650   
@@ -262,8 +363,9 @@ table_categorical(
 #>  Variable          │ Total %    p    Cramer's V 
 #> ───────────────────┼────────────────────────────
 #>  Current smoker    │          <.001     .14     
-#>    No              │  78.8                      
-#>    Yes             │  21.2                      
+#>    No              │  77.2                      
+#>    Yes             │  20.8                      
+#>    (Missing)       │   2.1                      
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  Physical activity │          <.001     .21     
 #>    No              │  54.2                      
@@ -285,7 +387,9 @@ table_continuous(
 #>  Variable                       │ 95% CI UL   n   
 #> ────────────────────────────────┼─────────────────
 #>  Body mass index                │   26.14    1188 
-#>  Satisfaction with health (1-5) │    3.62    1192
+#>  Satisfaction with health (1-5) │    3.62    1192 
+#> 
+#> Missing values removed: bmi (12), life_sat_health (8).
 ```
 
 ``` r
@@ -294,7 +398,7 @@ table_continuous(
   select = c(bmi, life_sat_health),
   by = education
 )
-#> Descriptive statistics
+#> Descriptive statistics by Highest education level
 #> 
 #>  Variable                       │ Group              M     SD    Min    Max  
 #> ────────────────────────────────┼────────────────────────────────────────────
@@ -324,7 +428,9 @@ table_continuous(
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  Satisfaction with health (1-5) │ Lower secondary  <.001 
 #>                                 │ Upper secondary        
-#>                                 │ Tertiary
+#>                                 │ Tertiary               
+#> 
+#> Missing values removed: bmi (12), life_sat_health (8).
 ```
 
 ``` r
@@ -356,33 +462,96 @@ table_regression(fit)
 #>  (Intercept)     │   65.20  1.66  [61.95, 68.45]  <.001 
 #>  age             │    0.05  0.03  [-0.01,  0.11]   .130 
 #>  sex:            │                                      
-#>    Female (ref.) │     —     —          —          —    
+#>    Female (ref.) │     –     –          –          –    
 #>    Male          │    3.86  0.91  [ 2.08,  5.63]  <.001 
 #>  smoking:        │                                      
-#>    No (ref.)     │     —     —          —          —    
+#>    No (ref.)     │     –     –          –          –    
 #>    Yes           │   -1.72  1.11  [-3.89,  0.45]   .121 
 #> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
 #>  n               │ 1175                                 
 #>  R²              │    0.02                              
-#>  Adj.R²          │    0.02                              
+#>  Adj. R²         │    0.02                              
 #> 
 #> Note. Linear regression.
 #> Std. errors: classical (OLS).
 ```
 
-See [Categorical summary tables in
-R](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
-for categorical summaries, [Continuous summary tables in
-R](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
+Regression tables cover 30+ model classes with the conventions of each
+family. A mixed-effects fit, for example, reports its random effects as
+rows (SD, correlation, residual – each with SE and CI), the ICC and
+group sizes as fit statistics, and the likelihood-ratio test of the
+random part with the boundary-correct chi-bar-squared p-value:
+
+``` r
+library(lme4)
+fit_mixed <- lmer(Reaction ~ Days + (Days | Subject), data = sleepstudy)
+table_regression(fit_mixed)
+#> Linear mixed-effects regression: Reaction
+#> 
+#>  Variable                        │    B      SE        95% CI         p   
+#> ─────────────────────────────────┼────────────────────────────────────────
+#>  (Intercept)                     │  251.41  6.82  [238.03, 264.78]  <.001 
+#>  Days                            │   10.47  1.55  [  7.44,  13.50]  <.001 
+#> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+#>  Random effects:                 │                                        
+#>    σ Subject (Intercept)         │   24.74  5.84  [  6.79,  34.32]   –    
+#>    σ Subject Days                │    5.92  1.25  [  2.47,   8.00]   –    
+#>    ρ Subject ((Intercept), Days) │    0.07  0.33  [ -0.57,   0.70]   –    
+#>    σ (Residual)                  │   25.59  1.51  [ 22.44,  28.39]   –    
+#> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+#>  n                               │  180                                   
+#>  N (Subject)                     │   18                                   
+#>  R² (marginal)                   │    0.28                                
+#>  R² (conditional)                │    0.80                                
+#>  AIC                             │ 1755.6                                 
+#>  BIC                             │ 1774.8                                 
+#> 
+#> Note. Linear mixed-effects regression.
+#> Std. errors: Wald (model-based).
+#> p-values: Wald-z, large-sample approximation. Load `lmerTest` for Satterthwaite t-tests.
+#> Random effects (REML): LR test vs linear regression, χ̄²(3) = 150.04, p < .001.
+```
+
+See [Categorical summary
+tables](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
+for categorical summaries, [Continuous summary
+tables](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
 for continuous summaries and group comparisons, [Model-based continuous
-summary tables in
-R](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
-for weighted or robust linear-model reporting, [Regression coefficient
-tables in
-R](https://amaltawfik.github.io/spicy/articles/table-regression.html)
-for `lm` and `glm` coefficient tables, and [Summary tables for APA-style
+summary
+tables](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
+for weighted or robust linear-model reporting, [Publication-ready
+regression
+tables](https://amaltawfik.github.io/spicy/articles/table-regression.html)
+for `table_regression()` across model families, and [Summary tables for
 reporting](https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html)
 for an overview of summary tables.
+
+The same numbers can be laid out outcome-first: one outcome, several
+groupings, one block per grouping.
+
+``` r
+table_outcome(
+  sochealth,
+  outcome = bmi,
+  select = c(sex, smoking)
+)
+#> Descriptive statistics of Body mass index
+#> 
+#>  Variable       │   M     SD    Min    Max   95% CI LL  95% CI UL   n     p   
+#> ────────────────┼─────────────────────────────────────────────────────────────
+#>  Overall        │ 25.93  3.72  16.00  38.90    25.72      26.14    1188       
+#> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+#>  Sex            │                                                        .018 
+#>    Female       │ 25.69  3.78  16.00  38.90    25.39      25.98     616       
+#>    Male         │ 26.20  3.64  16.00  37.70    25.90      26.50     572       
+#> ╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌┼╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌
+#>  Current smoker │                                                        .903 
+#>    No           │ 25.96  3.76  16.00  38.90    25.72      26.21     915       
+#>    Yes          │ 25.93  3.58  16.80  35.30    25.48      26.38     248       
+#>    (Missing)    │ 24.74  3.63  17.60  32.50    23.24      26.23      25       
+#> 
+#> Missing values removed: bmi (12). Group comparison: Welch t-test. Each block compares Body mass index across the levels of one variable; blocks are not adjusted for one another. Overall = the whole analytic sample.
+```
 
 ### Row-wise summaries
 
@@ -422,71 +591,86 @@ labelled::var_label(out)
 #> [1] "Total score"
 ```
 
-See [Explore variables and build codebooks in
-R](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
+See [Explore variables and build
+codebooks](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
 for more on `label_from_names()`, `varlist()`, and `code_book()`.
 
 ------------------------------------------------------------------------
 
-## Learn by task
+## Documentation
 
-If you are looking for a specific workflow, start with these vignettes:
+Each workflow has a dedicated article on the package site:
 
 - [Getting started with
   spicy](https://amaltawfik.github.io/spicy/articles/spicy.html)
-- [Explore variables and build codebooks in
-  R](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
-- [Frequency tables and cross-tabulations in
-  R](https://amaltawfik.github.io/spicy/articles/frequency-tables.html)
-- [Cramer’s V, Phi, and association measures in
-  R](https://amaltawfik.github.io/spicy/articles/association-measures.html)
-- [Categorical summary tables in
-  R](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
-- [Continuous summary tables in
-  R](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
-- [Model-based continuous summary tables in
-  R](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
-- [Regression coefficient tables in
-  R](https://amaltawfik.github.io/spicy/articles/table-regression.html)
-- [Summary tables for APA-style
+- [Explore variables and build
+  codebooks](https://amaltawfik.github.io/spicy/articles/variable-exploration.html)
+- [Frequency tables and
+  cross-tabulations](https://amaltawfik.github.io/spicy/articles/frequency-tables.html)
+- [Cramer’s V, Phi, and association
+  measures](https://amaltawfik.github.io/spicy/articles/association-measures.html)
+- [Categorical summary
+  tables](https://amaltawfik.github.io/spicy/articles/table-categorical.html)
+- [Continuous summary
+  tables](https://amaltawfik.github.io/spicy/articles/table-continuous.html)
+- [Model-based continuous summary
+  tables](https://amaltawfik.github.io/spicy/articles/table-continuous-lm.html)
+- [Publication-ready regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression.html)
+- [Mixed-effects regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression-mixed.html)
+- [Count and two-part regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression-counts.html)
+- [Survival regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression-survival.html)
+- [Ordinal regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression-ordinal.html)
+- [Multinomial regression
+  tables](https://amaltawfik.github.io/spicy/articles/table-regression-multinomial.html)
+- [Summary tables for
   reporting](https://amaltawfik.github.io/spicy/articles/summary-tables-reporting.html)
 
 Key reference pages:
-
-- [Reference for
-  `varlist()`](https://amaltawfik.github.io/spicy/reference/varlist.html)
-- [Reference for
-  `code_book()`](https://amaltawfik.github.io/spicy/reference/code_book.html)
-- [Reference for
-  `label_from_names()`](https://amaltawfik.github.io/spicy/reference/label_from_names.html)
-- [Reference for
-  `freq()`](https://amaltawfik.github.io/spicy/reference/freq.html)
-- [Reference for
-  `cross_tab()`](https://amaltawfik.github.io/spicy/reference/cross_tab.html)
-- [Reference for
-  `cramer_v()`](https://amaltawfik.github.io/spicy/reference/cramer_v.html)
-- [Reference for
-  `table_categorical()`](https://amaltawfik.github.io/spicy/reference/table_categorical.html)
-- [Reference for
-  `table_continuous()`](https://amaltawfik.github.io/spicy/reference/table_continuous.html)
-- [Reference for
-  `table_continuous_lm()`](https://amaltawfik.github.io/spicy/reference/table_continuous_lm.html)
-- [Reference for
-  `table_regression()`](https://amaltawfik.github.io/spicy/reference/table_regression.html)
-- [Reference for
-  `mean_n()`](https://amaltawfik.github.io/spicy/reference/mean_n.html)
-- [Reference for
-  `sum_n()`](https://amaltawfik.github.io/spicy/reference/sum_n.html)
-- [Reference for
-  `count_n()`](https://amaltawfik.github.io/spicy/reference/count_n.html)
+[`freq()`](https://amaltawfik.github.io/spicy/reference/freq.html),
+[`cross_tab()`](https://amaltawfik.github.io/spicy/reference/cross_tab.html),
+[`cramer_v()`](https://amaltawfik.github.io/spicy/reference/cramer_v.html),
+[`table_categorical()`](https://amaltawfik.github.io/spicy/reference/table_categorical.html),
+[`table_continuous()`](https://amaltawfik.github.io/spicy/reference/table_continuous.html),
+[`table_continuous_lm()`](https://amaltawfik.github.io/spicy/reference/table_continuous_lm.html),
+[`table_regression()`](https://amaltawfik.github.io/spicy/reference/table_regression.html),
+[`varlist()`](https://amaltawfik.github.io/spicy/reference/varlist.html),
+[`code_book()`](https://amaltawfik.github.io/spicy/reference/code_book.html),
+[`label_from_names()`](https://amaltawfik.github.io/spicy/reference/label_from_names.html),
+[`mean_n()`](https://amaltawfik.github.io/spicy/reference/mean_n.html),
+[`sum_n()`](https://amaltawfik.github.io/spicy/reference/sum_n.html),
+and
+[`count_n()`](https://amaltawfik.github.io/spicy/reference/count_n.html)
+– see the [full function
+index](https://amaltawfik.github.io/spicy/reference/index.html) for
+everything else.
 
 ------------------------------------------------------------------------
 
 ## Citation
 
-To cite spicy in a publication or teaching material:
+To cite spicy in a publication or teaching material (this entry is
+generated by `citation("spicy")` at build time and always refers to the
+current CRAN release):
 
-- Use `citation("spicy")` to generate the current BibTeX entry.
+Tawfik A (2026). *spicy: Publication-Ready Tables for Descriptive
+Statistics and Regression Models*. <doi:10.32614/CRAN.package.spicy>
+<https://doi.org/10.32614/CRAN.package.spicy>. R package version 0.13.0,
+<https://CRAN.R-project.org/package=spicy>.
+
+    @Manual{,
+      title = {spicy: Publication-Ready Tables for Descriptive Statistics and Regression Models},
+      author = {Amal Tawfik},
+      year = {2026},
+      note = {R package version 0.13.0},
+      url = {https://CRAN.R-project.org/package=spicy},
+      doi = {10.32614/CRAN.package.spicy},
+    }
+
 - Package DOI: <https://doi.org/10.32614/CRAN.package.spicy>.
 - Source citation file:
   <https://github.com/amaltawfik/spicy/blob/main/inst/CITATION>

@@ -4,13 +4,7 @@
 \alias{kendall_tau_c}
 \title{Kendall's Tau-c (Stuart's Tau-c)}
 \usage{
-kendall_tau_c(
-  x,
-  detail = FALSE,
-  conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
-)
+kendall_tau_c(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -19,14 +13,14 @@ kendall_tau_c(
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -44,6 +38,14 @@ Stuart's Tau-c is computed as
 \eqn{m = \min(r, c)}. It is designed for rectangular tables;
 the estimate is bounded by \eqn{[-1, 1]} only when the table is
 square, and may fall outside that range otherwise.
+When the asymptotic standard error is zero (e.g. a perfect
+association), the Wald z-test is undefined and the p-value is
+\code{NA}, matching the other measures in the family.
+When one variable is constant (all observations in a single row
+or column), there are no untied pairs and the statistic
+degenerates to a meaningless 0: the function returns \code{NA} with a
+\code{spicy_undefined_stat} warning, like its siblings, matching the
+SPSS / PSPP behavior of reporting no value.
 Standard error formulas follow the DescTools implementations
 (Signorell et al., 2024); see \code{\link[=cramer_v]{cramer_v()}} for full references.
 }
@@ -51,6 +53,16 @@ Standard error formulas follow the DescTools implementations
 tab <- table(sochealth$education, sochealth$self_rated_health)
 kendall_tau_c(tab)
 
+}
+\references{
+Stuart, A. (1953). The estimation and comparison of strengths of
+association in contingency tables. \emph{Biometrika}, 40(1-2),
+105-110. \doi{10.2307/2333101}
+
+Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+tests for correlation in two-way contingency tables. \emph{Journal of
+the American Statistical Association}, 72(358), 309-315.
+\doi{10.1080/01621459.1977.10480995}
 }
 \seealso{
 \code{\link[=kendall_tau_b]{kendall_tau_b()}}, \code{\link[=gamma_gk]{gamma_gk()}}, \code{\link[=somers_d]{somers_d()}},

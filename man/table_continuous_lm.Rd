@@ -33,14 +33,16 @@ table_continuous_lm(
   effect_size_digits = 2,
   p_digits = 3,
   decimal_mark = ".",
-  align = c("decimal", "auto", "center", "right"),
+  align = c("decimal", "center", "right"),
   output = c("default", "data.frame", "long", "tinytable", "gt", "flextable", "excel",
     "clipboard", "word"),
   excel_path = NULL,
-  excel_sheet = "Linear models",
+  excel_sheet = NULL,
   clipboard_delim = "\\t",
   word_path = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE,
+  style = NULL
 )
 }
 \arguments{
@@ -59,6 +61,12 @@ table reports the slope of \code{by} and its CI from \code{lm(y ~ by, ...)}.
 \item \strong{factor} or \strong{ordered factor}: treated as categorical. Level order
 is preserved as declared; the \strong{first level} is the reference for
 the displayed contrast (R's default treatment-contrast convention).
+An ordered factor is refit as an unordered factor with the same
+level order, so the model uses treatment contrasts -- not the
+polynomial contrasts (\code{contr.poly}) \code{lm()} would apply by default.
+The ordering only determines the display order and the reference
+level; per-level means, the displayed difference, and its CI are
+identical to those of an unordered factor with the same levels.
 \item \strong{character}: coerced to factor with \code{factor(by)}, which orders the
 levels alphabetically. To control the reference level, supply \code{by}
 as an explicit factor with the desired level ordering (e.g. via
@@ -66,6 +74,15 @@ as an explicit factor with the desired level ordering (e.g. via
 \item \strong{logical}: coerced to factor with levels \code{"FALSE"}, \code{"TRUE"} (in
 that order, since \code{FALSE < TRUE}). The reference level is \code{"FALSE"},
 so a binary contrast displays as \code{Delta (TRUE - FALSE)}.
+\item \strong{haven labelled with value labels} (an SPSS / Stata import):
+treated as categorical over the raw codes, in ascending code
+order (the reference level is the lowest code; the model needs
+a fixed level order). \code{\link[=table_continuous]{table_continuous()}} and
+\code{\link[=table_categorical]{table_categorical()}} form the same groups from such a column
+but display them in order of first appearance in the data, so
+the group ORDER can differ between the sibling tables. A
+labelled vector without value labels is treated as a continuous
+regressor. Declared missing values follow \code{user_na} as usual.
 }
 
 Rows with \code{NA} in \code{by} are excluded from the analytic sample for each
@@ -114,8 +131,13 @@ predicts at every observation with \code{by} set to that level
 (covariates kept at their observed values), and the
 predictions are averaged. Population-weighted by construction
 -- the empirical joint distribution of covariates is the
-reference. Best when the goal is "what is the predicted
-mean in \emph{this} population if everyone had \code{by = lvl}".
+reference. Under \code{weights}, the averaging uses the case
+weights (the Stata \code{margins} convention after a weighted
+regression; equivalent to
+\code{marginaleffects::avg_predictions(wts = )}), so the reference
+distribution is the weighted one. Best when the goal is "what
+is the predicted mean in \emph{this} population if everyone had
+\code{by = lvl}".
 \item \code{"balanced"} (matches \code{\link[emmeans:emmeans]{emmeans::emmeans()}} default and the
 SPSS UNIANOVA EMMEANS / SAS LSMEANS conventions): synthetic
 grid of factor-covariate level combinations x numeric
@@ -130,10 +152,12 @@ Both methods reduce to the same linear-contrast formula
 \code{emmean = avg_row \%*\% beta} and inherit the spicy variance
 pipeline (HC* / CR* / bootstrap / jackknife). They give the
 same answer when there are no covariates, and also when all
-covariates are numeric / logical (no factor levels to expand
-over). The two estimands diverge only when at least one
-factor / character covariate has non-uniform observed
-proportions.}
+covariates are numeric (fixed at their means either way). The
+two estimands diverge when a factor, character, or logical
+covariate has non-uniform observed proportions: those are
+levels to balance, and \code{"balanced"} weights them equally
+(a logical is a two-level factor to \code{lm()}, balanced
+FALSE/TRUE -- the \code{emmeans} convention).}
 
 \item{exclude}{Columns to exclude from \code{select}. Supports tidyselect syntax
 and character vectors of column names.}
@@ -184,8 +208,12 @@ estimators for non-independent observations (Liang and Zeger
 (Bell and McCaffrey 2002; Pustejovsky and Tipton 2018), with
 Satterthwaite degrees of freedom for inference; the
 fractional df is reported in the \code{df2} column and in the
-\code{t(df)} / \code{F(df1, df2)} test header. \code{"CR1"} corresponds to
-Stata's \verb{, vce(cluster id)} default. Cluster-robust variants
+\code{t(df)} / \code{F(df1, df2)} test header. \code{"CR1"} applies the
+G/(G-1) correction only; Stata's \verb{, vce(cluster id)} uses the
+larger G(N-1)/((G-1)(N-p)) factor with t(G-1) inference
+(clubSandwich's \code{"CR1S"}; exposed for \code{lm} fits in
+\code{\link[=table_regression]{table_regression()}}, not here), so \code{"CR1"} does
+not reproduce Stata. Cluster-robust variants
 are dispatched to \code{\link[clubSandwich:vcovCR]{clubSandwich::vcovCR()}} and inference uses
 \code{\link[clubSandwich:coef_test]{clubSandwich::coef_test()}} / \code{\link[clubSandwich:Wald_test]{clubSandwich::Wald_test()}};
 install \code{clubSandwich} to use them.
@@ -215,6 +243,8 @@ for the other (independent-observation) variants. Accepts:
 \item \code{NULL} (default): no cluster structure.
 \item an unquoted column name in \code{data}.
 \item a single character column name in \code{data}.
+\item a one-sided formula naming a column in \code{data} (\code{~ region}), the
+\code{sandwich} / \code{fixest} convention shared with \code{\link[=table_regression]{table_regression()}}.
 \item an atomic vector of length \code{nrow(data)} evaluated in the calling
 environment (factor, character, integer, etc.).
 }
@@ -228,6 +258,9 @@ cluster vectors) is not supported; use \code{\link[sandwich:vcovCL]{sandwich::vc
 
 \item{boot_n}{Integer. Number of bootstrap replicates used when
 \code{vcov = "bootstrap"}. Defaults to \code{1000}. Ignored otherwise.
+Must be at least \code{50} (values below that floor raise an error:
+fewer replicates make the variance estimate too noisy to use);
+non-integer values are truncated (e.g. \code{500.9} becomes \code{500}).
 Larger values reduce Monte-Carlo error in the bootstrap variance;
 typical values for inference are \code{500}-\code{2000}.}
 
@@ -287,7 +320,9 @@ affected by \code{vcov}.
 \strong{Under covariate adjustment} (\code{covariates} non-empty):
 \itemize{
 \item \code{"f2"} and \code{"omega2"} become the \strong{partial} \emph{\eqn{f^2}{f^2}} / partial \emph{\eqn{\omega^2}{omega^2}},
-derived from the partial \emph{F} of \code{by} via \code{\link[stats:drop1]{stats::drop1()}} --
+derived from the partial \emph{F} of \code{by} (the Type-II test of \code{by}
+after all covariates, equal to \code{\link[stats:drop1]{stats::drop1()}} in this
+additive setting) --
 the correctly-defined effect size when the model is adjusted.
 For numeric \code{by}, partial \emph{\eqn{f^2}{f^2}} equals the squared partial
 correlation of \code{by} with the outcome, divided by \verb{(1 - r^2_partial)}.
@@ -303,8 +338,8 @@ appropriate noncentral distribution (noncentral t for \code{"d"} / \code{"g"};
 noncentral F for \code{"omega2"} / \code{"f2"}). The CI level is taken from
 \code{ci_level}. In the long output (\code{output = "long"}), the bounds are always
 present in \code{es_ci_lower} / \code{es_ci_upper} (numeric). In the wide raw
-output (\code{output = "data.frame"}), the bounds appear as numeric columns
-\code{effect_size_ci_lower} / \code{effect_size_ci_upper}. In the printed ASCII
+output (\code{output = "data.frame"}), the bounds appear under the same
+names, \code{es_ci_lower} / \code{es_ci_upper} (numeric). In the printed ASCII
 table and rendered outputs (\code{"tinytable"}, \code{"gt"}, \code{"flextable"},
 \code{"word"}, \code{"excel"}, \code{"clipboard"}), the effect-size column shows the
 value followed by the CI in brackets (e.g. \code{0.18 [0.07, 0.30]}). Defaults
@@ -336,7 +371,10 @@ is used.}
 intervals (default: \code{0.95}). Must be between 0 and 1 exclusive.}
 
 \item{digits}{Number of decimal places for descriptive values, regression
-coefficients, and test statistics (default: \code{2}).}
+coefficients, and test statistics (default: \code{2}). Must be a single
+non-negative number; non-integer values are truncated (e.g. \code{2.9}
+becomes \code{2}). Same constraint for \code{fit_digits} and
+\code{effect_size_digits}.}
 
 \item{fit_digits}{Number of decimal places for model-fit columns (\verb{\eqn{R^2}{R^2}} or
 adjusted \verb{\eqn{R^2}{R^2}}) in wide and rendered outputs (default: \code{2}).}
@@ -353,7 +391,9 @@ prints \code{.045} and \verb{<.001}; \code{p_digits = 4} prints \code{.0451} and
 \verb{<.0001}; \code{p_digits = 2} prints \code{.05} and \verb{<.01}. Useful for
 genomics / GWAS contexts where adjusted \emph{p}-values can be very
 small, or for journals using a coarser convention. Leading zeros
-are always stripped, following APA convention.}
+are always stripped, following APA convention. Values below \code{1}
+raise an error; non-integer values are truncated (e.g. \code{3.7}
+becomes \code{3}).}
 
 \item{decimal_mark}{Character used as decimal separator. Either \code{"."}
 (default) or \code{","}.}
@@ -365,18 +405,19 @@ left-aligned. One of:
 \itemize{
 \item \code{"decimal"} (default): align numeric columns on the decimal
 mark, the standard scientific-publication convention used by
-SPSS, SAS, LaTeX \code{siunitx}, \code{\link[gt:cols_align_decimal]{gt::cols_align_decimal()}} and
-\code{tinytable::style_tt(align = "d")}. For engines without a
-native decimal-alignment primitive (\code{flextable}, \code{word},
-\code{clipboard}, ASCII print), values are pre-padded with leading
-and trailing spaces so the dots line up vertically; the body
-of the \code{flextable}/\code{word} output additionally uses a monospace
-font to make character widths uniform.
+SPSS, SAS, and LaTeX \code{siunitx}. Numeric cells are pre-padded
+with figure-spaces (U+2007, digit-width) so every string in a
+column has the same width with the decimal mark at the same
+internal position; centring those uniform-width strings then
+stacks the decimal points vertically. The same pad-then-centre
+strategy is applied on every rendering engine (\code{gt},
+\code{tinytable}, \code{flextable}, \code{word}, ASCII print) for a
+homogeneous rendering, matching \code{table_regression()}. The
+\code{clipboard} output is delimited text meant to be parsed rather
+than read at a fixed width, so its cells travel unpadded (a
+padded number pastes as text next to an unpadded number).
 \item \code{"center"}: center-align all numeric columns.
 \item \code{"right"}: right-align all numeric columns.
-\item \code{"auto"}: legacy per-column rule used in spicy < 0.11.0
-(center for the descriptive / inferential columns; right for
-\code{n}, \verb{Weighted n}, and \code{p}).
 }
 
 The \code{excel} output uses the engine's default alignment in any
@@ -386,7 +427,7 @@ format would require a separate refactor.}
 
 \item{output}{Output format. One of:
 \itemize{
-\item \code{"default"}: a printed ASCII table, returned invisibly
+\item \code{"default"}: an ASCII table object, printed when the call is bare
 \item \code{"data.frame"}: a plain wide \code{data.frame}
 \item \code{"long"}: a raw long \code{data.frame}
 \item \code{"tinytable"} (requires \code{tinytable})
@@ -399,28 +440,50 @@ format would require a separate refactor.}
 
 \item{excel_path}{File path for \code{output = "excel"}.}
 
-\item{excel_sheet}{Sheet name for \code{output = "excel"} (default:
-\code{"Linear models"}).}
+\item{excel_sheet}{Sheet name for \code{output = "excel"}. \code{NULL} (the
+default) uses \code{"Linear models"}.}
 
 \item{clipboard_delim}{Delimiter for \code{output = "clipboard"} (default:
-\code{"\\t"}).}
+\code{"\\t"}). A cell holding the delimiter itself, a double quote or a
+line break is quoted RFC 4180-style, so the grid survives whatever
+delimiter you choose.}
 
 \item{word_path}{File path for \code{output = "word"}.}
 
 \item{verbose}{Logical. If \code{TRUE}, prints messages about ignored
 non-numeric selected outcomes (default: \code{FALSE}).}
+
+\item{user_na}{Logical. If \code{TRUE} (the default), declared missing
+values in the outcomes, in \code{by}, and in \code{covariates} are treated
+as missing and excluded from the fitted models (reflected in the
+per-group \code{n}). If \code{FALSE}, the declared codes enter the fits as
+ordinary values. See the "Declared missing values" section of
+\code{\link[=freq]{freq()}}.}
+
+\item{style}{A journal style: a theme name (\code{"jama"}, \code{"nejm"},
+\code{"lancet"}, \code{"annals"}, \code{"apa"}, \code{"aer"}), a
+\code{\link[=spicy_style]{spicy_style()}} object, or \code{NULL} (the default). A style only
+changes DEFAULTS -- any argument you pass explicitly wins over it.
+Set \code{options(spicy.style = )} for document-wide scope. A theme
+covers numeric formatting conformity only, not full editorial
+conformity; \code{?spicy_style} lists the exact rules each one encodes
+and the official document they come from. An unknown name is an
+error.}
 }
 \value{
 Depends on \code{output}:
 \itemize{
-\item \code{"default"}: prints a styled ASCII table and invisibly returns
-the underlying long \code{data.frame} with class
-\code{"spicy_continuous_lm_table"} / \code{"spicy_table"}.
+\item \code{"default"}: the underlying long \code{data.frame} with class
+\code{"spicy_continuous_lm_table"} / \code{"spicy_table"}. The object is
+returned visibly, so a bare \code{table_continuous_lm(...)} call
+auto-prints the styled ASCII table at the console while
+\code{t <- table_continuous_lm(...)} stays silent (print \code{t} to
+display the table).
 \item \code{"data.frame"}: a plain wide \code{data.frame} with one row per
 outcome and numeric columns for means (categorical \code{by}) or slope
 (numeric \code{by}), optional contrast and CI, optional test statistic,
 \code{p}, fit statistic (\verb{\eqn{R^2}{R^2}} or adjusted \verb{\eqn{R^2}{R^2}}), effect size, optional
-\code{effect_size_ci_lower} / \code{effect_size_ci_upper} (when
+\code{es_ci_lower} / \code{es_ci_upper} (when
 \code{effect_size_ci = TRUE}), \code{n}, and \verb{Weighted n}.
 \item \code{"long"}: a raw \code{data.frame} with one block per outcome and 28
 columns covering identification (\code{variable}, \code{label},
@@ -439,13 +502,18 @@ and sample size (\code{n}, \code{weighted_n}).
 \item \code{"clipboard"}: copies the wide table and returns it invisibly.
 }
 
+The Excel sheet carries the same title the console prints on its
+first row; the table itself starts on row 3, and the note lines sit
+below the body.
+
 If no numeric outcome columns remain after applying \code{select}, \code{exclude},
 and \code{regex}, the function emits a warning and returns an empty
 \code{data.frame()} regardless of \code{output}.
 }
 \description{
-Builds APA-style summary tables from a series of linear models for one
-or many continuous outcomes selected with tidyselect syntax.
+Builds publication-ready summary tables from a series of linear
+models for one or many continuous outcomes selected with tidyselect
+syntax.
 
 A single focal predictor is supplied with \code{by}; each selected numeric
 outcome is fit as \code{lm(outcome ~ by, ...)}, optionally extended with
@@ -530,8 +598,9 @@ itself.
 
 \strong{Under covariate adjustment} (\code{covariates} non-empty), \code{"f2"} and
 \code{"omega2"} become the partial \emph{\eqn{f^2}{f^2}} / partial \emph{\eqn{\omega^2}{omega^2}} of \code{by}, derived
-from the partial \emph{F} via \code{\link[stats:drop1]{stats::drop1()}} restricted to the focal
-term. \code{"d"} and \code{"g"} raise a \code{spicy_unsupported} error: the pooled
+from the partial \emph{F} restricted to the focal term (the Type-II
+test of \code{by} after all covariates, equal to \code{\link[stats:drop1]{stats::drop1()}} in
+this additive setting). \code{"d"} and \code{"g"} raise a \code{spicy_unsupported} error: the pooled
 standard deviation has no canonical extension under adjustment, so
 Cohen's \emph{d} and Hedges' \emph{g} are undefined for adjusted models. See
 \code{effect_size} for the full dispatch.
@@ -545,14 +614,22 @@ software (Stata \code{esize} / \verb{estat esize}, SAS \verb{PROC TTEST} and
 \itemize{
 \item \code{"d"}, \code{"g"}: noncentral \emph{t} inversion (Steiger and Fouladi 1997;
 Goulet-Pelletier and Cousineau 2018). Empirical coverage is nominal
-across sample sizes (Cousineau and Goulet-Pelletier 2021), unlike the
+across sample sizes (Fitts 2021), unlike the
 older Hedges-Olkin normal approximation which is biased for small
 samples. For Hedges' \emph{g} the bounds inherit the \emph{J} small-sample
 correction.
 \item \code{"omega2"}, \code{"f2"}: noncentral \emph{F} inversion (Steiger 2004).
-Bounds are converted from the noncentrality parameter using
+Without covariates (model-level effect sizes), bounds are
+converted from the noncentrality parameter using
 \code{omega^2 = ncp / (ncp + N)} and \verb{\eqn{f^2}{f^2} = ncp / N} respectively, with
-\code{N = df1 + df2 + 1} (total sample size).
+\code{N = df1 + df2 + 1} (total sample size). Under covariate
+adjustment (partial effect sizes), the bounds use the partial
+transforms instead: partial \verb{\eqn{f^2}{f^2} = ncp / df2}, and for partial
+\code{omega^2} the inversion runs at the \emph{F}-value equivalent of the
+omega-squared point estimate with bounds \code{ncp / (ncp + df2)} --
+the \code{\link[effectsize:omega_squared]{effectsize::omega_squared()}} \code{partial = TRUE} convention,
+which is narrower than the partial eta-squared CI because
+omega-squared shrinks the point estimate.
 }
 For the weighted case, the CI uses raw (unweighted) group counts and
 \code{df.residual(fit) = n - p}, consistent with the WLS reporting convention
@@ -594,7 +671,11 @@ Hotelling-T-squared with Satterthwaite df, "HTZ") for inference.
 modern recommended default; it generally produces fractional
 Satterthwaite degrees of freedom in \code{df2}, which the displayed
 \code{t(df)} / \code{F(df1, df2)} header renders to one decimal. \code{"CR1"}
-matches Stata's \verb{, vce(cluster id)}. Effect sizes remain invariant
+applies the G/(G-1) correction only -- Stata's \verb{, vce(cluster id)}
+uses the larger G(N-1)/((G-1)(N-p)) factor with t(G-1) inference
+(clubSandwich's \code{"CR1S"}; exposed for \code{lm} fits in
+\code{\link[=table_regression]{table_regression()}}, not here), so \code{"CR1"} does not
+reproduce Stata. Effect sizes remain invariant
 to \code{vcov} (including \verb{CR*}); only the SE, CI, test statistic, and
 \code{df2} of the contrast change.
 
@@ -607,8 +688,10 @@ Supplying \code{cluster} switches both to their cluster-aware variants
 leave-one-cluster-out jackknife). The number of bootstrap replicates
 is controlled by \code{boot_n} (default \code{1000}); replicates that fail to
 fit on rank-deficient resamples are dropped, with an explicit warning
-if more than half fail and a fallback to the classical OLS variance
-below 10 valid replicates. Inference for both estimators is
+if more than half fail. Fewer than 10 valid bootstrap replicates (or
+fewer than 2 jackknife leave-outs) raises \code{spicy_resampling_failed}
+rather than silently reporting a different variance estimator.
+Inference for both estimators is
 asymptotic (\code{z} for single-coefficient contrasts, \code{chi^2(q)} for the
 multi-coefficient global Wald test on \code{k > 2} categorical
 predictors), reflected in the displayed test header. Use the
@@ -658,6 +741,10 @@ When \code{covariates} is non-empty, the printed ASCII table appends an
 APA-style footer naming the covariates and the chosen estimand, e.g.
 \verb{Note. Adjusted for age, education (proportional).}
 
+The rendering engines carry that same footer as a table note. On the
+\code{"tinytable"} route the note is set one size down;
+\code{options(spicy.note_style)} governs that (see \code{\link[=table_regression]{table_regression()}}).
+
 Optional output engines require the corresponding suggested packages:
 \itemize{
 \item \pkg{tinytable} for \code{output = "tinytable"}
@@ -667,6 +754,37 @@ Optional output engines require the corresponding suggested packages:
 \item \pkg{openxlsx2} for \code{output = "excel"}
 \item \pkg{clipr} for \code{output = "clipboard"}
 }
+}
+
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
 }
 
 \examples{
@@ -738,13 +856,15 @@ table_continuous_lm(
 
 # Cluster-robust SE for repeated-measures data: the `sleep` dataset
 # has 10 subjects measured twice (one observation per group).
-table_continuous_lm(
-  sleep,
-  select = extra,
-  by = group,
-  cluster = ID,
-  vcov = "CR2"
-)
+if (requireNamespace("clubSandwich", quietly = TRUE)) {
+  table_continuous_lm(
+    sleep,
+    select = extra,
+    by = group,
+    cluster = ID,
+    vcov = "CR2"
+  )
+}
 
 # --- Covariate adjustment ----------------------------------------------
 
@@ -771,7 +891,7 @@ table_continuous_lm(
 )
 
 # Effect sizes adjust automatically: f2 / omega2 become partial
-# effect sizes via partial F (drop1) restricted to the focal `by`.
+# effect sizes via the partial F restricted to the focal `by`.
 # d / g are undefined under adjustment and raise spicy_unsupported.
 table_continuous_lm(
   sochealth,
@@ -912,12 +1032,6 @@ Cohen, J. (1988).
 \emph{Statistical Power Analysis for the Behavioral Sciences}
 (2nd ed.). Hillsdale, NJ: Lawrence Erlbaum.
 
-Cousineau, D., & Goulet-Pelletier, J.-C. (2021).
-Expected and empirical coverages of different methods for generating
-noncentral \emph{t} confidence intervals for a standardized mean
-difference. \emph{Behavior Research Methods}, \strong{53}, 2376--2394.
-\doi{10.3758/s13428-021-01550-4}
-
 Cribari-Neto, F. (2004).
 Asymptotic inference under heteroskedasticity of unknown form.
 \emph{Computational Statistics & Data Analysis}, \strong{45}(2), 215--233.
@@ -945,6 +1059,12 @@ Using sample survey weights in multiple regression analyses of
 stratified samples. \emph{Journal of the American Statistical
 Association}, \strong{78}(383), 535--543.
 \doi{10.1080/01621459.1983.10478006}
+
+Fitts, D. A. (2021).
+Expected and empirical coverages of different methods for generating
+noncentral \emph{t} confidence intervals for a standardized mean
+difference. \emph{Behavior Research Methods}, \strong{53}(6), 2412--2429.
+\doi{10.3758/s13428-021-01550-4}
 
 Goulet-Pelletier, J.-C., & Cousineau, D. (2018).
 A review of effect sizes and their confidence intervals, Part I:

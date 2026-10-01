@@ -11,7 +11,6 @@ spicy_print_table(
   padding = 2L,
   first_column_line = TRUE,
   row_total_line = TRUE,
-  column_total_line = TRUE,
   bottom_line = FALSE,
   lines_color = "darkgrey",
   align_left_cols = NULL,
@@ -21,6 +20,8 @@ spicy_print_table(
   group_sep_rows = integer(0),
   total_row_idx = attr(x, "total_row_idx"),
   display_labels = NULL,
+  fit_stats_start = NULL,
+  qualify_companions = FALSE,
   ...
 )
 }
@@ -42,10 +43,9 @@ the migration note from the pre-0.11.0 string enum.}
 \item{first_column_line}{Logical. If \code{TRUE} (the default), adds a vertical separator
 after the first column.}
 
-\item{row_total_line, column_total_line, bottom_line}{Logical flags controlling
-the presence of horizontal lines before total rows/columns or at the bottom
-of the table.
-Both \code{row_total_line} and \code{column_total_line} default to \code{TRUE};
+\item{row_total_line, bottom_line}{Logical flags controlling the
+horizontal line before a total row and the closing line at the
+bottom of the table. \code{row_total_line} defaults to \code{TRUE};
 \code{bottom_line} defaults to \code{FALSE}.}
 
 \item{lines_color}{Character. Color for table separators. Defaults to \code{"darkgrey"}.
@@ -86,6 +86,25 @@ Sliced per panel when the table is split across stacked panels.
 Forwarded to \code{\link[=build_ascii_table]{build_ascii_table()}}; see that function for full
 semantics. Defaults to \code{NULL}.}
 
+\item{fit_stats_start}{Optional 1-based index of the first
+model-level statistics row (the block below the dashed rule in
+regression tables). When the table splits into stacked panels,
+continuation panels drop the rows of that block whose every
+visible data cell is blank -- model-level statistics print once,
+under the panel that carries their values, instead of leaving
+empty \code{n} / \code{AIC} stub rows on every continuation panel. \code{NULL}
+(default) keeps all rows on all panels.}
+
+\item{qualify_companions}{Logical. When the table splits into stacked
+panels, should a companion column (\code{SE}, \code{p}, an interval) that a
+width split separated from its carrier name that carrier in its
+header -- \verb{95\% CI} becoming \verb{95\% CI (B)}? Set it \code{TRUE} only for a
+layout where those headers really are companions of the estimate
+column on their left, as in a coefficient table. In a layout whose
+\code{p} is the omnibus test of a whole block it has no carrier, and
+qualifying it would attribute it to whichever column happened to
+sit before it. Defaults to \code{FALSE}.}
+
 \item{...}{Additional arguments passed to \code{\link[=build_ascii_table]{build_ascii_table()}}.}
 }
 \value{
@@ -114,6 +133,12 @@ on each panel. Unicode line-drawing characters are used by
 default; coloured separators are drawn when the terminal supports
 ANSI colour (\code{\link[crayon:has_color]{crayon::has_color()}}) and fall back to monochrome
 otherwise.
+
+The layout arguments \code{spanners}, \code{display_labels},
+\code{fit_stats_start}, \code{total_row_idx} and \code{group_sep_rows} are
+plumbing consumed by spicy's own print methods; they are
+documented for completeness and are rarely useful when calling
+this function directly.
 }
 \examples{
 # Simple demonstration

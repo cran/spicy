@@ -35,11 +35,50 @@
 #'   \item Partial effect sizes -- `lm` only: `"partial_f2"`,
 #'     `"partial_eta2"`, `"partial_omega2"`, each with a paired
 #'     `_ci` companion (`"partial_f2_ci"`, ...).
-#'   \item Partial effect size -- `glm` only: `"partial_chi2"`
-#'     (likelihood-ratio chi-square via `drop1(test = "LRT")`;
-#'     SAS PROC LOGISTIC `TYPE3`; Long & Freese 2014 Section 3.5).
-#'     Rendered as `value (df)` to disambiguate factor terms
-#'     (k-1 df) from numeric terms (1 df).
+#'   \item Partial effect size -- `glm` and mixed-effects models:
+#'     `"partial_chi2"`, the term-level Type-II partial chi-square.
+#'     Each term is tested under the marginality-respecting
+#'     hypothesis that excludes any higher-order interaction
+#'     containing it (the `car::Anova(type = 2)` convention), so
+#'     the value does not depend on the factor coding. For `glm`
+#'     the statistic is the likelihood-ratio chi-square (Long &
+#'     Freese 2014 Sections 3.2.2, 3.2.4); for `lmer` / `glmer` / `glmmTMB` /
+#'     `nlme::lme` it is the Wald chi-square built from the same
+#'     Type-II hypothesis -- a deliberate departure from the
+#'     Type-III default of SAS PROC MIXED and `lmerTest` (the two
+#'     conventions coincide for models without interactions).
+#'     Rendered as `value (df)` to disambiguate factor terms (k-1
+#'     df) from numeric terms (1 df).
+#'   \item Variance explained per fit -- `lm` only: `"r2"`,
+#'     `"adj_r2"`. Like `"n"`, these are *per-fit* columns: they are
+#'     populated by [table_regression_uv()] screens, where each
+#'     predictor block is its own model and the \eqn{R^2}{R^2}
+#'     answers "how much of the outcome does this predictor explain
+#'     on its own". A model whose \eqn{R^2}{R^2} is a single
+#'     model-level number drops the column and reports it in the
+#'     fit-statistics rows instead (the `"r2"` / `"adj_r2"` tokens of
+#'     `show_fit_stats`, on by default for `lm`). Refused for classes
+#'     with no least-squares variance partition (`glm`, `coxph`,
+#'     ...), where only competing pseudo-\eqn{R^2}{R^2} measures
+#'     exist: name the one you want in `show_fit_stats`.
+#'   \item Sample columns: `"n"` -- per-row N, populated by
+#'     [table_regression_uv()] screens (each predictor block is its
+#'     own fit); models without per-row N data drop the column.
+#'     `"n_events"` -- outcome event counts as `events/N`, per
+#'     factor level (reference row included) and model totals on
+#'     continuous rows, computed on each model's own estimation
+#'     sample (STROBE item 16's "data behind the association";
+#'     NEJM-style `no. of events/total no.`). Binary (binomial)
+#'     outcomes and right-censored `coxph` fits -- other models
+#'     raise `spicy_invalid_input`.
+#'   \item Survival estimands -- `coxph` only: `"rmst"`,
+#'     `"rmst_se"`, `"rmst_ci"`, `"rmst_p"` (restricted-mean-
+#'     survival-time difference over `[0, tau]`) and
+#'     `"risk_diff"`, `"risk_diff_se"`, `"risk_diff_ci"`,
+#'     `"risk_diff_p"` (cumulative-incidence difference at
+#'     `at_time`), by g-computation from the fitted model with
+#'     bootstrap inference. The horizon arguments are required;
+#'     see `tau` / `at_time`.
 #' }
 #'
 #' **Group tokens** (presets) expand to a fixed atomic vector
@@ -72,17 +111,76 @@
 #' ## `show_fit_stats` -- model-level rows below the coefficients
 #'
 #' \itemize{
-#'   \item Counts: `"nobs"`, `"weighted_nobs"`.
+#'   \item Counts: `"nobs"`, `"weighted_nobs"`, `"n_events"` (Cox
+#'     models: number of events, reported alongside `n` per the
+#'     field convention; blank for other classes).
 #'   \item Variance explained (`lm` only): `"r2"`, `"adj_r2"`,
 #'     `"omega2"`.
-#'   \item Pseudo-\eqn{R^2}{R^2} (`glm` only): `"pseudo_r2_mcfadden"`
-#'     (McFadden 1974), `"pseudo_r2_nagelkerke"` (Nagelkerke 1991),
+#'   \item Pseudo-\eqn{R^2}{R^2} (`glm` and ordinal `polr` / `clm`):
+#'     `"pseudo_r2_mcfadden"` (McFadden 1974),
+#'     `"pseudo_r2_nagelkerke"` (Nagelkerke 1991),
 #'     `"pseudo_r2_tjur"` (Tjur 2009; binomial only).
 #'   \item Residual scale: `"sigma"` (lm \eqn{\hat{\sigma}}{sigma-hat}
 #'     / glm dispersion), `"rmse"`.
+#'   \item Survey designs (`survey::svyglm` only): `"eff_p"`, the
+#'     effective number of parameters of the design (the first element
+#'     of survey's `extractAIC`, the sum of the Rao-Scott eigenvalues).
+#'     Opt-in and distinct from `"aic"`, which reports the design-based
+#'     AIC of Lumley & Scott (2015). Blank for other classes.
+#'   \item Bayesian fits only: `"r2_bayes"` (posterior-median
+#'     Bayesian \eqn{R^2}{R^2}, Gelman et al. 2019 -- in the
+#'     all-Bayesian default), `"elpd_loo"` and `"looic"` (PSIS-LOO
+#'     expected log predictive density and its deviance-scale twin,
+#'     Vehtari et al. 2017; opt-in, a few seconds per model; the
+#'     footer discloses the elpd standard error), and `"waic"`
+#'     (Watanabe-Akaike; PSIS-LOO is generally preferred).
+#'   \item Negative-binomial dispersion (`MASS::glm.nb` only):
+#'     `"theta"` (\eqn{V = \mu + \mu^2/\theta}{V = mu + mu^2/theta})
+#'     and `"alpha"` (\eqn{= 1/\theta}{= 1/theta}, the Stata `nbreg`
+#'     convention). Refused for other families.
+#'   \item Beta-regression precision (`betareg::betareg` only):
+#'     `"phi"` (\eqn{Var(y) = \mu(1-\mu)/(1+\phi)}{Var(y) =
+#'     mu(1-mu)/(1+phi)}, Ferrari & Cribari-Neto 2004; higher
+#'     \eqn{\phi}{phi} = less dispersion). A constant precision is
+#'     back-transformed from its link, so `y ~ x | 1` reports the
+#'     same \eqn{\phi}{phi} as `y ~ x`. Refused for other families
+#'     and when the precision has covariates (`y ~ x | z`), so it is
+#'     not a single number.
+#'   \item GEE (`geepack::geeglm` only): `"qic"` and `"qicu"` -- the
+#'     quasi-likelihood information criteria (Pan 2001; QIC for
+#'     working-correlation choice, QICu for covariate choice) via
+#'     [geepack::QIC()], computed only when requested (QIC silently
+#'     refits the independence working model); `"scale"` -- the
+#'     estimated scale (dispersion) parameter, shown only when the
+#'     fit estimated it (blank under `scale.fix = TRUE`, matching
+#'     geepack's own summary); `"max_cluster_size"` -- the largest
+#'     cluster in the estimation sample (on by default with
+#'     `"n_groups"`, which renders the `N (<id>)` cluster count).
+#'     Cluster statistics count the clusters geepack itself used
+#'     (`geese$clusz`, consecutive runs of `id =` values), so they
+#'     always describe the displayed sandwich inference.
+#'     Refused when no model in the table is a geeglm fit; the
+#'     likelihood-based tokens (`"aic"`, pseudo-\eqn{R^2}{R^2}, ...)
+#'     are refused in return for all-GEE tables -- quasi-likelihood
+#'     has no likelihood.
+#'   \item Absorbed fixed effects (`fixest` fits, and `estimatr` fits
+#'     built with `fixed_effects =`): `"fixed_effects"` renders a
+#'     `Fixed effects:` block at the top of the fit statistics --
+#'     one Yes / No row per absorbed factor (the `etable` / `esttab`
+#'     convention), blank cells for models without the concept in
+#'     mixed tables -- and is on by default for both.
+#'     Varying-slope-only factors (`Origin[[x]]`) absorb no
+#'     intercept: they read No when another model absorbs that
+#'     factor, and contribute no row otherwise.
+#'     `"within_r2"` is the FE-partialled within
+#'     R-squared (a default for `feols`, opt-in for `estimatr`;
+#'     GLM-family fixest fits report fixest's McFadden `pr2`
+#'     instead). Both tokens are refused when no model in the table
+#'     absorbs fixed effects.
 #'   \item Effect size: `"f2"`.
-#'   \item Information criteria: `"AIC"`, `"AICc"`, `"BIC"`,
-#'     `"deviance"`.
+#'   \item Information criteria: `"aic"`, `"aicc"`, `"bic"`,
+#'     `"deviance"` (lowercase like every other token; the rendered
+#'     row labels stay `AIC` / `AICc` / `BIC`).
 #'   \item Change-stats for hierarchical comparison
 #'     (active under `nested = TRUE`; see *Hierarchical
 #'     comparison* below): `"r2_change"`, `"adj_r2_change"`,
@@ -91,11 +189,15 @@
 #'     `"deviance_change"`, `"p_change"`.
 #' }
 #'
-#' Default (resolved when `NULL`) is class-aware: lm fits get
-#' `c("nobs", "r2", "adj_r2")`; glm fits get
-#' `c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "AIC")`;
+#' Default (resolved when `NULL`) is class-aware: lm and
+#' `lm_robust` fits get
+#' `c("nobs", "r2", "adj_r2")`; glm and ordinal `polr` / `clm` fits get
+#' `c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke", "aic")`;
 #' mixed lm + glm sets union both groups (the renderer per-row
-#' em-dashes the inappropriate cell). When `nested = TRUE`, the
+#' en-dashes the inappropriate cell); Cox fits get
+#' `c("nobs", "n_events", "aic")`; GEE fits get
+#' `c("nobs", "n_groups", "max_cluster_size")` (the cluster
+#' structure, Stata `xtgee`-header style). When `nested = TRUE`, the
 #' class-aware default is extended with change tokens
 #' (`c("r2_change", "f_change", "p_change")` for lm,
 #' `c("lrt_change", "p_change")` for glm). The order of tokens in
@@ -121,14 +223,18 @@
 #'
 #' Duplicate explicit names in the list are rejected
 #' (`spicy_invalid_input`) -- they would silently collide in the
-#' internal model_id key.
+#' internal model_id key. So is a name that collides with the
+#' auto-filled label of another slot (`list("Model 2" = m1, m2)`):
+#' two models under one spanner cannot be told apart in the table,
+#' nor addressed by [inline()]. Rename the model, or pass
+#' `model_labels`.
 #'
 #' # Inference and standard errors
 #'
 #' `vcov` selects the variance-covariance estimator:
 #'
 #' \itemize{
-#'   \item `"classical"` -- OLS (lm) / MLE inverse Hessian (glm).
+#'   \item `"classical"` -- OLS (lm) / Fisher information (glm).
 #'   \item `"HC0"` to `"HC5"` -- heteroskedasticity-consistent
 #'     (via [sandwich::vcovHC()]).
 #'   \item `"CR0"` to `"CR3"` -- cluster-robust with
@@ -144,9 +250,11 @@
 #' same fit can appear several times with different estimators to
 #' compare standard errors side-by-side.
 #'
-#' Inferential regimes (B and AME share the same regime):
+#' Inferential regimes for `lm` / `glm` (B and AME share the same
+#' regime):
 #' \itemize{
-#'   \item `classical`, `HC*` -> t with `df.residual`.
+#'   \item `classical`, `HC*` -> t with `df.residual` (`lm`) /
+#'     z-asymptotic (`glm`).
 #'   \item `bootstrap`, `jackknife` -> z asymptotic.
 #'   \item `CR0`-`CR3` -> t with **Satterthwaite-corrected df** (B
 #'     via [clubSandwich::coef_test()]; AME via
@@ -155,6 +263,108 @@
 #'     `splines::ns()`), AME falls back to z-asymptotic with a
 #'     `spicy_fallback` warning.
 #' }
+#' For other classes the t-vs-z axis follows the estimator's native
+#' reference distribution (e.g. `glm`, `glmmTMB`, survival, ordinal,
+#' `betareg`, `mlogit` use z; `lm`, `lme`, `lmer`, `rms::ols` use t).
+#'
+#' ## Multinomial models: outcome categories as columns
+#'
+#' A single `nnet::multinom` model renders the publication layout:
+#' predictors as rows, one column group per **non-reference outcome
+#' category** (spanner = category name), so a predictor's effect can
+#' be compared across equations along its row. The mandatory footer
+#' note `Reference outcome: <level>.` names the base category (Stata's
+#' "base outcome" line); `outcome_labels` relabels the spanners (e.g.
+#' `"Student vs Employed"`). Fit statistics print once, under the
+#' first group. When per-category AMEs are requested the reference
+#' category appears as a last, AME-only group (its coefficient cells
+#' are empty -- the reference has no equation; its AMEs complete the
+#' zero-sum across categories). The default `show_columns` compacts
+#' to B / SE / p exactly like multi-model tables; request atomic
+#' tokens to restore CIs. Multi-model and `nested = TRUE` multinomial
+#' tables keep the one-row-per-(category, predictor) layout --
+#' categories-within-models would need two spanner levels.
+#' `tidy()` and `output = "long"` always return the long form
+#' (`"<category>: <term>"` rows), whatever the display;
+#' `as_structured()` mirrors the displayed table (one column set per
+#' category), as it does for every other layout.
+#'
+#' ## Robust SE availability by model class
+#'
+#' Not every estimator is defined for every class. A robust `vcov`
+#' the class cannot honour fails fast with `spicy_unsupported_vcov`
+#' -- never a silent model-based result under a robust label:
+#'
+#' \describe{
+#'   \item{`lm`, `glm`, `MASS::glm.nb`}{all of `classical`, `HC*`,
+#'     `CR*`, `bootstrap`, `jackknife`. `lm` additionally takes
+#'     `"CR1S"` -- the full Stata `regress, vce(cluster)`
+#'     convention: the CR1S small-sample scaling (equal to
+#'     [sandwich::vcovCL()] with `type = "HC1"`) with `t(G - 1)`
+#'     inference, `G` the number of clusters. Use it to reproduce
+#'     Stata tables; `"CR2"` (Bell-McCaffrey, Satterthwaite df)
+#'     remains the recommended modern choice. `"CR1S"` is refused
+#'     for `glm` with an explanation: Stata's ML commands use a
+#'     different convention (`G/(G-1)` scaling, z), so the label
+#'     would not match Stata output there.}
+#'   \item{`mlogit`}{`classical` + `CR*` only (cluster at the
+#'     choice-situation level) -- `sandwich::vcovHC()` mis-scales the
+#'     sandwich for mlogit's per-choice-situation scores, so `HC*` is
+#'     refused.}
+#'   \item{`lmer`, `lme`, `coxph`, `survreg`,
+#'     `mgcv::gam`/`bam`, `polr`, `clm`, `betareg`,
+#'     `nnet::multinom`, `pscl::zeroinfl`/`hurdle`,
+#'     `rms` (`ols`/`lrm`/`cph`/`Glm`)}{`classical`
+#'     + `CR*` only -- `HC*` and the resamplers (which refit
+#'     `lm`/`glm`) are not defined for these. `clm` with a scale /
+#'     nominal (partial-PO) component is `classical` only.
+#'     `multinom` needs \pkg{sandwich} >= 3.1-2 (which added its
+#'     `estfun()` method); its `cluster` is one entry per
+#'     observation. For the two-part `pscl` fits the cluster
+#'     sandwich covers both components (count and zero) at once.}
+#'   \item{`quantreg::rq`}{its own estimator family, not the sandwich
+#'     vocabulary: `classical` (= `"nid"`, quantreg's large-sample
+#'     default), `"iid"`, `"ker"`, `"rank"` (intervals only) and a
+#'     native `"bootstrap"`, clustered via the wild gradient
+#'     bootstrap. `HC*`, `CR*` and `jackknife` are refused, each with
+#'     its own reason -- see the `vcov` argument.}
+#'   \item{`geepack::geeglm`}{no spicy-side estimator at all: GEE
+#'     inference is robust by construction, so the fit's own sandwich
+#'     (or jackknife) standard errors -- chosen by geeglm's
+#'     `std.err =` option, clustered on its `id =` -- are the
+#'     displayed inference. `HC*` / `CR*` and `cluster` are refused
+#'     with a pointer to those fit options.}
+#'   \item{`survey::svyglm`}{`classical` only, on principle: the
+#'     design-based Taylor / replicate variance is already the robust
+#'     variance for the declared design, and clustering belongs in
+#'     the design itself (`survey::svydesign(ids = )`), not in the
+#'     table call.}
+#'   \item{`estimatr` (`lm_robust`/`iv_robust`) and `fixest`}{these
+#'     fits carry the variance they were computed with -- estimatr's
+#'     `se_type =`, and whatever fixest's own `vcov` interface
+#'     produced -- and spicy never overwrites it. A `vcov` request is
+#'     refused; set the estimator through the fitting package instead
+#'     (`se_type =` for estimatr; `vcov =` at estimation or in
+#'     `summary()` for fixest).}
+#'   \item{Other classes (`glmer`, `glmmTMB`,
+#'     `rstanarm`/`brms`, ...)}{`classical` (model-based) only
+#'     (\pkg{clubSandwich} has no working backend for `glmer` /
+#'     `glmmTMB`).}
+#' }
+#'
+#' Cluster-robust backends differ by class but are each cross-validated
+#' to the field-standard oracle: `lm`/`glm`/`lmer`/`lme` use
+#' \pkg{clubSandwich} (CR2 = Bell-McCaffrey, with Satterthwaite df for
+#' `lm`/`lme`/`lmer`); `coxph`/`cph` use the Lin-Wei grouped-dfbeta
+#' sandwich (identical to `coxph(..., cluster=)`);
+#' `survreg`/`gam`/`polr`/`clm`/`betareg`/`mlogit`/`multinom` and the
+#' `pscl` two-part fits use
+#' [sandwich::vcovCL()]; `rms` fits use [rms::robcov()] (which
+#' needs the fit's `x = TRUE, y = TRUE`). These single cluster
+#' sandwiches have no CR0-CR3 bias-reduction variants, so the requested
+#' `CR*` maps to the one available estimator. `cluster` length is one
+#' entry per observation, except `mlogit` (one per choice situation)
+#' and censored `coxph` (one per subject).
 #'
 #' ## How to specify `cluster`
 #'
@@ -180,13 +390,78 @@
 #'     otherwise not a column of the model's `data`.
 #' }
 #'
-#' Bare unquoted names (`cluster = region`) are **not** accepted --
-#' they would require non-standard evaluation magic that breaks
-#' under programmatic use (function wrapping, dynamic column
-#' choice, loops). Use `~region` or `"region"` instead.
+#' A bare unquoted name (`cluster = region`) is **not** column
+#' selection: it is evaluated as an ordinary R variable. If an object
+#' `region` exists in the calling environment, its value is used as
+#' the **vector** form above; if it does not (the typical "unquoted
+#' column name" intent), the call fails with a migration error
+#' pointing at `~region` / `"region"`. Bare-name column selection is
+#' deliberately unsupported -- it would require non-standard
+#' evaluation magic that breaks under programmatic use (function
+#' wrapping, dynamic column choice, loops).
 #'
 #' For multi-model use, mix forms freely:
 #' `cluster = list(~region, "region", df$region)`.
+#'
+#' # Bayesian fits (rstanarm / brms)
+#'
+#' `stanreg` and `brmsfit` models are summarized from their posterior
+#' draws: `B` is the posterior median, `SE` the posterior MAD SD (the
+#' scaled median absolute deviation -- the pairing of *Regression and
+#' Other Stories* and rstanarm's own print; equal to the posterior SD
+#' for a normal posterior), and the interval an equal-tailed credible
+#' interval (header `95% CrI`; `ci_method = "hdi"` opts into the
+#' highest-density interval, header `95% HDI`). There is no p-value
+#' or t-statistic; group presets (`"all_b"`, ...) expand without
+#' them, and the opt-in `"pd"` column reports the probability of
+#' direction with a footer definition (Makowski et al. 2019). Under
+#' `exponentiate = TRUE` all quantities are computed from the
+#' exponentiated draws directly (the SE is the posterior MAD SD on
+#' the ratio scale, not a delta-method approximation). The AME
+#' columns are equally draws-native: `avg_slopes()` computes the
+#' marginal effects per posterior draw, and the table reports their
+#' posterior median, MAD SD and credible interval (equal-tailed or
+#' HDI per `ci_method`); `"ame_p"` has nothing to fill and follows
+#' the p-column policy (dropped from presets, refused as an atomic
+#' token, dashed in mixed tables). Standardized betas follow the same
+#' draws logic: `"posthoc"` / `"basic"` / `"smart"` are exact affine
+#' rescales of the link-scale summaries (the Gaussian family divides
+#' by SD(y); every other family standardizes predictors only, the
+#' frequentist glm convention); `"refit"` and `"pseudo"` are refused.
+#'
+#' Fit statistics: `"r2_bayes"` (in the Bayesian default) plus the
+#' opt-in `"elpd_loo"` / `"looic"` / `"waic"`, whose standard errors
+#' are disclosed in the footer; unreliable estimates (PSIS-LOO Pareto
+#' k above the sample-size-specific threshold
+#' \eqn{\min(1 - 1/\log_{10} S, 0.7)}{min(1 - 1/log10(S), 0.7)} of
+#' Vehtari et al. 2024 -- the same bound `loo::loo()` prints -- and
+#' WAIC p_waic > 0.4) add a footer caveat instead of being
+#' silenced. Every table is backed by an automatic sampler-diagnostics
+#' guard (R-hat >= 1.01, ESS below 100 per chain -- floored at 400 so
+#' fewer chains never weaken the bar --, divergent
+#' transitions, E-BFMI < 0.2, per Vehtari et al. 2021): problems add
+#' a footer line and raise a warning classed
+#' `spicy_bayes_diagnostics` (nested under `spicy_caveat`, so
+#' `withCallingHandlers(spicy_bayes_diagnostics = ...)` mutes the
+#' guard selectively); clean fits print nothing. Per-coefficient
+#' `"rhat"` / `"ess_bulk"` / `"ess_tail"` columns are available in
+#' all-Bayesian tables, as is `"mcse"` -- the Monte Carlo standard
+#' error of the displayed posterior median, the criterion for how
+#' many digits a table can honestly show (a displayed digit is
+#' Monte-Carlo stable when twice the MCSE stays below it; Gelman,
+#' Vehtari, McElreath et al. 2026, sec. 11.6). Under
+#' `exponentiate = TRUE` the MCSE is recomputed on the exponentiated
+#' draws.
+#'
+#' Refused on principle (classed error, never a silent fallback):
+#' likelihood-based fit statistics (`"aic"`, pseudo-R², ...),
+#' `p_adjust`, robust / cluster `vcov` (model the clustering with
+#' group-level terms instead), `ci_method = "profile"` /
+#' `"boot_percentile"`, and non-MCMC fits
+#' (`algorithm = "meanfield"` / `"optimizing"` -- refit with
+#' `algorithm = "sampling"`). See the
+#' [Bayesian regression tables](https://amaltawfik.github.io/spicy/articles/table-regression-bayesian.html)
+#' article.
 #'
 #' # Hierarchical (nested) model comparison
 #'
@@ -194,24 +469,75 @@
 #' rows** (APA Table 7.13 / Stata `esttab` / SPSS Model Summary
 #' convention). Each adjacent pair (M2 vs M1, M3 vs M2, ...)
 #' contributes one column of change stats; the FIRST model column
-#' gets em-dashes (no previous model to compare to). Validation
+#' gets en-dashes (no previous model to compare to). Validation
 #' requires identical `nobs` and identical response variable
 #' across all models.
+#'
+#' **Structural refusals.** Four hierarchies carry no valid change
+#' statistic whatever their `nobs` and response, and are refused with
+#' `spicy_invalid_input` rather than rendered with empty or
+#' meaningless cells:
+#' \itemize{
+#'   \item *A REML pair whose fixed effects differ*
+#'     (`nlme::lme(method = "REML")`, `glmmTMB(REML = TRUE)`). The
+#'     restricted likelihood depends on the fixed-effects design
+#'     matrix, so the two criteria are not on a common scale and the
+#'     likelihood-ratio test is not valid (Pinheiro & Bates 2000
+#'     Section 2.4.2). Refit both by maximum likelihood
+#'     (`method = "ML"`, `REML = FALSE`). A REML pair that differs
+#'     only in its random structure stays valid and is accepted.
+#'   \item *Two `fixest` fits that absorbed different fixed
+#'     effects*. fixest counts every absorbed level as an estimated
+#'     parameter, so a test across two `| fe` structures measures the
+#'     change in the absorbed effects together with the change in the
+#'     coefficients, and the two cannot be separated. Hold the
+#'     `| fe` part fixed across the hierarchy.
+#'   \item *Mixed-effects fits from different engines* (`lme4`,
+#'     `glmmTMB`, `nlme::lme`). The change statistics come from the
+#'     engine's own two-model `anova()`, and no engine's method
+#'     accepts a fit produced by another. Refit one of the two with
+#'     the other's engine.
+#'   \item *A `MASS::rlm` hierarchy*. M-estimation minimises a
+#'     bounded loss on the scaled residuals: it partitions no sums of
+#'     squares and it is not a likelihood, so there is neither a
+#'     likelihood-ratio test nor a partial F to report. Every change
+#'     token is refused -- including on a single fit or a
+#'     `nested = FALSE` pair, where the token is the explicit
+#'     request. Compare the least-squares fits (`lm()`) if the
+#'     hierarchy itself is the question.
+#' }
+#' In the first three, `nested = FALSE` renders the models side by
+#' side instead.
 #'
 #' Default change tokens auto-injected when `show_fit_stats` is
 #' `NULL`:
 #' \itemize{
-#'   \item All-lm: `c("r2_change", "f_change", "p_change")` --
-#'     APA hierarchical regression standard.
+#'   \item All-lm (and `nls`): `c("r2_change", "f_change",
+#'     "p_change")` -- APA hierarchical regression standard.
 #'   \item All-glm: `c("lrt_change", "p_change")` -- Hosmer &
-#'     Lemeshow Section 3.5; Long & Freese 2014 Section 3.6.
+#'     Lemeshow Section 3.5; Long & Freese 2014 Section 3.2.4.
+#'   \item Any other hierarchy that carries a likelihood
+#'     (`survreg`, `polr`, `clm`, `coxph`, `gls`, `betareg`,
+#'     `multinom`, `fixest`, ...): the same
+#'     `c("lrt_change", "p_change")`.
+#'   \item Mixed-effects (`lmer` / `glmer` / `glmmTMB` /
+#'     `nlme::lme`): `c("aic_change", "bic_change", "lrt_change",
+#'     "p_change")` -- Pinheiro & Bates 2000 Section 2.4.1.
+#'   \item Quantile (`rq`): `c("f_change", "p_change")` -- the
+#'     Wald-type test `quantreg::anova.rq()` reports.
 #' }
 #' To customise, pass the change tokens directly to
-#' `show_fit_stats`. Variance-explained change tokens on an
-#' all-glm hierarchy raise `spicy_invalid_input` (the
-#' residual-sum-of-squares partition does not apply outside the
-#' least-squares framework -- the renderer points the user at
-#' `lrt_change`).
+#' `show_fit_stats`. The variance-explained change tokens
+#' (`"r2_change"`, `"adj_r2_change"`, `"f_change"`,
+#' `"f2_change"`) raise `spicy_invalid_input` on any hierarchy
+#' whose nested comparison is a likelihood-ratio test -- `glm`,
+#' and equally every other likelihood class and the
+#' mixed-effects families: that comparison reports a chi-square,
+#' not a variance-explained change, and the message points at
+#' `"lrt_change"` + `"p_change"`. A quantile hierarchy refuses
+#' them too, and `"lrt_change"` with them, pointing at
+#' `"f_change"` + `"p_change"` instead. `lm` and `nls` keep the
+#' least-squares tokens.
 #'
 #' # Standardised coefficients
 #'
@@ -220,7 +546,7 @@
 #' \itemize{
 #'   \item `"refit"` -- refit on z-scored data. For `lm` both X
 #'     and Y are z-scored (Cohen et al. 2003 gold standard); for
-#'     `glm` only numeric X (Long & Freese 2014 Section 4.3.4
+#'     `glm` only numeric X (Long & Freese 2014 Section 4.7.2
 #'     "x-standardization").
 #'   \item `"posthoc"` -- post-hoc scaling. lm:
 #'     \eqn{\beta = B \times SD(X) / SD(Y)}{beta = B * SD(X) / SD(Y)};
@@ -228,8 +554,11 @@
 #'     (Y is undefined on the link scale).
 #'   \item `"basic"` -- like `"posthoc"` but factor dummies are
 #'     scaled by their column SD.
-#'   \item `"smart"` -- Gelman (2008): divide binary predictors
-#'     by `2 * SD` instead of `SD`.
+#'   \item `"smart"` -- Gelman (2008): continuous numeric inputs
+#'     are scaled by `2 * SD(X)` (a +/-1 SD swing then spans the
+#'     same range as a binary's 0 to 1 step); binary inputs --
+#'     numeric 0/1 and factor dummies -- are left unscaled. (Before
+#'     0.13.0 the rule was applied inverted; see NEWS.)
 #'   \item `"pseudo"` -- *glm only*. Menard (2004, 2011)
 #'     fully-standardised \eqn{\beta = B \times SD(X) / SD(Y^*)}{beta = B * SD(X) / SD(Y*)},
 #'     with \eqn{Y^*}{Y*} the latent variable on the link scale and
@@ -240,11 +569,27 @@
 #'   \item `"none"` (default) -- no \eqn{\beta}{beta} computed.
 #' }
 #'
-#' Under interactions or transformed predictors (`I()`, `poly()`,
-#' `log()`, `splines::ns()`), a `spicy_caveat` warns that
-#' standardised coefficients on such terms are subtle to interpret
-#' (Cohen et al. 2003 Section 7.7; Aiken & West 1991). The caveat is
-#' auto-documented in the footer.
+#' **Interactions and transforms.** Under `"refit"`, an interaction's
+#' \eqn{\beta}{beta} is the coefficient of the product of the z-scored
+#' components -- the recommended treatment for such models (Cohen et
+#' al. 2003 Section 7.7; Aiken & West 1991; Friedrich 1982). Under
+#' `"posthoc"`, `"basic"`, and `"smart"`, the product / transformed
+#' design column is treated as a single numeric column and scaled by
+#' its own SD (under `"smart"`, by `2 * SD` when the product column is
+#' continuous; a binary product column -- e.g. a binary-by-binary
+#' interaction -- stays unscaled like any binary input) -- the
+#' convention of SPSS beta, Stata `regress, beta`, SAS PROC REG `STB`, and
+#' `lm.beta::lm.beta()`, identical to
+#' `effectsize::standardize_parameters(method = "basic")` on those
+#' columns. The two conventions differ whenever the components are
+#' correlated; a `spicy_caveat` warns and the footer names the
+#' convention actually used. `"refit"` declines formulas with inline
+#' transforms (`log(x)`, `poly()`, `factor()` written in the formula):
+#' the model frame's evaluated columns cannot be re-evaluated on
+#' z-scored data, so spicy falls back to `"posthoc"` with a warning
+#' (`effectsize`'s refit instead standardizes *before* the transform
+#' -- a different estimand). Pre-build transformed columns in `data`
+#' for an exact refit.
 #'
 #' # Multiple-comparison adjustment
 #'
@@ -266,6 +611,38 @@
 #' and reference rows excluded), not the displayed subset --
 #' filtering is a display choice and must not change the
 #' inferential family.
+#'
+#' # Tied event times and the survival estimands
+#'
+#' A Cox model has to decide what to do when several events share
+#' the same time, and `survival::coxph()` decides with
+#' `ties = "efron"` by default. The absolute estimands do not make
+#' a second decision:
+#'
+#' **The baseline hazard behind the RMST-difference and
+#' risk-difference columns follows the tie-handling convention of
+#' the fit, exactly as [survival::survfit()] and
+#' [survival::basehaz()] do.** A `ties = "breslow"` fit gives a
+#' Breslow baseline; the default Efron fit gives an Efron baseline.
+#' One rule, so the hazard-ratio column and the dRMST column always
+#' come from the same likelihood. To change the convention, change
+#' the fit.
+#'
+#' When the choice matters is not simply "when there are many
+#' ties". What governs it is the fraction of tied events *within
+#' the risk set*, together with the effect size and the spread of
+#' the covariates: a large risk set dilutes a tied block, a small
+#' one -- fine strata, matched or nested case-control designs --
+#' does not. A file with hundreds of tied days can be insensitive
+#' to the convention while a small stratified one with a handful of
+#' ties is not.
+#'
+#' And Efron is the better default, not the correct answer: the
+#' approximations are all biased at finite sample size and agree
+#' asymptotically, and Efron's virtue is a much smaller small-sample
+#' bias (Hertz-Picciotto & Rockhill 1997). Efron himself, quoting
+#' Peto, put it as "it probably doesn't make much difference"
+#' (Efron 1977).
 #'
 #' # Output formats and broom integration
 #'
@@ -293,6 +670,36 @@
 #' model with the model-level statistics; `df.residual` is kept
 #' numeric so cluster-robust Satterthwaite df is preserved.
 #'
+#' # Global options
+#'
+#' * **`options(spicy.style = )`** -- the journal style applied by
+#'   default to all four table families
+#'   (`table_regression()`, `table_categorical()`,
+#'   `table_continuous()`, `table_continuous_lm()`). Takes a theme
+#'   name (`"jama"`, `"nejm"`, `"lancet"`, `"annals"`, `"apa"`,
+#'   `"aer"`) or a [spicy_style()] object. The style of a report is a
+#'   property of the document, so it is set once in the setup chunk;
+#'   the `style` argument overrides it per call, and any formatting
+#'   argument you type overrides both. `options(spicy.style = NULL)`
+#'   restores spicy's own defaults. See [spicy_style()] for the exact
+#'   rules each theme encodes and the official document they come
+#'   from.
+#'
+#' * **`options(spicy.note_style = )`** -- how the table note is
+#'   rendered by the `"tinytable"` engine (all four table families).
+#'   A note is subordinate to the table it documents, so it is set
+#'   one size down, in black: `0.9em`, matching the `"gt"` engine and
+#'   the 10pt-on-11pt of the Word engine. Two opt-ins:
+#'   \itemize{
+#'     \item `"none"` -- no intervention; the note is rendered
+#'       exactly as the receiving document template styles it.
+#'     \item any other string -- extra arguments for the Typst
+#'       `text()` call around the note, appended to the size (e.g.
+#'       `options(spicy.note_style = "fill: luma(89)")` for a grey
+#'       note). Typst only; the HTML note keeps the plain `0.9em`.
+#'   }
+#'   `options(spicy.note_style = NULL)` restores the default.
+#'
 #' # Weights
 #'
 #' No `weights` argument: weights are a property of the fit
@@ -308,16 +715,43 @@
 #' `labels`. The title and footer are post-processable via
 #' `attr(result, "title")` and `attr(result, "note")`.
 #'
-#' @param models An `lm` or `glm` fitted model, or a list of such
-#'   fits (named or unnamed; `lm` and `glm` may be mixed). Single
-#'   fits are auto-promoted to a 1-element list. `merMod` and
-#'   other classes raise `spicy_unsupported`. Raw data + formula
-#'   is not accepted -- fit-only API.
+#' @param models A fitted model object, or a list of such fits
+#'   (named or unnamed; classes may be mixed). Single fits are
+#'   auto-promoted to a 1-element list. A broad set of model classes
+#'   is supported -- linear / generalised linear (`lm`, `glm`,
+#'   `MASS::glm.nb`), mixed-effects (`lmer`, `lme`, `glmmTMB`),
+#'   survival (`coxph`, `survreg`), ordinal (`polr`, `clm`),
+#'   `mgcv::gam`/`bam`, `betareg`, `mlogit`, `survey::svyglm`, `rms`
+#'   (`ols`/`lrm`/`cph`/`Glm`), and Bayesian (`rstanarm`/`brms`),
+#'   among others. An unsupported class raises
+#'   `spicy_unsupported`. Raw data + formula is not accepted
+#'   -- fit-only API.
 #' @param vcov Variance-covariance estimator: `"classical"`,
 #'   `"HC0"`-`"HC5"`, `"CR0"`-`"CR3"`, `"bootstrap"`, or
 #'   `"jackknife"`. A scalar is recycled to all models; a list
 #'   (one string per model) allows mixed estimators. Default
-#'   `"classical"`. See *Inference and standard errors*.
+#'   `"classical"`. The resampling estimators (`lm` / `glm`,
+#'   including `MASS::glm.nb`) refit each replicate on resampled rows
+#'   of the fixed evaluated design; for `glm.nb` the dispersion
+#'   parameter theta is held at its full-sample estimate (Stata's
+#'   `nbreg, vce(bootstrap)` re-estimates it per replicate -- the two
+#'   conventions differ slightly). Resampling that fails on nearly
+#'   every replicate raises `spicy_resampling_failed` rather than
+#'   silently reporting a different estimator.
+#'   Quantile regression (`quantreg::rq`) uses its own estimator
+#'   family instead: `"classical"` resolves to the
+#'   heteroskedasticity-robust `"nid"` sandwich (Hendricks-Koenker,
+#'   Hall-Sheather bandwidth -- quantreg's own large-sample default
+#'   and the Stata `vce(robust)` analogue), with `"iid"`
+#'   (Koenker-Bassett homoskedastic, Stata `vce(iid)` parity),
+#'   `"ker"` (Powell kernel) and `"rank"` (rank-score inversion:
+#'   genuine CIs, no SE / t / p -- those cells render as dashes) as
+#'   opt-ins, and `"bootstrap"` running quantreg's native `boot.rq`
+#'   (`bsmethod = "xy"`; with `cluster =`, the Hagemann 2017 wild
+#'   gradient cluster bootstrap -- the one cluster-robust route for
+#'   `rq`; `CR*` and `HC*` are refused for `rq`, as is
+#'   `"jackknife"`, whose leave-one-out form is inconsistent for
+#'   quantiles). See *Inference and standard errors*.
 #' @param cluster Cluster identifier for cluster-robust variance
 #'   (used when `vcov` is `"CR0"`-`"CR3"` or a cluster-bootstrap /
 #'   cluster-jackknife). Three accepted forms (see *How to specify
@@ -330,9 +764,12 @@
 #'       on the fly).
 #'   }
 #'   For multi-model use, pass a list of one form per model
-#'   (mix-and-match allowed). Bare unquoted names
-#'   (`cluster = region`) are NOT accepted -- use `~region` or
-#'   `"region"`. Default `NULL` (no clustering).
+#'   (mix-and-match allowed). A bare unquoted name
+#'   (`cluster = region`) is not column selection: it is evaluated
+#'   as an ordinary variable (the vector form when `region` exists
+#'   in the calling environment, a migration error pointing at
+#'   `~region` / `"region"` otherwise). Default `NULL` (no
+#'   clustering).
 #' @param ci_level Confidence level for all reported CIs (B, \eqn{\beta}{beta},
 #'   AME, partial effect sizes). Default `0.95`.
 #' @param boot_n Number of bootstrap replicates when
@@ -340,28 +777,102 @@
 #'   `1000L`.
 #' @param ci_method CI construction. `"wald"` (default) uses
 #'   `estimate +/- z x SE` (`t x SE` for `lm`). `"profile"`
-#'   (*glm only*) uses the profile-likelihood CI from
-#'   [MASS::confint.glm()] -- asymmetric, exact for
-#'   likelihood-based inference (Venables & Ripley *MASS* Section 7.2).
-#'   Only the CI bounds change; estimate, SE, statistic and
-#'   p-value remain Wald. `"profile"` with `lm` raises
+#'   (`glm` and ordinal `MASS::polr` / `ordinal::clm`) uses the
+#'   profile-likelihood CI from [stats::confint()] --
+#'   [MASS::confint.glm()] for `glm`, `confint.polr()` / `confint.clm()`
+#'   for ordinal fits -- asymmetric, exact for likelihood-based
+#'   inference (Venables & Ripley *MASS* Section 7.2). Only the CI bounds
+#'   change; estimate, SE, statistic and p-value remain Wald. For ordinal
+#'   fits the profile covers the predictor coefficients (the cut-point
+#'   thresholds stay Wald), and a robust `vcov` takes precedence (its
+#'   Wald-robust CIs are used instead, with a consolidated warning).
+#'   `"profile"` with `lm` raises `spicy_invalid_input`.
+#'   `"boot_percentile"` (requires `vcov = "bootstrap"` for every
+#'   model) replaces the coefficient CI bounds with equal-tailed
+#'   percentile intervals of the bootstrap replicates (the
+#'   [boot::boot.ci()] `type = "perc"` convention; Davison & Hinkley
+#'   1997, ch. 5), reusing the same resamples as the bootstrap SEs.
+#'   Only the CI bounds change; estimate, SE, statistic and p-value
+#'   remain Wald from the bootstrap covariance -- the Stata convention
+#'   (normal-based table CIs by default, percentile on request via
+#'   `estat bootstrap`). AME and standardized-beta CIs are not
+#'   covered. With `exponentiate = TRUE` the percentile bounds are
+#'   exponentiated (percentile intervals are
+#'   transformation-respecting).
+#'   `"hdi"` (Bayesian `stanreg` / `brmsfit` fits only) replaces the
+#'   default equal-tailed credible interval with the highest-density
+#'   interval -- the shortest interval containing `ci_level` of the
+#'   posterior draws (Kruschke 2015), relabelling the column header
+#'   `95% HDI`. Unlike the equal-tailed interval the HDI is not
+#'   transformation-invariant, so under `exponentiate = TRUE` it is
+#'   recomputed on the exponentiated draws rather than transformed.
+#'   Requesting `"hdi"` for a frequentist fit, or `"profile"` /
+#'   `"boot_percentile"` for a Bayesian fit, raises
 #'   `spicy_invalid_input`.
 #' @param standardized Standardisation method for the `"beta"`
 #'   column. One of `"none"` (default), `"refit"`, `"posthoc"`,
 #'   `"basic"`, `"smart"`, `"pseudo"`. `"pseudo"` is *glm only*
 #'   (Menard 2011 fully-standardised); using it with `lm()` raises
-#'   `spicy_invalid_input`. See the *Standardised coefficients*
+#'   `spicy_invalid_input`. Supported classes: `lm`, `glm`
+#'   (incl. `MASS::glm.nb`), the mixed engines (`lmer` /
+#'   `glmer` / `glmmTMB` / `nlme::lme`), and fixed-effects
+#'   `stan_glm`-style `stanreg` fits for the algebraic flavors
+#'   `"posthoc"` / `"basic"` / `"smart"` -- exact affine rescales of
+#'   the posterior draws (median, MAD SD and credible bounds all
+#'   scale by the same positive SD ratio; the beta stays on the link
+#'   scale under `exponentiate = TRUE`). Standard-formula
+#'   fixed-effects `brmsfit` models are supported too (their design
+#'   matrix is recovered through \pkg{insight}); the scale factors
+#'   are engine-invariant, so the same model fit with rstanarm or
+#'   brms gets identical betas up to sampling noise. Bayesian
+#'   `"refit"` (would re-run the sampler) and `"pseudo"` (per-draw
+#'   latent variance; planned) are refused. Also refused: multilevel
+#'   fits (`stan_glmer` / `stan_lmer` and `brm()` with group-level
+#'   terms; a Bayesian beta would need an explicit sd(Y)
+#'   decomposition that the frequentist mixed engines resolve by
+#'   refitting on z-scored data), non-GLM `stanreg` subclasses
+#'   (`stan_polr`, `stan_betareg`), and brms formulas with
+#'   distributional, multivariate or special terms (`mo()`, `s()`,
+#'   ...). In all refused Bayesian cases, standardize predictors
+#'   before fitting instead. Any other class
+#'   raises
+#'   `spicy_unsupported_standardized` rather than rendering an
+#'   empty beta column. See the *Standardised coefficients*
 #'   section.
-#' @param exponentiate Logical. When `TRUE` and the model is a
-#'   `glm` with a non-identity link, `B`, the CI bounds, and the
-#'   SE are transformed via `exp()` (delta method:
-#'   `SE_OR = OR x SE_log-odds`). The column header is rebranded
-#'   per family / link: `OR` (binomial logit), `IRR` (poisson
-#'   log), `HR` (binomial cloglog), `RR` (binomial log), `MR`
-#'   (Gamma log), else `exp(B)`. The statistic and p-value stay
-#'   on the link scale (invariant under monotone transformation).
-#'   Default `FALSE`. No effect on `lm` or identity-link glm;
-#'   emits a `spicy_ignored_arg` warning in those cases.
+#' @param exponentiate Logical. When `TRUE`, `B`, the CI bounds, and
+#'   the SE (delta method: `SE_OR = OR x SE_log-odds`) are
+#'   `exp()`-transformed for links where the result is a ratio:
+#'   logit (`OR`), log (`IRR` / `RR` / `MR` per family, generic
+#'   `exp(B)` for other log-link families -- a genuine ratio of
+#'   means), and binomial / ordinal cloglog (`HR`; grouped-time
+#'   proportional hazards, Prentice & Gloeckler 1978). For the
+#'   *ordinal* (cumulative) cloglog model the displayed `HR` is
+#'   `exp(-B)`, not `exp(B)`: the cumulative parametrisation
+#'   `cloglog P(Y <= j) = zeta_j - xB` places the hazard of the
+#'   grouped event on `-B`, so `exp(B)` would be the reciprocal of
+#'   the hazard ratio (the CI endpoints are negated and swapped
+#'   accordingly, and the table note discloses the convention; a
+#'   cloglog `clm` with `nominal =` terms refuses `exponentiate`
+#'   because threshold-side coefficients have no covariate-HR
+#'   reading). The statistic
+#'   and p-value stay on the link scale (invariant under monotone
+#'   transformation). Identity-link fits are left untouched (a
+#'   `spicy_ignored_arg` warning fires when no model in the table
+#'   exponentiates), so mixed `lm` + logit tables keep working. Any
+#'   other link (probit, cauchit, inverse -- the
+#'   `Gamma()` default --, `1/mu^2`, sqrt, ordinal `loglog`, ...)
+#'   raises `spicy_invalid_input`: the exponential of such a
+#'   coefficient has no ratio interpretation, and reporting it
+#'   would mislabel the estimate. Report response-scale effects for
+#'   those models via the AME column instead. Note that the displayed
+#'   CI is the link-scale CI with exponentiated endpoints (Wald or
+#'   profile per `ci_method`), so it is asymmetric around the ratio
+#'   and cannot be reconstructed as `estimate ± z × SE`; the
+#'   delta-method SE follows the Stata convention (`[R] logistic`,
+#'   Methods and formulas: `se(OR) = OR × se(b)`) and the log-scale
+#'   CI endpoints carry the uncertainty more faithfully than this SE.
+#'   The footer states the SE scale and the CI asymmetry whenever an
+#'   SE column is displayed. Default `FALSE`.
 #' @param p_adjust Multiple-comparison adjustment method applied
 #'   to the family of estimated coefficient p-values within each
 #'   model (intercept and reference rows excluded). One of
@@ -372,20 +883,41 @@
 #'   own families). Active adjustments are documented in the
 #'   footer (method + family size). See the *Multiple-comparison
 #'   adjustment* section for when this is and is not appropriate.
+#' @param tau RMST horizon: the `"rmst"` column family reports the
+#'   restricted-mean-survival-time difference over `[0, tau]`
+#'   (`coxph` and `survreg` fits). A positive time on the outcome's scale, or
+#'   `"minmax"` for the smallest per-group maximum follow-up (the
+#'   resolved value is disclosed in the table note). No default: the
+#'   horizon defines the estimand. Stratified fits (`strata()`) are
+#'   supported: standardization keeps each subject's own stratum
+#'   baseline, disclosed in the table note.
+#' @param at_time Landmark time for the `"risk_diff"` column family:
+#'   the difference in cumulative incidence at `at_time` (`coxph`
+#'   and `survreg` fits). A positive time on the outcome's scale; no default.
 #' @param show_columns Character vector of tokens selecting the
 #'   per-coefficient columns and their display order. Accepts
 #'   **atomic tokens** (`"b"`, `"se"`, `"ci"`, `"t"`, `"p"`,
-#'   `"beta"`, `"ame"`, `"ame_se"`, `"ame_ci"`, `"ame_p"`,
+#'   `"beta"`, `"n"`, `"n_events"`, `"pd"` (probability of
+#'   direction, Bayesian fits only), `"rhat"` / `"ess_bulk"` /
+#'   `"ess_tail"` / `"mcse"` (per-coefficient sampler diagnostics and
+#'   the Monte Carlo standard error of the displayed posterior
+#'   median, all-Bayesian tables only), `"ame"`, `"ame_se"`, `"ame_ci"`,
+#'   `"ame_p"`, `"rmst"` + `"rmst_se"` / `"rmst_ci"` / `"rmst_p"`,
+#'   `"risk_diff"` + its `_se` / `_ci` / `_p` companions,
 #'   `"partial_f2"` + `"partial_f2_ci"`, `"partial_eta2"` +
 #'   `"partial_eta2_ci"`, `"partial_omega2"` +
-#'   `"partial_omega2_ci"`, `"partial_chi2"`) and **group tokens**
+#'   `"partial_omega2_ci"`, `"partial_chi2"`, `"r2"` / `"adj_r2"`
+#'   (per-fit variance explained, `lm` screens)) and **group tokens**
 #'   (`"all_b"`, `"all_b_compact"`, `"all_b_full"`, `"all_beta"`,
 #'   `"all_ame"`, `"all_ame_compact"`, `"all_f2"`, `"all_eta2"`,
 #'   `"all_omega2"`). See *Vocabulary tokens* in the details for
 #'   the full enumeration. Default `NULL` selects a context-aware
-#'   layout: `"all_b"` (single model) or `"all_b_compact"` (multi-
-#'   model). The `"p"` token is always the B / beta p-value; for
-#'   the AME-specific p-value use `"ame_p"`.
+#'   layout: `"all_b"` (single model) or `"all_b_compact"`
+#'   (multi-model, and the single-multinomial outcome-as-columns
+#'   layout, which has the same width pressure -- restore CIs with
+#'   atomic tokens, e.g. `c("b", "se", "ci", "p")`). The `"p"`
+#'   token is always the B / beta p-value; for the AME-specific
+#'   p-value use `"ame_p"`.
 #' @param keep Character vector of regexes. Only coefficient rows
 #'   whose term name (as in [stats::coef()] -- e.g. `"wt"`,
 #'   `"cyl6"`, `"factor(cyl)8"`) matches at least one pattern are
@@ -397,6 +929,42 @@
 #'   `keep`. Default `NULL`.
 #' @param show_intercept Whether to display the intercept row.
 #'   Default `TRUE` (APA convention). Hide via `FALSE`.
+#' @param show_thresholds For ordinal cumulative-link models
+#'   (`MASS::polr`, `ordinal::clm`), whether to display the estimated
+#'   category thresholds (cut-points) as a subordinate `"Thresholds"`
+#'   block of rows below the predictors, carrying B / SE / CI / p like
+#'   the predictor rows. Default `TRUE`. `FALSE` collapses them to a
+#'   compact one-line footer note instead. Thresholds are reported on
+#'   the log-odds (B) scale and are **never exponentiated** (under
+#'   `exponentiate = TRUE` their rows stay on the log-odds scale).
+#'   Has no effect on non-ordinal models, and the rows are shown only
+#'   when a coefficient column (`"b"`/`"beta"`) is in `show_columns`.
+#' @param show_components For models with secondary components,
+#'   whether to display them as labelled subordinate blocks of rows
+#'   below the primary (count / conditional / location) coefficients.
+#'   Default `TRUE`:
+#'   \itemize{
+#'     \item `pscl::zeroinfl` and `glmmTMB(ziformula = )`: a
+#'       `Zero-inflation` block -- the model for the probability of a
+#'       **structural (excess) zero**.
+#'     \item `pscl::hurdle`: a `Zero hurdle` block -- the model for the
+#'       probability of a **nonzero count** (note the opposite direction
+#'       vs zero-inflation; the footer names each block's meaning).
+#'     \item `glmmTMB(dispformula = )`: a `Dispersion` block (only when
+#'       dispersion was actually modelled; log scale, never
+#'       exponentiated).
+#'     \item `ordinal::clm(scale = ~)`: a `Scale effects` block -- the
+#'       covariate effects on the **log standard deviation of the
+#'       latent response**. Never exponentiated: their exponential is a
+#'       ratio of latent standard deviations, not an odds ratio.
+#'   }
+#'   Component rows carry full Wald inference (B / SE / z / p / CI),
+#'   join the `p_adjust` family, and take significance stars. Under
+#'   `exponentiate = TRUE` a component is exponentiated **only when its
+#'   link makes the result an odds ratio** (the logit zero components);
+#'   probit / cauchit / cloglog zero links and count-type hurdle zero
+#'   parts stay on the link scale, disclosed in the footer. `FALSE`
+#'   omits the blocks (the title still names the model type).
 #' @param intercept_position Where to place the intercept when
 #'   shown. `"first"` (default, APA) or `"last"` (Stata-style,
 #'   intercept just above the fit-stats footer). Ignored when
@@ -419,7 +987,7 @@
 #'   exposed (in a row, inline, in the footer, or nowhere):
 #'   \itemize{
 #'     \item `"row"` (default): explicit row `Female (ref.)` with
-#'       em-dashes in all stat columns (NEJM / BMJ clinical
+#'       en-dashes in all stat columns (NEJM / BMJ clinical
 #'       convention). `reference_label` controls the suffix.
 #'     \item `"annotation"`: the row is dropped and the reference
 #'       is shown inline. Under `factor_layout = "grouped"` the
@@ -439,6 +1007,16 @@
 #'       `factor_layout = "flat"`, an informational message is
 #'       emitted to flag the silent omission.
 #'   }
+#'   **Ordered factors with AME**: under R's default `contr.poly`,
+#'   ordered factors have B coefficients named `.L` / `.Q` / `.C`
+#'   (orthogonal polynomial trends) which have no per-level reference
+#'   semantics. When `"ame"` is in `show_columns`, however, the AME
+#'   block is per-level contrasts against `levels()[1]`. A synthetic
+#'   reference row anchored on `levels()[1]` is therefore emitted so
+#'   the reader sees the AME baseline explicitly, with the same
+#'   `reference_style` handling as plain treatment-coded factors. The
+#'   `[vs <ref>]` annotation in `"annotation"` mode is attached to the
+#'   first AME row, not to the polynomial-trend rows.
 #' @param reference_label Suffix shown after the reference level in
 #'   `reference_style = "row"` mode. Default `"(ref.)"`. Ignored
 #'   by the other three modes (which use structural English
@@ -447,11 +1025,15 @@
 #'   model-level rows below the coefficients; row order follows
 #'   token order. `NULL` (default) resolves class-aware:
 #'   \itemize{
-#'     \item `lm`: `c("nobs", "r2", "adj_r2")`.
-#'     \item `glm`: `c("nobs", "pseudo_r2_mcfadden",
-#'       "pseudo_r2_nagelkerke", "AIC")`.
+#'     \item `lm`, `estimatr::lm_robust()`: `c("nobs", "r2",
+#'       "adj_r2")`. `estimatr::iv_robust()` gets `"nobs"` alone --
+#'       the 2SLS R-squared is not the classical one.
+#'     \item `glm`, ordinal `polr` / `clm`:
+#'       `c("nobs", "pseudo_r2_mcfadden", "pseudo_r2_nagelkerke",
+#'       "aic")` (McFadden = Stata `ologit` default,
+#'       Nagelkerke = SPSS PLUM).
 #'     \item mixed `lm` + `glm`: the union of the two (the
-#'       renderer em-dashes per cell the stat not defined for a
+#'       renderer en-dashes per cell the stat not defined for a
 #'       given model class).
 #'   }
 #'   Under `nested = TRUE` the default is extended with the
@@ -493,24 +1075,154 @@
 #'   (native primitives handle the mixed-precision case), and
 #'   trivially decimal-aligns in `"merged"` mode (the fit-stat
 #'   values move out of the B column into the merged cell).
+#' @param show_re Logical. `TRUE` (default) renders the random-effects
+#'   variance components of a mixed-effects fit (`lmer`, `glmer`,
+#'   `glmmTMB`, `lme`) as a subordinate **"Random effects" block of
+#'   table rows** below the fixed effects: one row per standard
+#'   deviation / correlation per grouping factor, plus the residual,
+#'   each with its estimate, SE, and CI in the shared coefficient
+#'   columns. The group sizes (`N (groups)`) and the ICC render as
+#'   fit-statistic rows; the footer reports the estimation method
+#'   (`REML` / `ML`) and the likelihood-ratio test of the whole
+#'   random part against the no-random-effects model, with the
+#'   boundary-corrected chi-bar-squared p-value (Self & Liang 1987;
+#'   Stram & Lee 1994). Variance-component rows deliberately carry
+#'   **no per-row p-value**: a Wald test of a variance is invalid at
+#'   the boundary of the parameter space, and no reporting guideline
+#'   requests one (see the *Mixed-effects models* section of the
+#'   [Publication-ready regression tables](https://amaltawfik.github.io/spicy/articles/table-regression.html)
+#'   article). `FALSE` suppresses the block.
+#'   No effect on fits without random effects (`lm`, `glm`,
+#'   `coxph`, ...).
+#' @param re_scale One of `"sd"` (default) or `"variance"`.
+#'   Controls the display scale of the random-effects rows:
+#'   \itemize{
+#'     \item `"sd"`: report the random-effect standard
+#'       deviation \eqn{\sigma} (Gelman 2005, *Technometrics*:
+#'       "*directly interpretable as the size of the variation
+#'       across groups*"). Standard error and CI converted via
+#'       the Delta method:
+#'       \eqn{SE(\sigma) = SE(\sigma^2) / (2\sigma)};
+#'       \eqn{CI(\sigma) = \sqrt{CI(\sigma^2)}}.
+#'     \item `"variance"`: report \eqn{\sigma^2} (the canonical
+#'       internal scale; SE and CI come straight from the
+#'       Hessian / `nlme::intervals()` / `glmmTMB::confint()`
+#'       without rescaling).
+#'   }
+#'   Correlation rows (\eqn{\rho}) are unitless and pass through
+#'   either way.
+#' @param re_columns Character vector. Subset of
+#'   `c("est", "se", "ci")` controlling which cells of the
+#'   random-effects rows are **displayed** (`"est"` is mandatory);
+#'   deselected SE / CI cells render as an en-dash on those rows
+#'   only. Useful for slimming output (`re_columns = "est"`) or
+#'   for journals that want only standard errors
+#'   (`re_columns = c("est", "se")`). Display-only: the underlying
+#'   data (`broom::tidy()`, [as_structured()]) always carries the
+#'   full SE + CI.
+#'
+#'   Note. Under the default `re_ci = "wald"` the SE and CI are Wald
+#'   (`est ± z * SE`, clamped at 0 for variances). Wald can be
+#'   optimistic near the variance boundary (Self & Liang 1987
+#'   chi-bar-squared); request boundary-respecting profile-likelihood
+#'   intervals with `re_ci = "profile"` when robustness is critical.
+#'   See the *Mixed-effects models* section of the
+#'   [Publication-ready regression tables](https://amaltawfik.github.io/spicy/articles/table-regression.html)
+#'   article.
+#'
+#'   For `lmer` / `glmer` fits these SEs come from `merDeriv`, whose
+#'   cost grows superlinearly with the number of observations (about a
+#'   minute at n of roughly 2,700). Above `options("spicy.re_se_max_n")`
+#'   (default `1000`) they are skipped: the rows keep their estimates,
+#'   the SE / CI cells render as en-dashes, a table note states the
+#'   omission, and a `spicy_caveat` warning points here. Raise the cap
+#'   (e.g. `options(spicy.re_se_max_n = Inf)`) to force the
+#'   computation, or test the random terms with `re_test = "lrt"`.
+#' @param re_test One of `"none"` (default), `"lrt"`, or `"rlrt"`.
+#'   Opt-in **per-term significance test** for the random-effect
+#'   variance components, filling the otherwise-empty p column of
+#'   the Random effects rows. Never a Wald test (invalid at the
+#'   boundary sigma = 0):
+#'   \itemize{
+#'     \item `"lrt"`: likelihood-ratio test of each random term vs
+#'       the model refitted without it (the term's variance plus its
+#'       covariances with the other terms of its bar), referred to
+#'       the boundary-corrected chi-bar-squared mixture
+#'       `0.5 chi2(q-1) + 0.5 chi2(q)` (Self & Liang 1987; Stram &
+#'       Lee 1994). The reduction scheme matches
+#'       `lmerTest::ranova()`; the mixture reference makes the
+#'       p-value exact-asymptotic rather than conservative. A bar's
+#'       intercept is tested only when it is the bar's single term.
+#'       Supported: `lmer`, `glmer`, `glmmTMB`, and `lme` with a
+#'       simple `random = ~ terms | group` structure.
+#'     \item `"rlrt"`: exact restricted likelihood-ratio test with a
+#'       simulated finite-sample null (`RLRsim::exactRLRT()`;
+#'       Crainiceanu & Ruppert 2004). Only defined for a Gaussian
+#'       `lmer` / `lme` fit with a single variance component.
+#'   }
+#'   The test statistic and df stay out of the displayed t/z column
+#'   (they are chi-square-scale, not t/z) but are carried in
+#'   `broom::tidy()` (`test_type` `"chibar2"` / `"rlrt"`). The
+#'   whole-block LR test in the footer is unaffected. Correlation
+#'   and residual rows are never tested (a correlation is tested
+#'   jointly with its slope; the residual has no zero-variance
+#'   null). Refits happen once per random term: expect a
+#'   noticeable cost on large models. For structures outside these
+#'   two routes (e.g. multiple variance components needing a
+#'   finite-sample null), `pbkrtest::PBmodcomp()` offers a
+#'   parametric-bootstrap LR test on the same nested pair of fits
+#'   (Halekoh & Hojsgaard 2014) -- run it directly and report its
+#'   p-value alongside the table.
+#' @param re_ci One of `"wald"` (default) or `"profile"`. Uncertainty
+#'   route for the random-effect variance-component rows of `lmer` /
+#'   `glmer` fits:
+#'   \itemize{
+#'     \item `"wald"`: SE and symmetric CI from the observed
+#'       information (`merDeriv`), subject to the
+#'       `options("spicy.re_se_max_n")` size cap (see `re_columns`).
+#'     \item `"profile"`: **profile-likelihood CIs** via
+#'       `confint(fit, method = "profile")` -- the route lme4 itself
+#'       documents and defaults to. The intervals are asymmetric and
+#'       respect the boundary at 0; no SE is shown (lme4's position:
+#'       a symmetric SE misdescribes the skewed sampling distribution
+#'       of a variance). Sidesteps the size cap entirely (roughly two
+#'       seconds per variance parameter even at n ~ 7,000; `glmer`
+#'       profiles cost more). The footer discloses the method, and
+#'       likelihood intervals transform exactly, so
+#'       `re_scale = "variance"` shows the profile CI of the variance
+#'       itself.
+#'   }
+#'   `glmmTMB` and `nlme::lme` fits keep their engine-native CIs
+#'   (TMB's `sdreport`; nlme's `apVar`) and refuse `"profile"`.
 #' @param model_labels Per-model labels used as the **column-group
 #'   spanner** above each model's sub-columns (console + gt /
 #'   flextable / tinytable / Excel / Word renderers). `NULL`
 #'   (default) resolves automatically; see *Multi-model semantics*
 #'   for the full rule. A character vector of length
-#'   `length(models)` overrides.
+#'   `length(models)` overrides. Refused (error) for a single
+#'   multinomial model: there the column groups are outcome
+#'   categories, relabelled via `outcome_labels`.
 #' @param outcome_labels Optional **Outcome body row** override.
 #'   `NULL` (default) hides the row entirely -- under the
 #'   multi-model spanner the DV is already visible above the data.
 #'   A character vector of length `length(models)` forces an
 #'   explicit Outcome row with those values (the spanner stays as
 #'   `"Model 1, ..."` unless `model_labels` is also supplied).
-#'   `FALSE` also suppresses the row.
+#'   `FALSE` also suppresses the row. **Single multinomial model**
+#'   (outcome-as-columns layout): repurposed as the category
+#'   spanner override -- a character vector with one label per
+#'   non-reference outcome category (unique, in model order), e.g.
+#'   `c("Student vs Employed", ...)`; the reference category's
+#'   AME-only group (when displayed) keeps its own name, and `FALSE`
+#'   is a no-op (there is no Outcome row to suppress).
 #' @param stars Significance asterisks. `FALSE` (default, APA 7
 #'   Section 6.46) -- no stars. `TRUE` -- APA cutoffs
 #'   `c("*" = 0.05, "**" = 0.01, "***" = 0.001)`. A named numeric
 #'   vector specifies custom thresholds, e.g.
 #'   `c("+" = 0.10, "*" = 0.05, "**" = 0.01, "***" = 0.001)`.
+#'   With `output = "excel"` a marked estimate is written as text
+#'   (`"64.63***"` is not a number); the cells with no marker stay
+#'   numeric.
 #' @param nested Whether to inject pairwise change-statistic rows
 #'   for adjacent models (M2 vs M1, M3 vs M2, ...). `FALSE`
 #'   (default) -- pure side-by-side display. `TRUE` -- requires
@@ -537,14 +1249,18 @@
 #'   `"."` (default) or `","` (European convention). When
 #'   `","` is used, the CI bracket separator switches to `"; "`
 #'   automatically to avoid `"0,18 [0,07, 0,30]"` ambiguity.
+#'   With `output = "excel"` a numeric cell is displayed by Excel
+#'   with the *viewer's* locale separator, which a file cannot set,
+#'   so a non-default mark makes the body go out as pre-formatted
+#'   text (the default `"."` keeps every cell a real number).
 #' @param align Numeric column alignment.
 #'   `"decimal"` (default) -- pre-pad cells so decimal marks line
 #'   up vertically (publication-style). For CI cells (`[LL, UL]`)
 #'   the left bracket, the LL decimal point, the comma separator,
 #'   the UL decimal point, and the right bracket are independently
 #'   aligned across rows.
-#'   `"center"`, `"right"`, or `"auto"` for legacy per-column
-#'   alignment.
+#'   `"center"` and `"right"` apply the same alignment to every
+#'   numeric column.
 #' @param padding Non-negative integer giving the extra characters
 #'   added to each data column's auto-computed width when the
 #'   default `print` method renders the table. Default `0L`
@@ -557,6 +1273,21 @@
 #'   [stats::terms()]); values are the displayed labels. E.g.
 #'   `c("age" = "Age (years)", "sexM" = "Male (vs Female)")`.
 #'   Default `NULL` (use raw term names).
+#'
+#'   The names are model identifiers, not display text: they are the
+#'   term and coefficient names R itself produces, and they keep that
+#'   form regardless of the language the table is rendered in. A name
+#'   that is neither a term label nor a coefficient name is rejected,
+#'   so the header of a subordinate block -- `Random effects`,
+#'   `Thresholds`, `Zero-inflation`, ... -- cannot be relabelled here;
+#'   those headers are set by the package. Classes that carry no
+#'   `terms` component at all (`nls()`,
+#'   `sampleSelection::selection()`) are keyed on their coefficient
+#'   (or parameter) names alone.
+#'
+#'   With several models, a name is checked against the union of their
+#'   terms: a key naming a term only one model has is legal, and the
+#'   label lands on the rows where that term exists.
 #' @param title,note Override or suppress the auto-built caption /
 #'   methodological footer. Three modes per argument:
 #'   \itemize{
@@ -583,16 +1314,20 @@
 #'   `word_path`).
 #' @param excel_path File path for `output = "excel"`. Default
 #'   `NULL` (required when `output = "excel"`).
-#' @param excel_sheet Sheet name when writing to Excel. Default
-#'   `"Regression"`.
+#' @param excel_sheet Sheet name when writing to Excel. `NULL` (the
+#'   default) uses `"Regression"`.
 #' @param clipboard_delim Field delimiter for
 #'   `output = "clipboard"`. Default `"\t"` (tab-separated, pastes
 #'   cleanly into Excel / Google Sheets / Word). The clipboard
 #'   payload mirrors the Excel layout (title row, spanner row,
 #'   header, body, footer note) but is plain text -- horizontal
-#'   rules, cell merging, decimal alignment, monospace font, and
-#'   factor-level indentation cannot be encoded in TSV and are
-#'   therefore absent from the paste.
+#'   rules, cell merging, decimal alignment and the monospace font
+#'   cannot be encoded in delimited text and are therefore absent
+#'   from the paste. A cell holding the delimiter itself (a label
+#'   with a comma under `clipboard_delim = ","`, or any number under
+#'   `decimal_mark = ","`), a double quote or a line break is quoted
+#'   RFC 4180-style, so the grid survives whatever delimiter you
+#'   choose.
 #'
 #'   Paste behaviour by target:
 #'   * **Excel / Google Sheets:** numerics are auto-detected and
@@ -644,6 +1379,16 @@
 #'   APA-strict, journal-specific) be applied without modifying the
 #'   call site.
 #'
+#' @param style A journal style: a theme name (`"jama"`, `"nejm"`,
+#'   `"lancet"`, `"annals"`, `"apa"`, `"aer"`), a
+#'   [spicy_style()] object, or `NULL` (the default). A style only
+#'   changes DEFAULTS -- any argument you pass explicitly wins over it.
+#'   Set `options(spicy.style = )` for document-wide scope. A theme
+#'   covers numeric formatting conformity only, not full editorial
+#'   conformity; `?spicy_style` lists the exact rules each one encodes
+#'   and the official document they come from. An unknown name is an
+#'   error.
+#'
 #' @return A `spicy_regression_table` object (a `data.frame`
 #'   subclass with classes `c("spicy_regression_table",
 #'   "spicy_table", "data.frame")`) when `output = "default"`.
@@ -662,11 +1407,17 @@
 #' (root); warnings from `spicy_warning`. Specific leaves used by
 #' this function include `spicy_invalid_input`,
 #' `spicy_invalid_data`, `spicy_unsupported`,
+#' `spicy_unsupported_vcov`, `spicy_unsupported_standardized`,
 #' `spicy_missing_pkg`, `spicy_missing_column`,
 #' `spicy_ignored_arg`, `spicy_caveat`, `spicy_fallback`. See
 #' [`spicy`][spicy::spicy-package] for the full taxonomy.
 #'
 #' @seealso
+#' [table_regression_models()] for the registry of supported model
+#' classes and the per-family behaviour reference (also reachable as
+#' `?table_regression_mixed`, `?table_regression_ordinal`, ...). If a
+#' class is not listed there, try `table_regression(fit)` anyway --
+#' unsupported classes error with a clear message.
 #' Other regression-table functions:
 #' [table_continuous_lm()] for one-predictor-by-many-outcomes
 #' descriptive tables.
@@ -677,8 +1428,8 @@
 #' [spicy_print_table()] for ASCII rendering;
 #' [build_ascii_table()] for the low-level renderer.
 #' Inferential infrastructure (internal):
-#' `compute_lm_vcov()`, `compute_lm_coef_inference()`,
-#' `compute_lm_wald_test()`.
+#' `compute_model_vcov()`, `compute_coef_inference()`,
+#' `compute_wald_test()`.
 #' broom integration:
 #' [broom::tidy()], [broom::glance()].
 #'
@@ -687,36 +1438,55 @@
 #' fit <- lm(wellbeing_score ~ age + sex + smoking, data = sochealth)
 #'
 #' # Default APA layout: B / SE / 95% CI / p plus the n / R^2 /
-#' # Adj.R^2 fit-stats footer. Factor reference level is annotated
-#' # with `(ref.)` and shows an em-dash in the statistic columns.
+#' # Adj. R^2 fit-stats footer. Factor reference level is annotated
+#' # with `(ref.)` and shows an en dash in the statistic columns.
 #' table_regression(fit)
 #'
-#' # Standardised coefficients (beta) injected next to B. Four
-#' # methods available; "refit" is the SPSS / Stata regress, beta
-#' # gold standard.
+#' \donttest{
+#' # Standardised coefficients (beta) injected next to B. "refit"
+#' # is the Cohen et al. (2003) refit-on-z-scores convention;
+#' # "basic" reproduces the SPSS / Stata regress, beta definition.
 #' table_regression(fit, standardized = "refit")
+#' }
 #'
+#' \donttest{
 #' # Custom column set: B + AME + AME-specific p-value. Note that
 #' # the `p` token always belongs to B, never to AME -- use the
 #' # explicit `ame_p` token for AME inference.
-#' table_regression(
-#'   fit,
-#'   show_columns = c("b", "p", "ame", "ame_ci", "ame_p")
-#' )
+#' if (requireNamespace("marginaleffects", quietly = TRUE)) {
+#'   table_regression(
+#'     fit,
+#'     show_columns = c("b", "p", "ame", "ame_ci", "ame_p")
+#'   )
+#' }
+#' }
 #'
+#' \donttest{
 #' # Group-token shortcut: "all_b" + "all_ame" expands to the full
 #' # B / AME column families side by side.
-#' table_regression(fit, show_columns = c("all_b", "all_ame"))
+#' if (requireNamespace("marginaleffects", quietly = TRUE)) {
+#'   table_regression(fit, show_columns = c("all_b", "all_ame"))
+#' }
+#' }
 #'
 #' # ---- Cluster-robust variance -------------------------------------
 #' # CR2 (Bell-McCaffrey) with Satterthwaite-corrected df is the
 #' # recommended default under few clusters. Three forms are accepted
 #' # for `cluster`; the formula is preferred for composability with
 #' # multi-way clustering and for programmatic robustness.
-#' table_regression(fit, vcov = "CR2", cluster = ~region)
-#' table_regression(fit, vcov = "CR2", cluster = "region")
-#' table_regression(fit, vcov = "CR2", cluster = ~region:age_group)
+#' \donttest{
+#' if (requireNamespace("clubSandwich", quietly = TRUE)) {
+#'   table_regression(fit, vcov = "CR2", cluster = ~region)
+#' }
+#' if (requireNamespace("clubSandwich", quietly = TRUE)) {
+#'   table_regression(fit, vcov = "CR2", cluster = "region")
+#' }
+#' if (requireNamespace("clubSandwich", quietly = TRUE)) {
+#'   table_regression(fit, vcov = "CR2", cluster = ~region:age_group)
+#' }
+#' }
 #'
+#' \donttest{
 #' # ---- Hierarchical (nested) regression ----------------------------
 #' # Adds in-table change-statistic rows (Delta R^2 / F-change /
 #' # p-change for lm; LRT / p-change for glm) below the fit-stats.
@@ -734,18 +1504,58 @@
 #'   list("Step 1" = m1, "Step 2" = m2, "Step 3" = m3),
 #'   nested = TRUE
 #' )
+#' }
 #'
+#' \donttest{
 #' # ---- Side-by-side variance comparison ----------------------------
 #' # Same fit, three vcovs in one wide table. Useful for showing the
 #' # sensitivity of inference to the variance assumption.
-#' table_regression(
-#'   list("Classical" = fit, "HC3" = fit, "CR2" = fit),
-#'   vcov    = list("classical", "HC3", "CR2"),
-#'   cluster = list(NULL, NULL, ~region)
-#' )
+#' if (requireNamespace("clubSandwich", quietly = TRUE)) {
+#'   table_regression(
+#'     list("Classical" = fit, "HC3" = fit, "CR2" = fit),
+#'     vcov    = list("classical", "HC3", "CR2"),
+#'     cluster = list(NULL, NULL, ~region)
+#'   )
+#' }
+#' }
 #'
 #' # ---- Tidy long format for downstream pipelines -------------------
-#' broom::tidy(table_regression(fit))
+#' if (requireNamespace("broom", quietly = TRUE)) {
+#'   broom::tidy(table_regression(fit))
+#' }
+#'
+#' \donttest{
+#' # ---- Mixed-effects models ----------------------------------------
+#' # Linear mixed-effects (lme4). The footer adds a random-effects
+#' # panel with sigma + Wald SE / CI from `merDeriv`, the Nakagawa
+#' # marginal / conditional R^2 fit-stats, and a per-class p-value
+#' # annotation line.
+#' if (requireNamespace("lme4", quietly = TRUE)) {
+#'   fit <- lme4::lmer(Reaction ~ Days + (Days | Subject),
+#'                      data = lme4::sleepstudy)
+#'   table_regression(fit)
+#'
+#'   # Switch to the variance scale (sigma^2 instead of sigma).
+#'   table_regression(fit, re_scale = "variance")
+#'
+#'   # Minimal random-effects display: estimates only, no SE / CI.
+#'   table_regression(fit, re_columns = "est")
+#'
+#'   # Suppress the random-effects panel entirely.
+#'   table_regression(fit, show_re = FALSE)
+#' }
+#'
+#' # Hierarchical mixed-effects comparison (nested LRT).
+#' if (requireNamespace("lme4", quietly = TRUE)) {
+#'   m1 <- lme4::lmer(Reaction ~ 1     + (1 | Subject),
+#'                     data = lme4::sleepstudy, REML = FALSE)
+#'   m2 <- lme4::lmer(Reaction ~ Days  + (1 | Subject),
+#'                     data = lme4::sleepstudy, REML = FALSE)
+#'   m3 <- lme4::lmer(Reaction ~ Days  + (Days | Subject),
+#'                     data = lme4::sleepstudy, REML = FALSE)
+#'   table_regression(list(m1, m2, m3), nested = TRUE)
+#' }
+#' }
 #'
 #' \dontrun{
 #' # ---- Rich-format outputs (require optional Suggests packages) ----
@@ -774,6 +1584,21 @@
 #' *Applied multiple regression / correlation analysis for the
 #' behavioral sciences* (3rd ed.). Lawrence Erlbaum.
 #'
+#' Davison, A.C. & Hinkley, D.V. (1997). *Bootstrap methods and
+#' their application*. Cambridge University Press.
+#'
+#' Efron, B. (1977). The efficiency of Cox's likelihood function
+#' for censored data. *Journal of the American Statistical
+#' Association*, 72(359), 557-565.
+#'
+#' Friedrich, R.J. (1982). In defense of multiplicative terms in
+#' multiple regression equations. *American Journal of Political
+#' Science*, 26(4), 797-833.
+#'
+#' Hertz-Picciotto, I. & Rockhill, B. (1997). Validity and
+#' efficiency of approximation methods for tied survival times in
+#' Cox regression. *Biometrics*, 53(3), 1151-1156.
+#'
 #' Pustejovsky, J.E. & Tipton, E. (2018). Small-sample methods for
 #' cluster-robust variance estimation and hypothesis testing in
 #' fixed effects models. *Journal of Business & Economic
@@ -789,8 +1614,10 @@ table_regression <- function(
   vcov = "classical",
   cluster = NULL,
   ci_level = 0.95,
-  ci_method = c("wald", "profile"),
+  ci_method = c("wald", "profile", "boot_percentile", "hdi"),
   boot_n = 1000L,
+  tau = NULL,
+  at_time = NULL,
   standardized = c("none", "refit", "posthoc", "basic", "smart", "pseudo"),
   exponentiate = FALSE,
   p_adjust = "none",
@@ -798,12 +1625,19 @@ table_regression <- function(
   keep = NULL,
   drop = NULL,
   show_intercept = TRUE,
+  show_thresholds = TRUE,
+  show_components = TRUE,
   intercept_position = c("first", "last"),
   factor_layout = c("grouped", "flat"),
   reference_style = c("row", "annotation", "footer", "none"),
   reference_label = "(ref.)",
   show_fit_stats = NULL,
   fit_stats_layout = c("first_col", "merged"),
+  show_re = TRUE,
+  re_scale = c("sd", "variance"),
+  re_columns = c("est", "se", "ci"),
+  re_test = c("none", "lrt", "rlrt"),
+  re_ci = c("wald", "profile"),
   model_labels = NULL,
   outcome_labels = NULL,
   stars = FALSE,
@@ -814,19 +1648,36 @@ table_regression <- function(
   fit_digits = 2L,
   ic_digits = 1L,
   decimal_mark = ".",
-  align = c("decimal", "center", "right", "auto"),
+  align = c("decimal", "center", "right"),
   padding = 0L,
   labels = NULL,
   title = NULL,
   note = NULL,
-  output = c("default", "data.frame", "long", "gt", "flextable",
-             "tinytable", "excel", "clipboard", "word"),
+  output = c(
+    "default",
+    "data.frame",
+    "long",
+    "gt",
+    "flextable",
+    "tinytable",
+    "excel",
+    "clipboard",
+    "word"
+  ),
   excel_path = NULL,
-  excel_sheet = "Regression",
+  excel_sheet = NULL,
   clipboard_delim = "\t",
   word_path = NULL,
-  word_template = NULL
+  word_template = NULL,
+  style = NULL
 ) {
+  # A journal / locale style only moves DEFAULTS: `.style_begin()`
+  # rewrites the formatting formals the caller did NOT type, and pushes
+  # the levers that have no formal (p-value banding, interval
+  # separator, ...) onto a call-scoped stack popped on exit.
+  .style_pushed <- .style_begin(style, match.call(), environment())
+  on.exit(.style_end(.style_pushed), add = TRUE)
+
   # Capture the cluster expression BEFORE evaluation so we can
   # (a) derive a friendly name for the footer ("clusters by
   # clinic_id" rather than "cluster vector supplied"), and
@@ -835,8 +1686,10 @@ table_regression <- function(
   # "object 'region' not found" -- emit our migration error
   # pointing at `~region` / `"region"` instead.
   cluster_expr <- substitute(cluster)
-  if (is.symbol(cluster_expr) &&
-        !identical(as.character(cluster_expr), "cluster")) {
+  if (
+    is.symbol(cluster_expr) &&
+      !identical(as.character(cluster_expr), "cluster")
+  ) {
     sym <- as.character(cluster_expr)
     # Only complain if R would FAIL to evaluate the symbol --
     # `cluster = region` where `region` is a local variable IS
@@ -844,28 +1697,40 @@ table_regression <- function(
     exists_local <- exists(sym, envir = parent.frame(), inherits = TRUE)
     if (!exists_local) {
       spicy_abort(
-        c(sprintf(paste0("`cluster = %s`: unquoted bare names are not ",
-                          "supported."), sym),
-          "i" = sprintf("Use `cluster = ~%s` (formula) or `cluster = \"%s\"` (string).",
-                         sym, sym),
-          "i" = paste0("Bare-name NSE breaks under programmatic use ",
-                        "(function wrapping, dynamic column choice, ",
-                        "loops). The formula form is composable for ",
-                        "multi-way clustering: `~region:year`.")),
+        c(
+          sprintf(
+            paste0(
+              "`cluster = %s`: unquoted bare names are not ",
+              "supported."
+            ),
+            sym
+          ),
+          "i" = sprintf(
+            "Use `cluster = ~%s` (formula) or `cluster = \"%s\"` (string).",
+            sym,
+            sym
+          ),
+          "i" = paste0(
+            "Bare-name NSE breaks under programmatic use ",
+            "(function wrapping, dynamic column choice, ",
+            "loops). The formula form is composable for ",
+            "multi-way clustering: `~region:year`."
+          )
+        ),
         class = "spicy_invalid_input"
       )
     }
   }
 
-  # Resolve enum args
-  standardized <- match.arg(standardized)
-  ci_method <- match.arg(ci_method)
-  intercept_position <- match.arg(intercept_position)
-  reference_style <- match.arg(reference_style)
-  factor_layout <- match.arg(factor_layout)
-  fit_stats_layout <- match.arg(fit_stats_layout)
-  align <- match.arg(align)
-  output <- match.arg(output)
+  # Resolve enum args (classed spicy_invalid_input on invalid values)
+  standardized <- spicy_match_arg(standardized)
+  ci_method <- spicy_match_arg(ci_method)
+  intercept_position <- spicy_match_arg(intercept_position)
+  reference_style <- spicy_match_arg(reference_style)
+  factor_layout <- spicy_match_arg(factor_layout)
+  fit_stats_layout <- spicy_match_arg(fit_stats_layout)
+  align <- spicy_match_arg(align)
+  output <- spicy_match_arg(output)
 
   # ====================================================================
   # Validation cascade (Q21 -- 6 phases, ~29 steps, fail-fast).
@@ -892,27 +1757,87 @@ table_regression <- function(
   validate_nested_alignment(models, nested)
   validate_vcov_cluster_lists(vcov, cluster, models)
 
+  # Multinomial outcome-as-columns gate (single nnet::multinom model,
+  # no nested comparison). Computed early because it drives the
+  # `show_columns` compaction default below and refuses
+  # `model_labels` fail-fast: in this layout the column groups are
+  # outcome categories, not models, and their spanners are relabelled
+  # via `outcome_labels`. See R/regression_multinom_layout.R.
+  mn_columns_active <- .multinom_columns_active(models, nested)
+  if (mn_columns_active && !is.null(model_labels)) {
+    spicy_abort(
+      c(
+        paste0(
+          "`model_labels` does not apply to a single multinomial ",
+          "model: the column groups are outcome categories, ",
+          "not models."
+        ),
+        "i" = paste0(
+          "Use `outcome_labels` to relabel the category ",
+          "spanners."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+
   # Context-aware `show_columns` default. APA-7 Section 6.46 recommends
   # CIs for inference, so a single-model table (the publication
   # workflow) keeps CI in the default ("all_b"). Multi-model tables
   # drop CI to fit the side-by-side layout in a typical console /
-  # page width ("all_b_compact"). The user can pass
-  # `show_columns = "all_b"` (or atomic tokens) to restore CI.
+  # page width ("all_b_compact"); the multinomial columns layout has
+  # the same width pressure (one column set per outcome category) and
+  # compacts identically. The user can pass atomic tokens
+  # (e.g. `c("b", "se", "ci", "p")`) to restore CI.
   if (is.null(show_columns)) {
-    is_multi <- is.list(models) && !inherits(models, "lm") &&
-                  length(models) >= 2L
-    show_columns <- if (is_multi) "all_b_compact" else "all_b"
+    is_multi <- is.list(models) &&
+      !inherits(models, "lm") &&
+      length(models) >= 2L
+    show_columns <- if (is_multi || mn_columns_active) {
+      "all_b_compact"
+    } else {
+      "all_b"
+    }
+  }
+  # Phase 7c23 (item d): explicit `"all_b"` / `"all_ame"` group tokens
+  # auto-compact in multi-model layouts -- parity with the lm default
+  # which already auto-switches NULL -> "all_b_compact" in the branch
+  # above. Without this, a user passing `show_columns = "all_ame"` to
+  # a 5-model side-by-side table got 4 cells per model (AME + SE + CI
+  # + p) for 20 columns total, while the lm equivalent `"all_b"` would
+  # auto-drop CI for the same multi-model context.
+  is_multi <- is.list(models) && !inherits(models, "lm") && length(models) >= 2L
+  if (is_multi || mn_columns_active) {
+    if ("all_b" %in% show_columns) {
+      show_columns <- sub("^all_b$", "all_b_compact", show_columns)
+    }
+    if ("all_ame" %in% show_columns) {
+      show_columns <- sub("^all_ame$", "all_ame_compact", show_columns)
+    }
   }
   # Expand group tokens (`"all_b"`, `"all_ame"`, ...) to atomic
   # tokens before validation; also raises an actionable migration
   # error if a legacy uppercase token (`"B"`, `"AME"`, ...) slips
   # through from < 0.12 code.
-  show_columns <- expand_show_columns(show_columns)
+  all_bayes_models <- length(models) > 0L &&
+    all(vapply(models, inherits, logical(1), c("stanreg", "brmsfit")))
+  show_columns <- expand_show_columns(show_columns, bayesian = all_bayes_models)
 
   # Phase C -- vocabulary tokens (steps 9-12). validate_show_columns
   # also rejects "beta" combined with `standardized = "none"` (Q3).
   validate_show_columns(show_columns, standardized)
   validate_show_fit_stats(show_fit_stats)
+  # Survival estimand horizons: the horizon defines the estimand, so
+  # it is explicit and mandatory -- and refused when unused.
+  validate_estimand_horizons(show_columns, tau, at_time)
+  # Phase 7c23 (item a): coerce `FALSE` to `character(0)` so the
+  # downstream class-aware default branch (line ~ 996) treats the
+  # explicit "suppress" as "no tokens to inject", instead of leaving
+  # FALSE in the path and tripping `inherits(show_fit_stats, "character")`
+  # checks further down.
+  if (isFALSE(show_fit_stats)) {
+    show_fit_stats <- character(0)
+  }
   # Q3 -- auto-inject "beta" right after "B" when standardized != "none"
   # AND beta is not already requested. Done after validation so the
   # reject-beta-without-method branch fires before the orchestrator
@@ -933,25 +1858,248 @@ table_regression <- function(
   # When `nested = TRUE`, change-stat tokens (`r2_change` / `f_change`
   # / `p_change` for lm; `lrt_change` / `p_change` for glm) are
   # injected RIGHT AFTER `r2` / `adj_r2` / `AIC` so the table reads
-  # "n / R^2 / Adj.R^2 / DeltaR^2 / F-change / p" as in APA Table 7.13.
+  # "n / R^2 / Adj. R^2 / DeltaR^2 / F-change / p" as in APA Table 7.13.
   user_set_fit_stats <- !is.null(show_fit_stats)
   if (!user_set_fit_stats) {
-    any_glm <- any(vapply(models, inherits, logical(1), "glm"))
-    any_lm_only <- any(vapply(models, function(f) {
-      inherits(f, "lm") && !inherits(f, "glm")
-    }, logical(1)))
+    # Bayesian fits inherit from lm / glm (stanreg subclasses both), but
+    # their defaults are their own: no likelihood-based information
+    # criteria, no classical or pseudo R^2 -- nobs only. Exclude them
+    # from the frequentist class buckets so the glm branch does not
+    # inject AIC / pseudo-R^2 tokens the Bayesian gate would refuse.
+    is_bayes <- vapply(models, inherits, logical(1), c("stanreg", "brmsfit"))
+    # GEE fits inherit from glm but are quasi-likelihood: the glm
+    # defaults (pseudo-R^2, AIC) are undefined for them and would be
+    # refused by the class-aware token gate. Their own branch below
+    # reports the cluster structure instead.
+    is_gee <- vapply(models, inherits, logical(1), "geeglm")
+    # Survey-design fits inherit "glm" (svyglm) or "coxph" (svycoxph),
+    # and the sets those branches inject are wrong for them: there is no
+    # likelihood, so the pseudo-R^2 pair and the Cox AIC name statistics
+    # that do not exist. EXCLUDED from the predicates rather than
+    # answered before them -- the branches below are independent
+    # predicates that CONCATENATE, so an earlier one removes nothing.
+    # Same idiom as is_bayes / is_gee.
+    is_design <- vapply(models, .is_design_fit, logical(1))
+    any_glm <- any(
+      vapply(models, inherits, logical(1), "glm") &
+        !is_bayes &
+        !is_gee &
+        !is_design
+    )
+    # The OLS bucket: fits whose CLASSICAL R-squared pair is defined.
+    # lm_robust belongs in it -- it is a linear regression with a
+    # robust variance, and its R-squared is the same statistic as an
+    # lm's, so a default table without it was a hole. iv_robust (a
+    # disjoint class, not a subclass) stays out: the 2SLS R-squared is
+    # not the classical one, which is why its frame declares
+    # supports$classical_r2 = FALSE.
+    any_lm_only <- any(
+      vapply(
+        models,
+        function(f) {
+          (inherits(f, "lm") && !inherits(f, "glm")) ||
+            inherits(f, "lm_robust")
+        },
+        logical(1)
+      ) &
+        !is_bayes
+    )
+    # Phase 7c9a: mixed-effects class-aware default. lmer / glmer /
+    # glmmTMB / lme get nobs + Nakagawa marginal/conditional R^2 + AIC
+    # + BIC. classical R^2 is not defined, and the two R^2 of Nakagawa
+    # are the standard publication statistic for mixed models (Nakagawa
+    # & Schielzeth 2013; widely required by APA / journal templates).
+    any_mixed <- any(vapply(
+      models,
+      function(f) {
+        inherits(f, c("merMod", "lmerModLmerTest", "glmmTMB", "lme"))
+      },
+      logical(1)
+    ))
+    # Ordinal cumulative-link (polr / clm): nobs + the two pseudo-R^2 that
+    # generalise the binary-logit default (McFadden = Stata ologit default,
+    # Nagelkerke = SPSS PLUM) + AIC. summary.polr reports Residual Deviance +
+    # AIC; Stata/SPSS lead with the pseudo-R^2, so those are the headline here.
+    any_ordinal <- any(vapply(
+      models,
+      function(f) {
+        inherits(f, c("polr", "clm"))
+      },
+      logical(1)
+    ))
     show_fit_stats <- character(0)
     if (any_lm_only) {
       show_fit_stats <- c(show_fit_stats, "nobs", "r2", "adj_r2")
     }
     if (any_glm) {
-      show_fit_stats <- c(show_fit_stats,
-                            if (!any_lm_only) "nobs",
-                            "pseudo_r2_mcfadden",
-                            "pseudo_r2_nagelkerke",
-                            "AIC")
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only) "nobs",
+        "pseudo_r2_mcfadden",
+        "pseudo_r2_nagelkerke",
+        "aic"
+      )
+    }
+    if (any_mixed) {
+      # n_groups + icc render as fit-stat ROWS (aligned per model), like
+      # sjPlot / modelsummary -- not footer prose. ICC is blank when not
+      # computable (random slopes, multiple grouping factors, non-Gaussian
+      # without a link-scale formula).
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm) "nobs",
+        "n_groups",
+        "icc",
+        "r2_marginal",
+        "r2_conditional",
+        "aic",
+        "bic"
+      )
+    }
+    if (any_ordinal) {
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm && !any_mixed) "nobs",
+        "pseudo_r2_mcfadden",
+        "pseudo_r2_nagelkerke",
+        "aic"
+      )
+    }
+    # GEE (geepack::geeglm): quasi-likelihood, so no R^2 / AIC family.
+    # The field convention reports the sample and its cluster
+    # structure (Stata's xtgee header: obs, groups, obs per group):
+    # n, one "N (<id>)" row per grouping variable, and the largest
+    # cluster. QIC / QICu and the scale parameter stay opt-in.
+    if (any(is_gee)) {
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm && !any_mixed && !any_ordinal) "nobs",
+        "n_groups",
+        "max_cluster_size"
+      )
+    }
+    if (any(is_bayes)) {
+      # Bayesian default: n + the posterior-median Bayesian R^2 --
+      # the R^2 every other family's default carries, in its
+      # draws-based form (Gelman et al. 2019). elpd_loo / looic stay
+      # opt-in (~2 s of PSIS-LOO per model). In a MIXED table the
+      # frequentist models simply render a blank r2_bayes cell,
+      # mirroring how "r2" is blank for the Bayesian side -- silently
+      # dropping the Bayesian model's default R^2 would contradict
+      # the never-silently-wrong policy.
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm) "nobs",
+        "r2_bayes"
+      )
+    }
+    # multinom: same pseudo-R2 pair as the other categorical families
+    # (dev/fit_stats_by_class.md). Its null model is intercept-only, whose
+    # log-likelihood has the ordinal path's closed form.
+    any_multinom <- any(vapply(
+      models,
+      function(f) {
+        inherits(f, "multinom")
+      },
+      logical(1)
+    ))
+    if (any_multinom) {
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm && !any_mixed && !any_ordinal) "nobs",
+        "pseudo_r2_mcfadden",
+        "pseudo_r2_nagelkerke",
+        "aic"
+      )
+    }
+    # Cox proportional hazards (survival::coxph and rms::cph, which
+    # inherits from it): the field convention reports n AND the number
+    # of events (EpiRHandbook survival chapter; Stata stcox header).
+    # n_events is NA outside the coxph frame, and the renderer skips
+    # the row when no model carries a value.
+    any_coxph <- any(
+      vapply(models, inherits, logical(1), "coxph") & !is_design
+    )
+    if (any_coxph) {
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm && !any_mixed && !any_ordinal) "nobs",
+        "n_events",
+        "aic"
+      )
+    }
+    # fixest: the field convention leads with the absorbed-FE
+    # disclosure (etable, modelsummary and esttab all default it on),
+    # then n, R2 and the FE-partialled within R2 (feols; both rows
+    # auto-drop as all-NA for feglm / fepois, which carry fixest's
+    # McFadden "pr2" instead) and AIC.
+    any_fixest <- any(vapply(models, inherits, logical(1), "fixest"))
+    any_fixest_glm <- any(vapply(
+      models,
+      function(m) {
+        inherits(m, "fixest") && !is.null(m$family)
+      },
+      logical(1)
+    ))
+    if (any_fixest) {
+      show_fit_stats <- c(
+        show_fit_stats,
+        if (!any_lm_only && !any_glm && !any_mixed && !any_ordinal) "nobs",
+        "r2",
+        "within_r2",
+        if (any_fixest_glm) "pseudo_r2_mcfadden",
+        "aic"
+      )
+    }
+    # Survey-design fits: the observed count AND the population it
+    # describes, because a table that shows one `n` under a design does
+    # not say which of the two it is -- the twins' header has said both
+    # since decision 28 ("N = 200 (weighted 6194)"). A design-based Cox
+    # adds the event count, the field convention beside a survival
+    # estimate; a design-based glm adds the design AIC of Lumley &
+    # Scott, the only information criterion published for that class.
+    # The other two design classes carry NA there, and an all-NA row is
+    # dropped by the renderer.
+    if (any(is_design)) {
+      show_fit_stats <- unique(c(
+        show_fit_stats,
+        "nobs",
+        "weighted_nobs",
+        if (any(vapply(models, inherits, logical(1), "coxph") & is_design)) {
+          "n_events"
+        },
+        if (any(vapply(models, inherits, logical(1), "glm") & is_design)) {
+          "aic"
+        }
+      ))
+      # The two counts are read together, so they are printed together:
+      # in a MIXED table a co-model's branch has already queued its own
+      # statistics, and appending would strand "Weighted n" below them.
+      rest <- show_fit_stats[show_fit_stats != "weighted_nobs"]
+      show_fit_stats <- append(
+        rest,
+        "weighted_nobs",
+        after = match("nobs", rest)
+      )
+    }
+    # Universal safety net: a class matched by none of the branches above
+    # (betareg, survreg, coxph, multinom, mlogit, rms, stan, ...) still
+    # gets N + AIC, so no fit ever renders a blank model-fit block. The
+    # per-class passes refine this to each family's field-standard set (e.g.
+    # concordance for coxph, deviance-explained for gam). nobs / AIC are defined
+    # for essentially every likelihood fit; an absent token is skipped per row.
+    if (length(show_fit_stats) == 0L) {
+      show_fit_stats <- c("nobs", "aic")
     }
     show_fit_stats <- unique(show_fit_stats)
+    # The Fixed effects block renders at the TOP of the fit block
+    # (etable / journal placement), so the token must lead the vector
+    # even when an lm arm contributed first in a mixed table. An
+    # estimatr fit built with `fixed_effects =` absorbs factors the
+    # same way and discloses them the same way.
+    if (any(vapply(models, absorbs_fixed_effects, logical(1)))) {
+      show_fit_stats <- unique(c("fixed_effects", show_fit_stats))
+    }
     if (isTRUE(nested) && length(models) >= 2L) {
       show_fit_stats <- c(show_fit_stats, default_nested_tokens(models))
     }
@@ -963,23 +2111,183 @@ table_regression <- function(
   # the resolved (class-aware default OR user-supplied) vector.
   validate_class_appropriate_tokens(models, show_columns, show_fit_stats)
 
-  # `ci_method = "profile"` is glm only. Profile-likelihood CIs are
-  # standard for glm (MASS::confint.glm); for lm, Wald CIs are exact
-  # under the normal-error assumption, so a profile path would be
-  # equivalent to Wald with extra cost.
+  # Bayesian fits and ci_method. The posterior interval is the only
+  # interval a posterior has: `"hdi"` is the Bayesian-only opt-in
+  # (highest-density interval, the Kruschke-school convention; the
+  # equal-tailed interval stays the default), while `"profile"` and
+  # `"boot_percentile"` are likelihood / resampling constructions with
+  # no posterior analogue -- both are refused HERE with the Bayesian
+  # alternative, not routed into a downstream generic error.
+  is_bayes_ci <- vapply(models, inherits, logical(1), c("stanreg", "brmsfit"))
+  if (identical(ci_method, "hdi") && !all(is_bayes_ci)) {
+    offending <- class(models[[which(!is_bayes_ci)[1]]])[1]
+    spicy_abort(
+      c(
+        paste0(
+          "`ci_method = \"hdi\"` is defined only for Bayesian ",
+          "fits (`stanreg` / `brmsfit`)."
+        ),
+        "x" = sprintf(
+          paste0(
+            "`%s` has no posterior draws to take a ",
+            "highest-density interval of."
+          ),
+          offending
+        ),
+        "i" = paste0(
+          "Frequentist fits use `ci_method = \"wald\"` ",
+          "(default), `\"profile\"`, or `\"boot_percentile\"`."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+  if (ci_method %in% c("profile", "boot_percentile") && any(is_bayes_ci)) {
+    spicy_abort(
+      c(
+        sprintf(
+          "`ci_method = \"%s\"` is not defined for Bayesian fits.",
+          ci_method
+        ),
+        "i" = paste0(
+          "A posterior has no profile likelihood or bootstrap ",
+          "replicates; the credible interval is computed from ",
+          "the posterior draws."
+        ),
+        "i" = paste0(
+          "Use the default equal-tailed credible interval, ",
+          "or `ci_method = \"hdi\"` for the highest-density ",
+          "interval."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
+
+  # `ci_method = "profile"` is available for glm and ordinal (polr / clm),
+  # which have a genuine profile-likelihood CI (confint.glm / confint.polr /
+  # confint.clm). It is rejected for lm, where Wald CIs are exact under the
+  # normal-error assumption so a profile path would just be Wald with extra
+  # cost. (Other classes silently keep Wald -- the frame method ignores the
+  # request when it has no profile path.)
   if (identical(ci_method, "profile")) {
-    any_lm_only <- any(vapply(models, function(f) {
-      inherits(f, "lm") && !inherits(f, "glm")
-    }, logical(1)))
-    if (any_lm_only) {
+    # Profile-likelihood CIs are genuine only where confint() profiles the
+    # coefficients: plain `glm` (MASS::confint.glm), `polr` (confint.polr) and
+    # `clm` (confint.clm). class(f)[1] pins the PLAIN glm and excludes glm
+    # subclasses whose confint() is not profile (svyglm design-based, gam).
+    # Any other class is rejected rather than silently returning Wald.
+    supports_profile <- vapply(
+      models,
+      function(f) {
+        class(f)[1] %in% c("glm", "polr", "clm")
+      },
+      logical(1)
+    )
+    if (!all(supports_profile)) {
+      offending <- class(models[[which(!supports_profile)[1]]])[1]
       spicy_abort(
         c(
-          "`ci_method = \"profile\"` is defined for `glm` only.",
-          "i" = paste0(
-            "For `lm`, Wald CIs are exact under the normal-error ",
-            "assumption (no profile refinement available)."
+          paste0(
+            "`ci_method = \"profile\"` is available only for `glm` and ",
+            "ordinal (`polr` / `clm`) fits."
           ),
-          "i" = "Use `ci_method = \"wald\"` (default) for `lm`."
+          "x" = sprintf(
+            paste0(
+              "`%s` has no profile-likelihood path; its CIs ",
+              "would silently fall back to Wald."
+            ),
+            offending
+          ),
+          "i" = paste0(
+            "Use `ci_method = \"wald\"` (default), or a robust ",
+            "`vcov` for robust (Wald) CIs."
+          )
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+
+    # Profile CIs are model-based likelihood quantities; a robust or
+    # resampling vcov takes precedence (its Wald CIs are used). The frame
+    # methods (lm / glm / polr / clm) resolve the request themselves --
+    # this is the single consolidated disclosure of that override.
+    vlist <- if (is.list(vcov)) vcov else rep(list(vcov), length(models))
+    overridden <- vapply(
+      vlist,
+      function(v) {
+        !.is_model_vcov(v)
+      },
+      logical(1)
+    )
+    if (any(overridden)) {
+      mod_labels <- .model_display_names(models)
+      spicy_warn(
+        c(
+          paste0(
+            "`ci_method = \"profile\"` is ignored under a robust or ",
+            "resampling `vcov`: ",
+            paste(mod_labels[overridden], collapse = ", "),
+            "."
+          ),
+          "i" = paste0(
+            "Profile CIs are model-based likelihood quantities; the ",
+            "requested `vcov` takes precedence and its Wald CIs are ",
+            "reported (the footer names the estimator)."
+          )
+        ),
+        class = "spicy_ignored_arg"
+      )
+    }
+  }
+
+  # `ci_method = "boot_percentile"` is a CI-only refinement of the
+  # bootstrap: equal-tailed percentile intervals of the SAME replicates
+  # that produced the bootstrap covariance (boot::boot.ci type = "perc"
+  # convention). It therefore requires vcov = "bootstrap" for every
+  # model (jackknife has no replicate distribution to take quantiles
+  # of), and is not defined for standardized betas (their CIs rescale
+  # the raw Wald machinery, not the replicates).
+  if (identical(ci_method, "boot_percentile")) {
+    vlist <- if (is.list(vcov)) vcov else rep(list(vcov), length(models))
+    all_boot <- all(vapply(
+      vlist,
+      function(v) {
+        is.character(v) && length(v) == 1L && identical(v, "bootstrap")
+      },
+      logical(1)
+    ))
+    if (!all_boot) {
+      spicy_abort(
+        c(
+          paste0(
+            "`ci_method = \"boot_percentile\"` requires ",
+            "`vcov = \"bootstrap\"` for every model."
+          ),
+          "i" = paste0(
+            "Percentile CIs are quantiles of the bootstrap ",
+            "replicates; they reuse the same resamples as the ",
+            "bootstrap SEs (no second resampling pass)."
+          ),
+          "i" = paste0(
+            "Set `vcov = \"bootstrap\"` (tune with `boot_n`), ",
+            "or drop `ci_method = \"boot_percentile\"`."
+          )
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+    if (!identical(standardized, "none")) {
+      spicy_abort(
+        c(
+          paste0(
+            "`ci_method = \"boot_percentile\"` is not available ",
+            "with `standardized`."
+          ),
+          "i" = paste0(
+            "Percentile CIs are quantiles of the raw-",
+            "coefficient replicates; standardised betas would ",
+            "need their own resampling scheme."
+          )
         ),
         class = "spicy_invalid_input"
       )
@@ -990,9 +2298,13 @@ table_regression <- function(
   # only -- it derives SD(Y*) from the link-scale latent variance,
   # which is undefined for lm.
   if (identical(standardized, "pseudo")) {
-    any_lm_only <- any(vapply(models, function(f) {
-      inherits(f, "lm") && !inherits(f, "glm")
-    }, logical(1)))
+    any_lm_only <- any(vapply(
+      models,
+      function(f) {
+        inherits(f, "lm") && !inherits(f, "glm")
+      },
+      logical(1)
+    ))
     if (any_lm_only) {
       spicy_abort(
         c(
@@ -1012,27 +2324,12 @@ table_regression <- function(
     }
   }
 
-  # exponentiate: warn if requested but no glm-with-non-identity-link
-  # is present -- the transform would be a no-op everywhere.
-  if (isTRUE(exponentiate)) {
-    has_non_identity_glm <- any(vapply(models, function(f) {
-      if (!inherits(f, "glm")) return(FALSE)
-      !identical(stats::family(f)$link, "identity")
-    }, logical(1)))
-    if (!has_non_identity_glm) {
-      spicy_warn(
-        c(
-          "`exponentiate = TRUE` has no effect on `lm()` or identity-link `glm()` fits.",
-          "i" = paste0(
-            "exp() is only applied to glm fits whose link is non-",
-            "identity (logit, probit, log, cloglog, inverse). Drop ",
-            "the argument or remove the check."
-          )
-        ),
-        class = "spicy_ignored_arg"
-      )
-    }
-  }
+  # exponentiate: the "no effect" warning is emitted AFTER frame extraction
+  # (see below, just after the frames loop), keyed on each frame's own
+  # info$extras$exp_applied. Doing it post-extraction lets one check cover
+  # every model class -- including polr / clm / multinom / fixest / betareg,
+  # which have no stats::family() method -- instead of guessing the link of
+  # each raw fit up front.
 
   # gaussian-glm caveat: the user fitted glm() with the default
   # (gaussian / identity) family, which is mathematically equivalent
@@ -1042,10 +2339,16 @@ table_regression <- function(
   # fit and surface the suggestion via spicy_caveat.
   for (i in seq_along(models)) {
     f <- models[[i]]
-    if (inherits(f, "glm")) {
+    # Only a PLAIN glm() earns the "use lm() instead" caveat. svyglm, gam/bam,
+    # and other glm subclasses inherit "glm" but the refit-with-lm() suggestion
+    # is wrong for them (it would drop the survey design / the smooth terms), so
+    # gate on the leading class being exactly "glm".
+    if (identical(class(f)[1L], "glm")) {
       fam <- stats::family(f)
-      if (identical(fam$family, "gaussian") &&
-            identical(fam$link, "identity")) {
+      if (
+        identical(fam$family, "gaussian") &&
+          identical(fam$link, "identity")
+      ) {
         spicy_warn(
           c(
             sprintf(
@@ -1072,7 +2375,7 @@ table_regression <- function(
   validate_logical_scalar(show_intercept, "show_intercept")
   validate_logical_scalar(nested, "nested")
   validate_caption_arg(title, "title")
-  validate_caption_arg(note,  "note")
+  validate_caption_arg(note, "note")
   validate_digit_arg(digits, "digits")
   validate_digit_arg(p_digits, "p_digits")
   validate_digit_arg(effect_size_digits, "effect_size_digits")
@@ -1083,23 +2386,94 @@ table_regression <- function(
   validate_reference_label(reference_label)
   validate_stars(stars)
   validate_p_adjust(p_adjust)
+  # Finding (a) of the Bayesian recon: a posterior has no p-values, so a
+  # p_adjust request was a silent no-op. Refuse it when every model is
+  # Bayesian (mixed-class tables keep it: the frequentist columns adjust).
+  if (
+    !identical(p_adjust, "none") &&
+      length(models) > 0L &&
+      all(vapply(models, inherits, logical(1), c("stanreg", "brmsfit")))
+  ) {
+    spicy_abort(
+      c(
+        "`p_adjust` is not available for Bayesian fits: there are no p-values to adjust.",
+        "i" = paste0(
+          "Bayesian tables report posterior medians and ",
+          "credible intervals; the probability-of-direction ",
+          "column (`show_columns = \"pd\"`) is the closest ",
+          "posterior summary."
+        )
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
   validate_keep_drop(keep, drop)
   validate_logical_scalar(exponentiate, "exponentiate")
   validate_model_labels(model_labels, models)
-  validate_outcome_labels(outcome_labels, models)
+  # Step 22b: the labels the columns will actually carry, resolved and
+  # checked here so a collision fails before the extraction loop rather
+  # than surfacing as two indistinguishable column groups. The
+  # multinomial columns layout cannot reach it (single model, so the
+  # resolved vector has one element).
+  validate_resolved_model_labels(
+    .resolve_model_labels(models, model_labels),
+    models
+  )
+  if (!mn_columns_active) {
+    # Multinomial columns layout: `outcome_labels` relabels the
+    # category spanners instead of the per-model Outcome row; its
+    # length (= number of non-reference categories) is validated in
+    # .multinom_columns_spanners() at the explode.
+    validate_outcome_labels(outcome_labels, models)
+  }
   validate_predictor_labels(labels, models)
+  # Random-effects display args: validate fail-fast (before the extraction
+  # loop), so a bad value errors immediately instead of after the expensive
+  # per-model extraction, and with a spicy_invalid_input class (finding m3).
+  # Reused both to materialise the RE rows (in the loop) and by the footer.
+  validate_logical_scalar(show_re, "show_re")
+  validate_logical_scalar(show_components, "show_components")
+  re_scale_val <- .validate_re_scale(re_scale)
+  re_columns_val <- .validate_re_columns(re_columns)
+  re_test_val <- .validate_re_test(re_test)
+  if (!identical(re_test_val, "none")) {
+    if (!isTRUE(show_re)) {
+      spicy_abort(
+        c(
+          "`re_test` requires the random-effects rows (`show_re = TRUE`).",
+          "i" = "The per-term test fills the p column of those rows."
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+  }
+  re_ci_val <- .validate_re_ci(re_ci, models)
+  if (identical(re_ci_val, "profile") && !isTRUE(show_re)) {
+    spicy_abort(
+      c(
+        "`re_ci` requires the random-effects rows (`show_re = TRUE`).",
+        "i" = "The profile CIs fill the CI cells of those rows."
+      ),
+      class = "spicy_invalid_input"
+    )
+  }
 
   # Phase E -- cross-arg semantic warnings (no errors). The
   # standardized x non-additive caveat is emitted later (after
   # extracts) since it inspects each fit. Q1 / Q2 conflict warnings
   # are runtime / orchestrator-only and emitted here.
-  if (!is.null(model_labels) &&
-      is.list(models) && !is.null(names(models)) &&
-      all(nzchar(names(models)))) {
+  if (
+    !is.null(model_labels) &&
+      is.list(models) &&
+      !is.null(names(models)) &&
+      all(nzchar(names(models)))
+  ) {
     spicy_warn(
       c(
-        paste0("Both `names(models)` and `model_labels` were supplied; ",
-               "the explicit `model_labels` takes precedence (Q1)."),
+        paste0(
+          "Both `names(models)` and `model_labels` were supplied; ",
+          "the explicit `model_labels` takes precedence (Q1)."
+        ),
         "i" = "Drop one of the two to silence this warning."
       ),
       class = "spicy_ignored_arg"
@@ -1108,8 +2482,11 @@ table_regression <- function(
   if (isFALSE(show_intercept) && !identical(intercept_position, "first")) {
     spicy_warn(
       c(
-        paste0("`intercept_position = \"", intercept_position,
-               "\"` is ignored when `show_intercept = FALSE` (Q2)."),
+        paste0(
+          "`intercept_position = \"",
+          intercept_position,
+          "\"` is ignored when `show_intercept = FALSE` (Q2)."
+        ),
         "i" = "Drop `intercept_position` or set `show_intercept = TRUE`."
       ),
       class = "spicy_ignored_arg"
@@ -1123,18 +2500,26 @@ table_regression <- function(
   # is a false alarm. Fire only when divergence is plausible:
   # any glm in the set, or any model with a non-additive term
   # (interaction / transform) detected by detect_non_additive_terms().
-  if (all(c("ame", "p") %in% show_columns) &&
-        !("ame_p" %in% show_columns)) {
+  if (
+    all(c("ame", "p") %in% show_columns) &&
+      !("ame_p" %in% show_columns)
+  ) {
     any_glm <- any(vapply(models, inherits, logical(1), "glm"))
-    any_non_additive <- any(vapply(models, function(f) {
-      detect_non_additive_terms(f)$has_problem
-    }, logical(1)))
+    any_non_additive <- any(vapply(
+      models,
+      function(f) {
+        detect_non_additive_terms(f)$has_problem
+      },
+      logical(1)
+    ))
     if (any_glm || any_non_additive) {
       spicy_warn(
         c(
-          paste0("`\"ame\"` and `\"p\"` shown without `\"ame_p\"`: the ",
-                 "`p` column is for B (or beta), not the AME. They can ",
-                 "differ under non-linear links or interactions."),
+          paste0(
+            "`\"ame\"` and `\"p\"` shown without `\"ame_p\"`: the ",
+            "`p` column is for B (or beta), not the AME. They can ",
+            "differ under non-linear links or interactions."
+          ),
           "i" = "Add `\"ame_p\"` to display the AME-specific p-value."
         ),
         class = "spicy_caveat"
@@ -1162,22 +2547,51 @@ table_regression <- function(
   # clusters was passed, we walk the captured expression element by
   # element. Falls back to NA -> footer renders "cluster vector
   # supplied" the way it did before.
-  cluster_name_list <- if (is.call(cluster_expr) &&
-                            identical(as.character(cluster_expr[[1]]), "list")) {
+  cluster_name_list <- if (
+    is.call(cluster_expr) &&
+      identical(as.character(cluster_expr[[1]]), "list")
+  ) {
     elems <- as.list(cluster_expr)[-1L]
     if (length(elems) == n_models) {
       vapply(elems, extract_arg_column_name, character(1))
     } else {
-      rep(NA_character_, n_models)
+      rep(NA_character_, n_models) # nocov -- validate_vcov_cluster_lists() Step 7 aborts on length mismatch
     }
   } else {
     rep(extract_arg_column_name(cluster_expr), n_models)
   }
+  # Wrappers (table_regression_uv) pass an already-evaluated cluster
+  # through do.call, so the expression walk above yields NA. They stamp
+  # the user-facing column name as an attribute instead; it wins.
+  attr_names <- if (is.list(cluster) && !is.atomic(cluster)) {
+    vapply(
+      cluster,
+      function(x) {
+        attr(x, "spicy_cluster_name", exact = TRUE) %||% NA_character_
+      },
+      character(1)
+    )
+  } else {
+    rep(
+      attr(cluster, "spicy_cluster_name", exact = TRUE) %||%
+        NA_character_,
+      n_models
+    )
+  }
+  if (length(attr_names) == n_models) {
+    cluster_name_list <- ifelse(
+      is.na(attr_names),
+      cluster_name_list,
+      attr_names
+    )
+  }
 
   # Detect AME-Satterthwaite path activation (Q14b)
-  any_cr <- any(vapply(vcov_list,
-                       function(v) is.character(v) && startsWith(v, "CR"),
-                       logical(1)))
+  any_cr <- any(vapply(
+    vcov_list,
+    function(v) is.character(v) && startsWith(v, "CR"),
+    logical(1)
+  ))
   use_ame_satt <- any_cr && "ame" %in% show_columns
 
   # ---- Per-model extraction (Layer 1) ------------------------------------
@@ -1188,12 +2602,16 @@ table_regression <- function(
     vapply(seq_len(n_models), default_id, character(1))
   }
 
-  extracts <- vector("list", n_models)
+  # Phase 0c sub-step C5: orchestrator now builds ONLY the frames list.
+  # The legacy `extracts` list, the `.frame_to_legacy_extract()` adapter,
+  # the legacy `apply_p_adjust()` -- all gone. Every downstream renderer
+  # (title, footer, alignment, nested LRT) consumes frames directly.
+  frames <- vector("list", n_models)
   for (i in seq_len(n_models)) {
-    extracts[[i]] <- extract_lm_phase1(
+    frames[[i]] <- as_regression_frame_validated(
       models[[i]],
       model_id = model_ids[i],
-      vcov_type = vcov_list[[i]],
+      vcov = vcov_list[[i]],
       cluster = cluster_list[[i]],
       boot_n = boot_n,
       ci_level = ci_level,
@@ -1203,37 +2621,633 @@ table_regression <- function(
       show_columns = show_columns,
       show_fit_stats = show_fit_stats,
       use_ame_satterthwaite = use_ame_satt,
-      cluster_name = cluster_name_list[i]
+      cluster_name = cluster_name_list[i],
+      re_ci = re_ci_val,
+      tau = tau,
+      at_time = at_time
     )
+    # Truthfulness gate: `standardized` requires a class with a real
+    # standardized-coefficients path (the beta attach). Classes without
+    # one used to accept the argument and render the auto-injected beta
+    # column entirely EMPTY -- silent wrong output under a requested
+    # label. supports$standardise_refit is declared TRUE only where the
+    # attach exists: lm / glm (incl. glm.nb) and the mixed engines
+    # (lmer / glmer / glmmTMB / lme). Bayesian frames instead declare
+    # standardise_algebraic (posthoc / basic / smart, exact affine
+    # rescales of the draws); their refit / pseudo refusals fire
+    # earlier, inside the frame method, with the Bayesian rationale.
+    std_ok <- isTRUE(frames[[i]]$info$supports$standardise_refit) ||
+      (isTRUE(frames[[i]]$info$supports$standardise_algebraic) &&
+        standardized %in% c("posthoc", "basic", "smart"))
+    if (!identical(standardized, "none") && !std_ok) {
+      model_tag <- if (n_models > 1L) {
+        sprintf("model %d (class %s)", i, class(models[[i]])[1L])
+      } else {
+        sprintf("this model class (%s)", class(models[[i]])[1L])
+      }
+      spicy_abort(
+        c(
+          sprintf(
+            "`standardized = \"%s\"` is not supported for %s.",
+            standardized,
+            model_tag
+          ),
+          "i" = paste0(
+            "Standardized coefficients are available for ",
+            "`lm`, `glm` (incl. `MASS::glm.nb`), mixed ",
+            "models (`lmer` / `glmer` / `glmmTMB` / ",
+            "`nlme::lme`), and fixed-effects `stan_glm`",
+            "-style fits (\"posthoc\" / \"basic\" / ",
+            "\"smart\")."
+          ),
+          "i" = paste0(
+            "To compare predictor effects in other classes, ",
+            "use average marginal effects where supported: ",
+            "`show_columns = c(\"b\", \"ame\")`."
+          )
+        ),
+        class = "spicy_unsupported_standardized"
+      )
+    }
+    # Truthfulness gate: RMST / risk-difference columns exist only for
+    # coxph fits (the g-computation engine); any other class would
+    # render the requested columns empty.
+    wants_estimand <- any(
+      c(
+        "rmst",
+        "rmst_se",
+        "rmst_ci",
+        "rmst_p",
+        "risk_diff",
+        "risk_diff_se",
+        "risk_diff_ci",
+        "risk_diff_p"
+      ) %in%
+        show_columns
+    )
+    if (
+      wants_estimand &&
+        !any(
+          frames[[i]]$coefs$estimate_type %in%
+            c("rmst", "risk_diff")
+        ) &&
+        # A supported class whose predictors were ALL transformed-only
+        # produced zero rows legitimately (marker in extras + caveat
+        # warning); only a class with no estimand machinery aborts.
+        is.null(frames[[i]]$info$extras$survival_estimands)
+    ) {
+      model_tag <- if (n_models > 1L) {
+        sprintf("model %d (class %s)", i, class(models[[i]])[1L])
+      } else {
+        sprintf("this model class (%s)", class(models[[i]])[1L])
+      }
+      spicy_abort(
+        c(
+          sprintf(
+            "RMST / risk-difference columns are not available for %s.",
+            model_tag
+          ),
+          "i" = paste0(
+            "They are computed by g-computation from a ",
+            "`survival::coxph` fit on right-censored ",
+            "single-record data, or a `survival::survreg` ",
+            "fit."
+          )
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+    # Truthfulness gate: `show_columns = "n_events"` requires per-row
+    # outcome event counts, which only binomial fits with an ungrouped
+    # binary response provide (.attach_event_counts). A frame without
+    # them would render a requested column entirely empty -- error
+    # instead, naming the model.
+    if ("n_events" %in% show_columns && is.null(frames[[i]]$coefs$events)) {
+      model_tag <- if (n_models > 1L) {
+        sprintf("model %d (class %s)", i, class(models[[i]])[1L])
+      } else {
+        sprintf("this model class (%s)", class(models[[i]])[1L])
+      }
+      spicy_abort(
+        c(
+          sprintf(
+            "`show_columns = \"n_events\"` is not available for %s.",
+            model_tag
+          ),
+          "i" = paste0(
+            "Outcome event counts need a binary (binomial ",
+            "family) outcome with an ungrouped 0/1, logical, ",
+            "or two-level factor response -- or a coxph fit ",
+            "on right-censored single-record data."
+          ),
+          "i" = paste0(
+            "The model-total event count is also available ",
+            "as a fit statistic for survival models: ",
+            "`show_fit_stats = c(\"nobs\", \"n_events\")`."
+          )
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+    # Exponentiate centrally so EVERY model class honours `exponentiate = TRUE`
+    # (OR / IRR / HR / RR / MR / TR), driven by each frame's own info$family /
+    # info$supports rather than a per-class `family()` lookup. Classes that
+    # exponentiate internally (lm/glm legacy, mixed, survival) set
+    # info$extras$exp_applied = TRUE, so .apply_exp_to_frame() no-ops for them;
+    # polr / clm / multinom / mlogit / betareg / fixest / pscl / rms / mgcv /
+    # svyglm / stan -- which never applied exp -- are handled here.
+    exp_out <- .apply_exp_to_frame(
+      frames[[i]]$coefs,
+      frames[[i]]$info,
+      exponentiate
+    )
+    frames[[i]]$coefs <- exp_out$coefs
+    frames[[i]]$info <- exp_out$info
+
     # Attach precomputed non-additivity metadata so the standardized
-    # caveat footer (build_standardized_caveat_footer_block()) can
-    # decide without reaching back to the live fit.
-    extracts[[i]][["non_additive"]] <- detect_non_additive_terms(models[[i]])
+    # caveat footer (build_standardized_caveat_footer_block_from_frames())
+    # can decide without reaching back to the live fit.
+    frames[[i]]$info$extras$non_additive <-
+      detect_non_additive_terms(models[[i]])
+
+    # Component blocks (zero-inflation / zero hurdle / dispersion) as labelled
+    # subordinate rows blocks. Materialised AFTER the central exponentiate --
+    # each block applies its OWN link-gated exp (logit -> OR; probit /
+    # count-type / dispersion stay on the link scale) -- and BEFORE p_adjust:
+    # component coefficients are substantive hypotheses and join the p-adjust
+    # family (unlike ordinal thresholds).
+    cb_i <- frames[[i]]$info$extras$component_blocks
+    if (
+      isTRUE(show_components) &&
+        "b" %in% show_columns &&
+        !is.null(cb_i) &&
+        length(cb_i) > 0L
+    ) {
+      frames[[i]]$coefs <- .append_component_rows(
+        frames[[i]]$coefs,
+        cb_i,
+        exponentiate
+      )
+      # Record whether each block's exp actually applied (footer gloss).
+      frames[[i]]$info$extras$component_blocks <- lapply(cb_i, function(b) {
+        b$exp_applied <- isTRUE(exponentiate) && isTRUE(b$exp_ok)
+        b
+      })
+    }
 
     # p_adjust runs per model BEFORE alignment / keep-drop filtering
     # so the family is the model's full coefficient set (intercept
     # and reference rows excluded), not just the displayed subset.
     if (!identical(p_adjust, "none")) {
-      extracts[[i]]$coefs <- apply_p_adjust(extracts[[i]]$coefs,
-                                            p_adjust)
+      frames[[i]]$coefs <- apply_p_adjust_to_frame_coefs(
+        frames[[i]]$coefs,
+        p_adjust
+      )
     }
+
+    # Ordinal thresholds as a subordinate "Thresholds" block of rows
+    # (show_thresholds = TRUE, the default). The (k - 1) cut-points stashed in
+    # info$extras$thresholds become coefs rows HERE -- after exp + p_adjust, so
+    # neither touches them: cut-points are never exponentiated, and they are not
+    # part of the p-adjust family. Gated on a coefficient column being shown
+    # (else the rows would render empty); when thresholds are not promoted to
+    # rows they fall back to the compact footer line (titlefooter layer).
+    thr_i <- frames[[i]]$info$extras$thresholds
+    if (
+      isTRUE(show_thresholds) &&
+        any(c("b", "beta") %in% show_columns) &&
+        !is.null(thr_i) &&
+        is.data.frame(thr_i) &&
+        nrow(thr_i) > 0L
+    ) {
+      frames[[i]]$coefs <- .append_threshold_rows(
+        frames[[i]]$coefs,
+        thr_i,
+        ci_level
+      )
+    }
+
+    # Scale (dispersion) coefficients of a `scale = ~` clm: their own
+    # "Scale effects" block, materialised here -- after exp + p_adjust, like
+    # the thresholds -- because they act on log(sigma) of the latent variable
+    # (exp(zeta) is a ratio of latent SDs, never an odds ratio). Gated on a
+    # coefficient column being shown, else the rows would render empty.
+    # Without the block the fit rendered as if its scale part did not exist.
+    sc_i <- frames[[i]]$info$extras$scale_effects
+    if (
+      isTRUE(show_components) &&
+        any(c("b", "beta") %in% show_columns) &&
+        !is.null(sc_i) &&
+        is.data.frame(sc_i) &&
+        nrow(sc_i) > 0L
+    ) {
+      frames[[i]]$coefs <- .rbind_union(frames[[i]]$coefs, sc_i)
+    }
+
+    # Random effects as a subordinate "Random effects" block of rows (show_re =
+    # TRUE, the default). Materialised HERE -- after exp + p_adjust, so variance
+    # components are never exponentiated or p-adjusted. Gated on a coefficient
+    # column being shown (else the rows render empty). ICC / N (groups) / the
+    # method tag and the chi-bar-squared LR test stay in the footer (they are
+    # summaries, not estimated variance parameters).
+    # Gated on the RAW coefficient column ("b"): a beta-only display has no
+    # column a variance component can honestly fill (a vc is never
+    # standardized), so the block is omitted rather than rendered empty.
+    re_i <- frames[[i]]$info$random_effects
+    if (
+      isTRUE(show_re) &&
+        "b" %in% show_columns &&
+        !is.null(re_i) &&
+        is.data.frame(re_i$variance_components) &&
+        nrow(re_i$variance_components) > 0L
+    ) {
+      # Opt-in per-term significance tests (LRT with the chi-bar-squared
+      # boundary correction, or the exact RLRT): fill the otherwise-NA test
+      # columns of the vc rows. Refits happen here, once per random term.
+      term_tests <- if (!identical(re_test_val, "none")) {
+        .compute_re_term_tests(models[[i]], re_test_val)
+      } else {
+        NULL
+      }
+      frames[[i]]$coefs <- .append_random_effects_rows(
+        frames[[i]]$coefs,
+        re_i,
+        re_scale = re_scale_val,
+        term_tests = term_tests,
+        re_test = re_test_val
+      )
+    }
+  }
+
+  # A model that reaches the renderer with no rows at all cannot produce
+  # a table: build_regression_table() returns empty_render_table(), which
+  # carries no fit statistics, no note and no structured view -- so the
+  # caller gets a bare header, and as_structured() then refuses the
+  # object for want of a view. Silence is the worst of the three possible
+  # answers; say what emptied the table instead.
+  #
+  # Exactly one route reaches this state: a fit whose entire content is a
+  # block the caller switched off. An intercept-only ordinal (`y ~ 1`) is
+  # that fit -- its cut-points ARE the model, there is not one predictor
+  # coefficient beside them -- and `show_thresholds = FALSE` removes
+  # them. Left alone (the default), the same fit renders its Thresholds
+  # block and its fit statistics normally.
+  empty_frames <- vapply(
+    frames,
+    function(fr) nrow(fr$coefs) == 0L,
+    logical(1)
+  )
+  if (any(empty_frames)) {
+    mod_labels <- .model_display_names(models)
+    hid_thresholds <- !isTRUE(show_thresholds) &&
+      any(vapply(
+        frames[empty_frames],
+        function(fr) {
+          thr <- fr$info$extras$thresholds
+          is.data.frame(thr) && nrow(thr) > 0L
+        },
+        logical(1)
+      ))
+    spicy_abort(
+      c(
+        sprintf(
+          "%s has no rows to show.",
+          paste(mod_labels[empty_frames], collapse = ", ")
+        ),
+        "i" = if (hid_thresholds) {
+          paste0(
+            "This fit has no predictor coefficients -- its cut-points ",
+            "are its whole content -- and `show_thresholds = FALSE` ",
+            "hides them."
+          )
+        } else {
+          "Every row the model could contribute has been switched off."
+        },
+        "i" = if (hid_thresholds) {
+          "Drop `show_thresholds = FALSE` to see the cut-points."
+        } else {
+          "Re-enable one of the row blocks (`show_thresholds`, `show_re`, `show_components`)."
+        }
+      ),
+      class = "spicy_empty_table"
+    )
+  }
+
+  # Singular mixed fits: the table note states the FACT (boundary
+  # estimate, SE/CI omitted); the actionable advice belongs here, to the
+  # analyst, once per table -- not in a published table note.
+  singular_mixed <- vapply(
+    frames,
+    function(fr) {
+      isTRUE(fr$info$extras$has_singular) &&
+        (fr$info$class %||% "") %in%
+          c("lmerMod", "lmerModLmerTest", "glmerMod", "glmmTMB", "lme")
+    },
+    logical(1)
+  )
+  if (any(singular_mixed)) {
+    mod_labels <- .model_display_names(models)
+    # "exactly zero" would be false for three of the five classes: only
+    # lme4 drives a collapsed component onto 0 itself. glmmTMB optimises
+    # the log-SD and nlme the log-Cholesky factor, where an exact 0 sits
+    # at -Inf, so the estimate lands NEAR the boundary; and the
+    # correlation regime (|r| = 1) has no zero variance at all.
+    advice <- paste0(
+      "Consider simplifying the random structure (drop the ",
+      "offending term), or test whether it belongs with ",
+      "`re_test = \"lrt\"`."
+    )
+    # `isSingular()` is lme4's, and lme4 is a Suggests: point there only
+    # for the fits it can actually be run on, or the reader is sent to a
+    # package they may not have, documenting a criterion that is not the
+    # one applied to their model.
+    singular_classes <- vapply(
+      frames[singular_mixed],
+      function(fr) fr$info$class %||% "",
+      character(1)
+    )
+    if (
+      all(singular_classes %in% c("lmerMod", "lmerModLmerTest", "glmerMod"))
+    ) {
+      advice <- paste0(
+        advice,
+        " See `help(\"isSingular\", package = \"lme4\")`."
+      )
+    }
+    spicy_warn(
+      c(
+        sprintf(
+          paste0(
+            "Singular fit (%s): the random-effect structure is estimated ",
+            "at or near the boundary of the parameter space -- a variance ",
+            "of 0, or a correlation of +/-1."
+          ),
+          paste(mod_labels[singular_mixed], collapse = ", ")
+        ),
+        "i" = advice
+      ),
+      class = "spicy_caveat"
+    )
+  }
+
+  # Variance-component SE / CI skipped for size: the note states the fact;
+  # the advice (raise the cap or test the random terms) belongs here, to
+  # the analyst, once per table.
+  re_se_skipped <- vapply(
+    frames,
+    function(fr) {
+      !is.na(fr$info$extras$re_se_skipped_n %||% NA_integer_)
+    },
+    logical(1)
+  )
+  if (any(re_se_skipped)) {
+    mod_labels <- .model_display_names(models)
+    spicy_warn(
+      c(
+        sprintf(
+          paste0(
+            "Variance-component SEs and CIs skipped for %s: n exceeds ",
+            "`options(\"spicy.re_se_max_n\")` = %s."
+          ),
+          paste(mod_labels[re_se_skipped], collapse = ", "),
+          format(.re_se_size_cap(), big.mark = ",")
+        ),
+        "i" = paste0(
+          "Their computation (merDeriv) grows superlinearly with n ",
+          "(roughly a minute at n \u2248 2,700). Raise the cap, e.g. ",
+          "`options(spicy.re_se_max_n = Inf)`, to compute them anyway, ",
+          "or test the random terms with `re_test = \"lrt\"`."
+        )
+      ),
+      class = "spicy_caveat"
+    )
+  }
+
+  # AME capability guard (finding M2): a class with no
+  # average-marginal-effects backend (supports$ame = FALSE: mlogit, coxph,
+  # flexsurv, selection, nls, Bayesian) must REFUSE the request rather
+  # than render an entirely empty column. In mixed tables where at least
+  # one model can produce AME, the capable models populate their columns
+  # and the incapable ones en-dash -- so only the all-incapable case
+  # errors.
+  if (any(c("ame", "ame_se", "ame_ci", "ame_p") %in% show_columns)) {
+    ame_ok <- vapply(
+      frames,
+      function(fr) {
+        isTRUE(fr$info$supports$ame)
+      },
+      logical(1)
+    )
+    if (!any(ame_ok)) {
+      classes <- unique(vapply(
+        frames,
+        function(fr) {
+          fr$info$class %||% "?"
+        },
+        character(1)
+      ))
+      # Cox models have the ABSOLUTE estimand family instead: point
+      # there rather than leaving the reader without a next step. (A
+      # DESIGN-based Cox never reaches here: the all-Cox token gate in
+      # validate_show_columns() refuses it first, with a hint of its own
+      # that points at survey rather than at estimands it also refuses.)
+      hint_main <- if (any(classes == "coxph")) {
+        paste0(
+          "For a Cox model, the absolute-effect columns are the RMST ",
+          "and risk differences: `show_columns = c(\"b\", \"rmst\")` ",
+          "with `tau = `, or `\"risk_diff\"` with `at_time = `."
+        )
+      } else {
+        paste0(
+          "No average-marginal-effects backend exists for this class ",
+          "(see ?table_regression_models, column AME)."
+        )
+      }
+      spicy_abort(
+        c(
+          sprintf(
+            "AME columns are not available for %s.",
+            paste0("`", classes, "`", collapse = " / ")
+          ),
+          "i" = hint_main,
+          "i" = "Drop the AME token(s) from `show_columns`."
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+  }
+
+  # Partial-effect-size capability guard (decision 41). Same shape as
+  # the AME guard above, reading the same kind of declaration: a class
+  # whose builder emits no term-level partial rows must REFUSE the
+  # token rather than render an entirely empty column. The pre-frame
+  # gate in validate_class_appropriate_tokens() only arbitrates WHICH
+  # partial estimand a class may ask for (variance-explained on lm,
+  # chi-square on glm and on the mixed families); it says nothing about
+  # the classes that have neither, and those used to reach the renderer
+  # and print a column of dashes. `supports$partial_effect_size` is the
+  # authority here, so a builder that mis-declares now visibly changes
+  # what the table refuses.
+  if (any(.PARTIAL_ES_TOKENS %in% show_columns)) {
+    partial_ok <- vapply(
+      frames,
+      function(fr) {
+        isTRUE(fr$info$supports$partial_effect_size)
+      },
+      logical(1)
+    )
+    if (!any(partial_ok)) {
+      classes <- .frame_class_labels(frames)
+      spicy_abort(
+        c(
+          sprintf(
+            "Partial effect-size columns are not available for %s.",
+            paste0("`", classes, "`", collapse = " / ")
+          ),
+          "i" = paste0(
+            "The term-level partial effect size is defined here for the ",
+            "least-squares families (`partial_f2` / `partial_eta2` / ",
+            "`partial_omega2`) and, as a partial likelihood-ratio or Wald ",
+            "chi-square, for `glm` and the mixed-effects families ",
+            "(`partial_chi2`). No such decomposition exists for this class ",
+            "(see ?table_regression_models)."
+          ),
+          "i" = "Drop the partial effect-size token(s) from `show_columns`."
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+  }
+
+  # Nested-comparison capability guard (decision 41). `nested = TRUE`
+  # on a model that cannot be compared to its predecessor used to
+  # render a block of en-dashed change rows -- an answer-shaped
+  # absence. Refuse instead, reading `supports$nested_lrt`. The GEE
+  # refusal in validate_nested_alignment() still fires first, before any
+  # frame exists, and keeps its own QIC hint; this guard covers the
+  # classes with no pre-frame gate of their own (design-based fits,
+  # Bayesian fits, lm_robust, ivreg).
+  #
+  # ONE incapable model is enough to refuse, unlike the column guards
+  # above. A column is independent per model -- a mixed lm + glm table
+  # fills the capable side and en-dashes the other, which is the
+  # intended reading. A hierarchy is a SEQUENCE: every change statistic
+  # is a statement about an adjacent PAIR, so a fit that cannot enter a
+  # comparison silently removes the comparison the table exists for.
+  # There is no capable side to fall back on.
+  if (isTRUE(nested) && length(frames) >= 2L) {
+    nested_ok <- vapply(
+      frames,
+      function(fr) {
+        isTRUE(fr$info$supports$nested_lrt)
+      },
+      logical(1)
+    )
+    if (!all(nested_ok)) {
+      classes <- .frame_class_labels(frames[!nested_ok])
+      spicy_abort(
+        c(
+          sprintf(
+            "`nested = TRUE` is not available for %s.",
+            paste0("`", classes, "`", collapse = " / ")
+          ),
+          "i" = paste0(
+            "The change statistics of a hierarchy (\u0394R\u00B2, partial ",
+            "F, LRT, \u0394AIC) all read a likelihood or a least-squares ",
+            "decomposition this class does not provide, and a hierarchy ",
+            "compares adjacent PAIRS -- one model that cannot be compared ",
+            "removes the comparison, it does not blank one column."
+          ),
+          "i" = "Render the models side by side with `nested = FALSE`."
+        ),
+        class = "spicy_invalid_input"
+      )
+    }
+  }
+
+  # `exponentiate = TRUE` no-op detection (relocated from before extraction):
+  # now that every frame is built, warn only when NO model actually applied
+  # exp() -- i.e. every link is identity or otherwise non-exponentiable. Keyed
+  # on the frames' own info$extras$exp_applied, so it covers classes with no
+  # stats::family() method (polr / clm / multinom / fixest / betareg / ...).
+  if (
+    isTRUE(exponentiate) &&
+      !any(vapply(
+        frames,
+        function(fr) isTRUE(fr$info$extras$exp_applied),
+        logical(1)
+      ))
+  ) {
+    spicy_warn(
+      c(
+        "`exponentiate = TRUE` has no effect on identity-link fits.",
+        "i" = paste0(
+          "exp() is only applied to fits whose coefficients are on a log / ",
+          "logit scale (odds, rate, risk, hazard, or time ratios). Drop the ",
+          "argument for identity-link (gaussian) fits."
+        )
+      ),
+      class = "spicy_ignored_arg"
+    )
   }
 
   # Standardized-on-non-additive caveat (Q15, Phase E)
   emit_standardized_caveat_if_needed(models, standardized)
 
   # Nested-comparison change stats (APA Table 7.13 in-table rows).
-  # Augments each `extracts[[i]]$fit_stats` row with `r2_change`,
+  # Augments each `frames[[i]]$info$fit_stats` list with `r2_change`,
   # `f_change`, `p_change`, etc. (NA for Model 1). MUST run BEFORE
-  # align_extracts() because align_extracts() rbinds the per-model
+  # align_frames() because align_frames() rbinds the per-model
   # fit_stats and the column schemas have to be uniform.
+  # Phase 0c sub-step C3: attach to frames; the legacy path
+  # (attach_nested_stats_to_extracts) is no longer called because
+  # align_frames() reads from frames directly.
   if (isTRUE(nested)) {
-    extracts <- attach_nested_stats_to_extracts(extracts, models)
+    frames <- attach_nested_stats_to_frames(frames, models)
+  }
+
+  # ---- Multinomial outcome-as-columns explode (display only) -------------
+  # The publication layout for a single multinom model: one column
+  # group per outcome category. The explode swaps in per-category
+  # pseudo-model frames for ALIGN + RENDER (and the display-facing
+  # footer themes); the title builder keeps reading the ORIGINAL
+  # frames (one model), and so does the dispatch payload below --
+  # tidy() and output = "long" keep the long frame with outcome_level
+  # and prefixed terms. See R/regression_multinom_layout.R.
+  frames_render <- frames
+  model_ids_render <- model_ids
+  mn_spanners <- NULL
+  mn_exploded <- FALSE
+  if (mn_columns_active) {
+    ex <- .explode_multinom_frame(frames[[1L]])
+    if (!is.null(ex)) {
+      frames_render <- ex$frames
+      model_ids_render <- ex$model_ids
+      # `outcome_labels = FALSE` is documented as "suppress the
+      # Outcome body row"; the columns layout has no such row, so
+      # FALSE is a no-op here (not an override).
+      if (isFALSE(outcome_labels)) {
+        outcome_labels <- NULL
+      }
+      mn_spanners <- .multinom_columns_spanners(
+        ex$model_ids,
+        frames[[1L]]$info$extras$reference_outcome %||% NA_character_,
+        outcome_labels
+      )
+      # `outcome_labels` is consumed as the spanner override in this
+      # layout: the renderer's per-model Outcome row must not also
+      # fire on the pseudo-models.
+      outcome_labels <- NULL
+      mn_exploded <- TRUE
+    }
   }
 
   # ---- Multi-model alignment + wide pivot (Layer 2) ----------------------
-  aligned <- align_extracts(
-    extracts,
+  # align_frames() consumes the frames list directly and produces the
+  # aligned long-format data structure consumed by the body builder.
+  aligned <- align_frames(
+    frames_render,
+    model_ids = model_ids_render,
     show_intercept = show_intercept,
     intercept_position = intercept_position,
     reference_style = reference_style
@@ -1245,6 +3259,43 @@ table_regression <- function(
   # coefficient family, not just the displayed subset).
   aligned <- apply_keep_drop_filter(aligned, keep = keep, drop = drop)
 
+  # Dispatch payload: under the columns layout, tidy() and
+  # `output = "long"` must keep the original long frame (a
+  # DISPLAY-only change), so the data-facing alignment is rebuilt
+  # from the un-exploded frames. Row selection (keep / drop /
+  # show_intercept) already ran on the DISPLAY alignment against
+  # BARE terms; one namespace must govern both views, so each
+  # prefixed row is mapped to its bare term and kept exactly when
+  # that term survived. Re-running the user regexes against the
+  # prefixed terms instead would silently select different rows
+  # (`keep = "^age$"` matches "age" but not "Student: age"), and
+  # align_frames()'s own intercept filter never matches
+  # "Student: (Intercept)".
+  aligned_data <- if (mn_exploded) {
+    ad <- align_frames(
+      frames,
+      model_ids = model_ids,
+      show_intercept = show_intercept,
+      intercept_position = intercept_position,
+      reference_style = reference_style
+    )
+    ca <- ad$coefs_aligned
+    lvl <- ca$outcome_level
+    bare <- ifelse(
+      !is.na(lvl) & startsWith(ca$term, paste0(lvl, ": ")),
+      substring(ca$term, nchar(lvl) + 3L),
+      ca$term
+    )
+    ad$coefs_aligned <- ca[
+      bare %in% unique(aligned$coefs_aligned$term),
+      ,
+      drop = FALSE
+    ]
+    ad
+  } else {
+    aligned
+  }
+
   # ---- Title + footer (Step 7) -------------------------------------------
   # `title` / `note` resolution: NULL -> auto, FALSE -> suppress,
   # character -> override. The auto-build is gated by `is.null(title)`
@@ -1253,20 +3304,68 @@ table_regression <- function(
   # "none" + flat informational message tied to reference_style; the
   # override / suppression happens last).
   title <- if (is.null(title)) {
-    build_regression_title(extracts, nested = nested)
+    # The title was the first renderer to read frames directly; the
+    # footer, body and alignment followed, and the legacy extract shape
+    # is gone.
+    build_regression_title_from_frames(frames, nested = nested)
   } else if (isFALSE(title)) {
     NULL
   } else {
     as.character(title)
   }
-  footer_main <- build_regression_footer(
-    extracts,
+  # The footer dispatcher reads from frames directly, each builder
+  # calling its _from_frames sibling. The legacy build_regression_footer()
+  # it replaced no longer exists.
+  # `re_scale_val` / `re_columns_val` were validated fail-fast up top (finding
+  # m3) and reused to materialise the RE rows; thread them through the footer.
+
+  # Phase 7c22 (item f): pass the surviving parent_vars (post keep /
+  # drop filter) so the polynomial-trends footer note suppresses when
+  # the ordered factor isn't actually displayed in the table.
+  # `aligned$coefs_aligned` has `factor_term` (parent name for factor
+  # rows, NA for non-factor rows) instead of the frame's `parent_var`
+  # column. Coalesce to recover the parent-var view of the display.
+  ca <- aligned$coefs_aligned
+  displayed_parent_vars <- unique(ifelse(
+    is.na(ca$factor_term),
+    ca$term,
+    ca$factor_term
+  ))
+
+  # The same resolved vector step 22b guarded, so the FOOTER cites the
+  # labels the column spanners display. The multinomial columns layout
+  # is excluded: its "models" are outcome categories and its footer
+  # never prints per-model lines. NULL means default labels;
+  # .model_line() then prints "Model %d", byte-identical to the
+  # historical footer.
+  named_model_labels <- if (mn_exploded) {
+    NULL
+  } else {
+    .resolve_model_labels(models, model_labels)
+  }
+
+  # Footer: model-facing themes read `frames` (one entry per model);
+  # the label-reading themes (reference categories, polynomial
+  # trends) read the DISPLAY frames -- under the columns layout the
+  # original prefixed labels would print pseudo-levels like
+  # "sex = Student: Female" once per equation.
+  footer_main <- build_regression_footer_from_frames(
+    frames,
+    frames_display = frames_render,
     standardized = standardized,
     p_adjust = p_adjust,
     stars = stars,
     nested = nested,
     show_columns = show_columns,
-    reference_style = reference_style
+    show_fit_stats = show_fit_stats,
+    reference_style = reference_style,
+    show_re = isTRUE(show_re),
+    re_scale = re_scale_val,
+    re_columns = re_columns_val,
+    re_test = re_test_val,
+    displayed_parent_vars = displayed_parent_vars,
+    decimal_mark = decimal_mark,
+    model_labels = named_model_labels
   )
 
   # "none" + flat: silent information loss flag. Inform-level
@@ -1274,24 +3373,41 @@ table_regression <- function(
   # must be carried by the surrounding article / caption. Only
   # emitted when at least one factor was detected (otherwise
   # there's nothing to be silent about).
-  if (identical(reference_style, "none") &&
-        identical(factor_layout, "flat") &&
-        any(vapply(extracts, function(e) {
-          coefs <- e$coefs
-          !is.null(coefs) && nrow(coefs) > 0L &&
-            any(!is.na(coefs$factor_term))
-        }, logical(1)))) {
+  # Phase 0c sub-step C5: factor-detection scan now reads from frames
+  # directly. Frame coefs have parent_var = term for non-factor predictors
+  # (no NA fallback), so the "any factor" test is parent_var != term on
+  # any non-intercept row.
+  if (
+    identical(reference_style, "none") &&
+      identical(factor_layout, "flat") &&
+      any(vapply(
+        frames_render,
+        function(f) {
+          coefs <- f$coefs
+          !is.null(coefs) &&
+            nrow(coefs) > 0L &&
+            any(coefs$parent_var != coefs$term & coefs$term != "(Intercept)")
+        },
+        logical(1)
+      ))
+  ) {
     spicy_inform(
-      c(paste0("`reference_style = \"none\"` with `factor_layout = ",
-               "\"flat\"`: reference levels are not displayed anywhere."),
-        "i" = paste0("State the reference convention in the surrounding ",
-                     "text or table caption.")),
+      c(
+        paste0(
+          "`reference_style = \"none\"` with `factor_layout = ",
+          "\"flat\"`: reference levels are not displayed anywhere."
+        ),
+        "i" = paste0(
+          "State the reference convention in the surrounding ",
+          "text or table caption."
+        )
+      ),
       class = "spicy_silent_reference"
     )
   }
 
   full_footer_str <- if (is.null(note)) {
-    if (length(footer_main)) footer_main else NULL
+    if (length(footer_main)) footer_main else NULL # nocov -- NULL arm unreachable: the type footer block always emits
   } else if (isFALSE(note)) {
     NULL
   } else {
@@ -1303,16 +3419,41 @@ table_regression <- function(
   # Partial-name auto-fill: `list("Step 1" = m1, m2)` becomes
   # `c("Step 1", "Model 2")`. validate_models_input() rejects
   # duplicates but accepts partial naming since user intent is
-  # unambiguous (named slots win, unnamed slots default).
-  effective_model_labels <- if (!is.null(model_labels)) {
-    model_labels
-  } else if (!is.null(names(models)) && any(nzchar(names(models)))) {
-    nms <- names(models)
-    missing_idx <- which(!nzchar(nms))
-    nms[missing_idx] <- paste0("Model ", missing_idx)
-    nms
+  # unambiguous (named slots win, unnamed slots default). Resolved
+  # above the footer build (`named_model_labels`) so the footer's
+  # per-model lines cite the same labels.
+  effective_model_labels <- if (mn_exploded) {
+    # Columns layout: the "model" labels are the category spanners
+    # (already outcome_labels-overridden); `model_labels` itself was
+    # refused fail-fast up top.
+    mn_spanners
   } else {
-    NULL  # render_regression_table generates "Model 1", ... as fallback
+    named_model_labels # NULL: render_regression_table generates "Model 1", ...
+  }
+  # "95% CrI" (equal-tailed) or "95% HDI" header when EVERY frame is a
+  # posterior interval (the design promise in regression_frame_stan.R;
+  # the hdi gate guarantees posterior_hdi is all-Bayesian): mixed
+  # frequentist + Bayesian tables keep the shared "CI" label, with a
+  # per-model footer disclosure from the CI-method block.
+  frame_ci_methods <- vapply(
+    frames,
+    function(f) {
+      f$info$ci_method %||% ""
+    },
+    character(1)
+  )
+  ci_label_val <- if (
+    length(frames) > 0L &&
+      all(frame_ci_methods == "posterior_quantile")
+  ) {
+    spicy_str("header_ci_label_credible")
+  } else if (
+    length(frames) > 0L &&
+      all(frame_ci_methods == "posterior_hdi")
+  ) {
+    spicy_str("header_ci_label_hdi")
+  } else {
+    spicy_str("header_ci_label_confidence")
   }
   rendered <- render_regression_table(
     aligned,
@@ -1324,6 +3465,7 @@ table_regression <- function(
     factor_layout = factor_layout,
     stars = stars,
     ci_level = ci_level,
+    ci_label = ci_label_val,
     digits = digits,
     p_digits = p_digits,
     effect_size_digits = effect_size_digits,
@@ -1334,7 +3476,8 @@ table_regression <- function(
     labels = labels,
     outcome_labels = outcome_labels,
     title = title,
-    note = full_footer_str
+    note = full_footer_str,
+    re_columns = re_columns_val
   )
   # Stash the print-time padding as an attribute so the print
   # method can honour the call-site choice (and tooling like
@@ -1344,9 +3487,13 @@ table_regression <- function(
   attr(rendered, "fit_stats_layout") <- fit_stats_layout
 
   # ---- Output dispatch (Step 11) -----------------------------------------
+  # `aligned_data` (not `aligned`): under the multinomial columns
+  # layout the display alignment is the exploded pseudo-model one,
+  # while tidy() / output = "long" read the original long frame
+  # (as_structured() mirrors the display, via the rendered table).
   dispatch_regression_output(
     rendered = rendered,
-    aligned = aligned,
+    aligned = aligned_data,
     output = output,
     excel_path = excel_path,
     excel_sheet = excel_sheet,
@@ -1354,4 +3501,18 @@ table_regression <- function(
     word_path = word_path,
     word_template = word_template
   )
+}
+
+# Display names for a list of fitted models: their names when all are
+# named, positional "Model k" otherwise. Every warning that cites a
+# model goes through here, and binds the result to `mod_labels` --
+# never `labels`, the user's per-coefficient row-label vector still
+# needed by the renderer downstream: shadowing it in a warning block
+# once silently dropped every `labels =` override on mixed fits.
+.model_display_names <- function(models) {
+  if (!is.null(names(models)) && all(nzchar(names(models)))) {
+    names(models)
+  } else {
+    paste("Model", seq_along(models))
+  }
 }

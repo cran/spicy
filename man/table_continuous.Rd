@@ -10,12 +10,17 @@ table_continuous(
   by = NULL,
   exclude = NULL,
   regex = FALSE,
+  drop_na = TRUE,
+  weights = NULL,
+  rescale = FALSE,
   test = c("welch", "student", "nonparametric"),
   p_value = NULL,
   statistic = FALSE,
   show_n = TRUE,
+  show_columns = NULL,
   effect_size = c("none", "auto", "hedges_g", "eta_sq", "r_rb", "epsilon_sq"),
   effect_size_ci = FALSE,
+  smd = FALSE,
   ci = TRUE,
   labels = NULL,
   ci_level = 0.95,
@@ -23,14 +28,16 @@ table_continuous(
   effect_size_digits = 2,
   p_digits = 3,
   decimal_mark = ".",
-  align = c("decimal", "auto", "center", "right"),
+  align = c("decimal", "center", "right"),
   output = c("default", "data.frame", "long", "tinytable", "gt", "flextable", "excel",
     "clipboard", "word"),
   excel_path = NULL,
-  excel_sheet = "Descriptives",
+  excel_sheet = NULL,
   clipboard_delim = "\\t",
   word_path = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE,
+  style = NULL
 )
 }
 \arguments{
@@ -44,7 +51,14 @@ expression pattern (character string).}
 \item{by}{Optional grouping column. Accepts an unquoted column name
 or a single character column name. Coerced to factor for
 grouping; non-numeric grouping columns (factor, character,
-logical) are supported as-is.}
+logical) are supported as-is. Factor levels keep their declared
+order; any other \code{by} (character, numeric, haven labelled) forms
+groups in order of first appearance in the data -- the same
+convention as \code{\link[=table_categorical]{table_categorical()}}. For a haven labelled \code{by},
+the group headers are the raw codes (value labels are not used
+for grouping headers -- the family convention shared with
+\code{\link[=table_categorical]{table_categorical()}} and \code{\link[=table_continuous_lm]{table_continuous_lm()}}); declared
+missing values follow \code{user_na} as usual.}
 
 \item{exclude}{Columns to exclude. Supports tidyselect syntax and
 character vectors of column names.}
@@ -52,6 +66,46 @@ character vectors of column names.}
 \item{regex}{Logical. If \code{FALSE} (the default), uses tidyselect
 helpers. If \code{TRUE}, the \code{select} argument is treated as a regular
 expression.}
+
+\item{drop_na}{Logical. Controls how missing values in the \code{by}
+column are handled -- the same argument as \code{\link[=table_categorical]{table_categorical()}},
+with one structural difference: a continuous summary has no
+\code{"(Missing)"} row for the summarized variable itself (a mean
+cannot include \code{NA}), so \code{NA}s in each summarized variable are
+always excluded from that variable's statistics and the exclusion
+is disclosed in a table note ("Missing values removed: ...")
+rather than silent. If \code{TRUE} (the default, preserving this
+function's historical behavior; \code{\link[=table_categorical]{table_categorical()}} defaults to
+\code{FALSE}), rows with \code{NA} in \code{by} are removed from the grouped
+summaries, with a warning and a dedicated note line ("Rows with
+missing ... removed"). If \code{FALSE}, rows with \code{NA} in \code{by} form a
+dedicated \code{"(Missing)"} group -- the field convention for
+descriptive tables (gtsummary's "Unknown" row; see the
+Epidemiologist R Handbook, Descriptive tables) -- while the
+group-comparison test and effect size are still computed on the
+observed groups only (show the missing, test the observed,
+matching \code{\link[=table_categorical]{table_categorical()}}). Ignored (with a warning) when
+\code{by} is not used.}
+
+\item{weights}{Optional case weights: an unquoted column name, a
+character column name, or a numeric vector of length \code{nrow(data)}.
+Weights must be non-negative and finite; rows with \code{NA} or zero
+weight leave every statistic (including \code{Min} / \code{Max}) and \code{NA}
+weights are disclosed in the table note. The weighted formulas
+follow the frequency-expansion convention -- see the \strong{Weights}
+section. The weighted table names its weights in the note
+("Statistics weighted by ..."). Group tests and effect sizes are
+not computed under weights: use \code{\link[=table_continuous_lm]{table_continuous_lm()}} for
+weighted comparisons.}
+
+\item{rescale}{Logical. If \code{TRUE}, weights are first normalised so
+that they sum to the number of observations used for each
+variable -- the same \code{rescale} grammar as \code{\link[=table_categorical]{table_categorical()}},
+read from \code{options(spicy.rescale)} when not supplied. This is the
+sampling-weights reading: results become invariant to the scale
+of the weights, and the weighted SD then equals Stata's
+\verb{[aweight]} / \code{survey::svyvar()} value exactly. The default
+\code{FALSE} uses the weights as given (frequency reading).}
 
 \item{test}{Character. Statistical test to use when comparing groups.
 One of \code{"welch"} (default), \code{"student"}, or \code{"nonparametric"}.
@@ -88,7 +142,15 @@ column in the printed ASCII table and in every rendered output
 Set to \code{FALSE} to drop the \code{n} column structurally from those
 outputs (no empty placeholder, no spanner). The \code{n} column is
 always present in the raw \code{output = "data.frame"} /
-\code{"long"} for downstream programmatic access. Defaults to \code{TRUE}.}
+\code{"long"} for downstream programmatic access. Defaults to \code{TRUE}.
+Ignored (with a warning) when \code{show_columns} is supplied.}
+
+\item{show_columns}{Statistics to display, as a character vector of
+tokens or a named list of such vectors (one per variable). \code{NULL}
+(the default) keeps the historical display: mean, SD, min, max,
+the mean CI (see \code{ci}) and \code{n} (see \code{show_n}). See the
+"Choosing the statistics" section for the token vocabulary, the
+per-variable form, and the test that follows a median.}
 
 \item{effect_size}{Effect-size measure to include in the rendered
 outputs. One of:
@@ -127,6 +189,16 @@ left at the default \code{effect_size = "none"}, the function warns
 and promotes \code{effect_size} to \code{"auto"} so the requested CI can
 be shown. Defaults to \code{FALSE}.}
 
+\item{smd}{Logical. If \code{TRUE}, adds an \code{SMD} column holding the
+standardized mean difference between the two groups of \code{by},
+the balance diagnostic of the Table 1 literature. Requires
+exactly two groups; signed, group 1 minus group 2 in the order
+the table displays them; no confidence interval and no p-value,
+by design. It is independent of \code{p_value} and of
+\code{effect_size}: turning it on turns nothing else off. Rounded
+with \code{effect_size_digits}. See the "Standardized mean
+difference" section below. Defaults to \code{FALSE}.}
+
 \item{ci}{Logical. If \code{TRUE}, includes the mean confidence
 interval columns (\verb{<level>\% CI LL} / \verb{<level>\% CI UL}) and their
 spanner in the printed ASCII table and in every rendered output
@@ -136,7 +208,8 @@ structurally from those outputs (no empty placeholders, no
 border lines under an empty header). The CI bounds are always
 present as \code{ci_lower} / \code{ci_upper} in the raw
 \code{output = "data.frame"} / \code{"long"} for downstream programmatic
-access. Defaults to \code{TRUE}. The CI level is taken from \code{ci_level}.}
+access. Defaults to \code{TRUE}. The CI level is taken from \code{ci_level}.
+Ignored (with a warning) when \code{show_columns} is supplied.}
 
 \item{labels}{An optional named character vector of variable labels.
 Names must match column names in \code{data}. When \code{NULL} (the default),
@@ -167,32 +240,38 @@ Either \code{"."} (default) or \code{","}.}
 
 \item{align}{Horizontal alignment of numeric columns in the printed
 ASCII table and in the \code{tinytable}, \code{gt}, \code{flextable}, \code{word},
-and \code{clipboard} outputs. The first column (\code{Variable}) and
+\code{excel}, and \code{clipboard} outputs. The first column (\code{Variable}) and
 \code{Group} (when present) are always left-aligned. One of:
 \itemize{
 \item \code{"decimal"} (default): align numeric columns on the decimal
 mark, the standard scientific-publication convention used by
-SPSS, SAS, LaTeX \code{siunitx}, \code{\link[gt:cols_align_decimal]{gt::cols_align_decimal()}} and
-\code{tinytable::style_tt(align = "d")}. For engines without a
-native decimal-alignment primitive (\code{flextable}, \code{word},
-\code{clipboard}, ASCII print), values are pre-padded with leading
-and trailing spaces so the dots line up vertically; the body
-of the \code{flextable}/\code{word} output additionally uses a monospace
-font to make character widths uniform.
+SPSS, SAS, and LaTeX \code{siunitx}. Numeric cells are pre-padded
+with figure-spaces (U+2007, digit-width) so every string in a
+column has the same width with the decimal mark at the same
+internal position; centring those uniform-width strings then
+stacks the decimal points vertically. The same pad-then-centre
+strategy is applied on every rendering engine (\code{gt},
+\code{tinytable}, \code{flextable}, \code{word}, ASCII print) for a
+homogeneous rendering, matching \code{table_regression()} and
+\code{table_continuous_lm()}. The \code{clipboard} output is delimited
+text meant to be parsed rather than read at a fixed width, so
+its cells travel unpadded (a padded number pastes as text
+next to an unpadded number).
 \item \code{"center"}: center-align all numeric columns.
 \item \code{"right"}: right-align all numeric columns.
-\item \code{"auto"}: legacy per-column rule (center for the descriptive
-columns, right for \code{n} and \code{p}).
 }
 
-The \code{excel} output uses the engine's default alignment in any
-case: cell-string padding does not align decimals under
-proportional fonts. Same default and semantics as
-\code{\link[=table_continuous_lm]{table_continuous_lm()}}.}
+\code{"center"} and \code{"right"} reach the \code{excel} output too. \code{"decimal"}
+does not: Excel cells are written unpadded, because cell-string
+padding does not align decimals under a proportional font, so the
+workbook keeps the engine's own convention instead -- counts and
+the \emph{p}-value right-aligned, the other numeric columns centred.
+Same default and same three values as \code{\link[=table_continuous_lm]{table_continuous_lm()}},
+whose \code{excel} output still uses that convention at every \code{align}.}
 
 \item{output}{Output format. One of:
 \itemize{
-\item \code{"default"}: a printed ASCII table, returned invisibly.
+\item \code{"default"}: an ASCII table object, printed when the call is bare.
 \item \code{"data.frame"} / \code{"long"}: a plain \code{data.frame} with one row
 per \verb{(variable x group)} (or one row per \code{variable} when \code{by}
 is not used). The two names are synonyms; pick whichever reads
@@ -208,28 +287,52 @@ better in your pipeline (\code{"long"} matches
 
 \item{excel_path}{File path for \code{output = "excel"}.}
 
-\item{excel_sheet}{Sheet name for \code{output = "excel"}
-(default: \code{"Descriptives"}).}
+\item{excel_sheet}{Sheet name for \code{output = "excel"}. \code{NULL} (the
+default) uses \code{"Descriptives"}.}
 
 \item{clipboard_delim}{Delimiter for \code{output = "clipboard"}
-(default: \code{"\\t"}).}
+(default: \code{"\\t"}). A cell holding the delimiter itself, a double
+quote or a line break is quoted RFC 4180-style, so the grid
+survives whatever delimiter you choose.}
 
 \item{word_path}{File path for \code{output = "word"}.}
 
 \item{verbose}{Logical. If \code{TRUE}, prints messages about excluded
 non-numeric columns (default: \code{FALSE}).}
+
+\item{user_na}{Logical. If \code{TRUE} (the default), declared missing
+values never reach the numeric summaries: they are excluded like
+\code{NA} and disclosed in the table note (\verb{Declared missing values removed: ...}); declared-missing \code{by} values form no group. If
+\code{FALSE}, the declared codes are summarized as ordinary numbers.
+See the "Declared missing values" section of \code{\link[=freq]{freq()}}.}
+
+\item{style}{A journal style: a theme name (\code{"jama"}, \code{"nejm"},
+\code{"lancet"}, \code{"annals"}, \code{"apa"}, \code{"aer"}), a
+\code{\link[=spicy_style]{spicy_style()}} object, or \code{NULL} (the default). A style only
+changes DEFAULTS -- any argument you pass explicitly wins over it.
+Set \code{options(spicy.style = )} for document-wide scope. A theme
+covers numeric formatting conformity only, not full editorial
+conformity; \code{?spicy_style} lists the exact rules each one encodes
+and the official document they come from. An unknown name is an
+error.}
 }
 \value{
 Depends on \code{output}:
 \itemize{
-\item \code{"default"}: prints a styled ASCII table and returns the
-underlying \code{data.frame} invisibly (S3 class
-\code{"spicy_continuous_table"} / \code{"spicy_table"}). The object can
-be re-coerced via \code{\link[=as.data.frame.spicy_continuous_table]{as.data.frame.spicy_continuous_table()}} or
-piped into \code{broom::tidy()} / \code{broom::glance()}.
+\item \code{"default"}: the underlying \code{data.frame} carrying the
+rendering metadata as attributes (S3 class
+\code{"spicy_continuous_table"} / \code{"spicy_table"}). The object is
+returned visibly, so a bare \code{table_continuous(...)} call
+auto-prints the styled ASCII table at the console while
+\code{t <- table_continuous(...)} stays silent (print \code{t} to display
+the table). The object can be re-coerced via
+\code{\link[=as.data.frame.spicy_continuous_table]{as.data.frame.spicy_continuous_table()}} or piped into
+\code{broom::tidy()} / \code{broom::glance()}.
 \item \code{"data.frame"} / \code{"long"}: a plain \code{data.frame} with
 columns \code{variable}, \code{label}, \code{group} (when \code{by} is used),
-\code{mean}, \code{sd}, \code{min}, \code{max}, \code{ci_lower}, \code{ci_upper}, \code{n}. When
+\code{mean}, \code{sd}, \code{min}, \code{max}, \code{ci_lower}, \code{ci_upper}, \code{median},
+\code{q1}, \code{q3}, \code{iqr}, \code{med_ci_lower}, \code{med_ci_upper}, \code{n}. Every
+statistic is computed whatever \code{show_columns} displays. When
 \code{by} is used together with \code{p_value = TRUE}, \code{statistic = TRUE},
 or \code{effect_size != "none"}, additional columns are appended
 (populated on the first row of each variable block only):
@@ -244,6 +347,11 @@ or \code{effect_size != "none"}, additional columns are appended
 \item \code{es_value}, \code{es_ci_lower}, \code{es_ci_upper} -- effect-size
 estimate and confidence interval bounds.
 }
+A \code{by} frame ALSO carries \code{smd_type} and \code{smd_value}
+unconditionally -- \code{NA} throughout when \code{smd = FALSE} -- so the
+schema a pipeline indexes into does not move with an argument
+(the \code{weighted_n} rule). \code{smd_type} names the kernel the value
+came from: \code{"continuous"} here.
 The two names \code{"data.frame"} and \code{"long"} are synonyms (the
 descriptive output is naturally already long). Pick whichever
 reads better in your code.
@@ -255,6 +363,22 @@ path invisibly.
 \item \code{"clipboard"}: copies the table and returns the display
 \code{data.frame} invisibly.
 }
+
+The missing-value disclosure (values excluded from the summaries,
+and rows removed for a missing \code{by} value under \code{drop_na = TRUE})
+travels with the table on every route, not just the console:
+\code{"default"} prints it under the ASCII table, \code{"tinytable"} / \code{"gt"} /
+\code{"flextable"} / \code{"word"} carry it as a table note, \code{"excel"} writes
+it below the body, and
+\code{"data.frame"} / \code{"long"} keep the sentence verbatim in the
+\code{missing_note} attribute (\code{attr(x, "missing_note")}, \code{NULL} when
+nothing was removed) so a pipeline that renders the numbers itself
+can still state what left the table. On the \code{"tinytable"} route the
+note is set one size down; \code{options(spicy.note_style)} governs that
+(see \code{\link[=table_regression]{table_regression()}}).
+
+The Excel sheet carries the same title the console prints on its
+first row; the table itself starts on row 3.
 }
 \description{
 Computes descriptive statistics (mean, SD, min, max, confidence interval
@@ -277,10 +401,118 @@ Details), or publication-ready tables (\code{"tinytable"}, \code{"gt"},
 This is the descriptive companion to \code{\link[=table_continuous_lm]{table_continuous_lm()}}. The
 two functions share their layout, alignment, and reporting precision
 so descriptive and model-based analyses of the same data look
-uniform side by side. Use \code{\link[=table_continuous_lm]{table_continuous_lm()}} when you need
+uniform side by side -- with one exception, documented under
+\code{align}: only \code{table_continuous()} carries \code{align} into the \code{excel}
+output. Use \code{\link[=table_continuous_lm]{table_continuous_lm()}} when you need
 robust SE, weighted contrasts, fitted means, or covariate
 adjustment.
 }
+\section{Choosing the statistics}{
+\code{show_columns} selects which statistics the table displays. The
+tokens, and the column each one produces:\tabular{lll}{
+   Token \tab Column \tab Statistic \cr
+   \code{"m"} \tab \code{M} \tab mean \cr
+   \code{"sd"} \tab \code{SD} \tab standard deviation \cr
+   \code{"med"} \tab \code{Med} \tab median (\code{\link[stats:median]{stats::median()}}) \cr
+   \code{"iqr"} \tab \code{IQR} \tab interquartile \emph{width}, \code{Q3 - Q1} \cr
+   \code{"med_iqr"} \tab \code{Med [Q1, Q3]} \tab median and the interquartile \emph{interval}, in one compact column \cr
+   \code{"q1"} / \code{"q3"} \tab \code{Q1} / \code{Q3} \tab first / third quartile \cr
+   \code{"min"} / \code{"max"} \tab \code{Min} / \code{Max} \tab extremes \cr
+   \code{"ci"} \tab \verb{<level>\% CI LL} / \code{UL} \tab \emph{t} confidence interval of the mean \cr
+   \code{"med_ci"} \tab \verb{Med <level>\% CI LL} / \code{UL} \tab exact confidence interval of the median \cr
+   \code{"n"} \tab \code{n} \tab valid observations \cr
+   \code{"weighted_n"} \tab \verb{Weighted n} \tab sum of weights (requires \code{weights}) \cr
+}
+
+
+Quartiles use \code{\link[stats:quantile]{stats::quantile()}}'s default type 7. \code{"iqr"} is the
+width (one number, the rank mirror of \code{SD}); \code{"med_iqr"} shows the
+interval with its bounds. Columns appear in the canonical order of
+the table above, whatever order they were written in.
+}
+
+\section{Weights}{
+With \code{weights}, every displayed statistic uses the
+\strong{frequency-expansion} convention: for integer weights each
+statistic equals its unweighted version computed on the data with
+every row repeated \code{w} times (\code{rep(x, w)}), exactly; with all
+weights equal to 1 every statistic equals its unweighted sibling.
+The formulas, with \eqn{W = \sum w_i}:
+\itemize{
+\item mean: \eqn{\sum w_i x_i / W};
+\item SD: \eqn{\sqrt{\sum w_i (x_i - \bar{x}_w)^2 / (W - 1)}};
+\item quantiles: type-7 positions on the cumulative-weight scale (the
+\code{\link[Hmisc:wtd.quantile]{Hmisc::wtd.quantile()}} default algorithm);
+\item CI of the mean: \eqn{\bar{x}_w \pm t_{W-1} \, s_w / \sqrt{W}};
+\item \code{n} counts the rows used; \code{"weighted_n"} reports \eqn{W}.
+}
+
+These are the conventions of \code{Hmisc::wtd.mean()} / \code{wtd.var()} /
+\code{wtd.quantile()} (defaults), \code{matrixStats::weightedSd()}, and
+\code{DescTools::Quantile()}, and -- for integer weights -- of Stata's
+\verb{[fweight]} and SPSS's \verb{WEIGHT BY}. With \code{rescale = TRUE} the
+weights are normalised to sum to the number of observations first,
+which makes every result invariant to the scale of the weights and
+makes the SD equal Stata's \verb{[aweight]} / \code{survey::svyvar()} value
+-- the reading appropriate for sampling weights. Weighted-quantile
+conventions genuinely differ across software (Stata interpolates
+nowhere, SAS refuses analytic-weighted quantiles, the survey
+package offers twelve rules); spicy states its rule here rather
+than leaving it implicit.
+
+Two deliberate refusals: the \code{"med_ci"} token (an order-statistic
+interval with no weighted version) and, under \code{by}, the group tests
+and effect sizes -- a \emph{t}-test printed next to weighted descriptives
+would silently be unweighted. Set \code{p_value = FALSE} for weighted
+descriptives by group, or use \code{\link[=table_continuous_lm]{table_continuous_lm()}} with
+\code{weights} for weighted comparisons. Note that
+\code{\link[=table_continuous_lm]{table_continuous_lm()}}'s residual SD answers a different question
+(model-based, precision-weight convention) and is not expected to
+match the descriptive SD here.
+
+A named list applies a different selection to each variable, with
+\code{.default} covering the variables it does not name -- the case of a
+table where a skewed variable must be reported as a median while the
+others keep the mean:
+
+\if{html}{\out{<div class="sourceCode r">}}\preformatted{show_columns = list(
+  mvpa    = c("med_iqr", "n"),
+  sitting = c("med_iqr", "n"),
+  .default = c("m", "sd", "n")
+)
+}\if{html}{\out{</div>}}
+
+The table's columns are the union of the requested tokens; a cell of
+a column the variable did not ask for is left blank (structurally
+empty, not an en dash, which is reserved for an undefined
+statistic).
+
+The table tests what it shows. A variable displaying a median
+without a mean takes the rank-based test -- Wilcoxon rank-sum for
+two groups, Kruskal-Wallis beyond -- and the rank effect size
+(rank-biserial \emph{r}, \eqn{\varepsilon^2}) when \code{effect_size} is
+\code{"auto"}. The switch is per variable, so a mixed table carries a
+rank test on its median rows and Welch on its mean rows, and the
+table note names which test each variable carries. An explicit
+\code{test} is sovereign: it applies to every variable, with a warning
+naming the ones displayed as medians.
+
+\code{"med_ci"} is the exact order-statistic (sign-test) confidence
+interval: the tightest interval \eqn{[x_{(k)}, x_{(n-k+1)}]} whose
+binomial coverage still reaches \code{ci_level}. It is distribution-free
+and deterministic -- no bootstrap, no seed -- and its coverage is at
+least nominal, the same convention as SAS \verb{PROC UNIVARIATE}
+(\code{CIPCTLDF}) and \code{DescTools::MedianCI(method = "exact")}. Below
+about six observations no interval reaches the requested level; the
+cells then show an en dash rather than a false interval.
+
+\code{"ci"} is the confidence interval \emph{of the mean}: requested without
+\code{"m"} it is dropped with a warning pointing at \code{"med_ci"}, and
+\code{"med_ci"} without a displayed median is dropped likewise. When
+\code{show_columns} is supplied it decides the \code{n} and CI columns on its
+own, and a contradictory \code{show_n} / \code{ci} is reported.
+}
+
 \section{Tests}{
 The omnibus test is computed only when \code{by} is supplied and at
 least two groups remain after dropping \code{NA}s, with every group
@@ -302,11 +534,85 @@ Confidence intervals (enabled with \code{effect_size_ci = TRUE}) use
 noncentral \emph{F} inversion for \eqn{\eta^2}, the Hedges-Olkin
 normal approximation for \emph{g}, the Fisher \emph{z}-transform for \emph{r},
 and percentile bootstrap (2,000 replicates) for
-\eqn{\varepsilon^2}.
+\eqn{\varepsilon^2}. The bootstrap bounds depend on the random
+number generator state: call \code{set.seed()} before the table for
+reproducible \eqn{\varepsilon^2} intervals (the other three CIs
+are closed-form and deterministic).
 
 For Cohen's \emph{d}, Hays' \eqn{\omega^2}, and Cohen's \emph{f}\eqn{^2}
 (derived from a fitted, possibly weighted \code{lm()}), use the
 model-based companion \code{\link[=table_continuous_lm]{table_continuous_lm()}}.
+}
+
+\section{Standardized mean difference}{
+\code{smd = TRUE} adds an \code{SMD} column with the balance diagnostic of
+the Table 1 literature, in Austin's form (Austin 2009, \emph{Stat Med}
+28:3083-3107; Austin 2011, \emph{Multivar Behav Res} 46:399-424):
+
+\deqn{\mathrm{SMD} = \frac{\bar{x}_1 - \bar{x}_2}{\sqrt{(s_1^2 +
+s_2^2) / 2}}}
+
+The denominator is the root \strong{mean of the two group variances},
+each at \eqn{n - 1}, not the degrees-of-freedom pooled SD. At
+\strong{equal} group sizes those two denominators are the same, so the
+SMD is exactly Cohen's \emph{d}; at unequal sizes they part company (on
+a 4-versus-3 split the SMD is \eqn{-0.51} and \emph{d} is \eqn{-0.54}).
+
+\code{effect_size = "hedges_g"}, two columns to the left, is a third
+number: \emph{g} applies the small-sample correction \emph{J} on top of \emph{d},
+so it \strong{never} equals the SMD. At equal group sizes the ratio
+\eqn{g / \mathrm{SMD}} is exactly \emph{J} -- 0.80 at \emph{n} = 3 per group,
+0.96 at \emph{n} = 10 -- approaching 1 only as the sample grows. Read
+each for what it is; do not recompute one from the other. (The
+divergence is nameable upstream:
+\code{cobalt::col_w_smd(s.d.denom = "pooled")} reproduces this column,
+\code{s.d.denom = "hedges"} reproduces \code{hedges_g}.)
+
+Conventions, all deliberate:
+
+\itemize{
+\item \strong{Signed}, group 1 minus group 2 in the order the table
+displays the groups -- the two groups sit side by side, so a
+bare magnitude would make the reader re-derive a direction the
+row already gives. (\code{tableone} publishes the magnitude;
+\code{cobalt} and \code{arsenal} sign it the other way, guessing the
+second level as "treated".) The threshold in the table note is
+read on \eqn{|\mathrm{SMD}|}; the column keeps the sign. No
+conditional formatting: spicy never highlights a threshold.
+\item \strong{No confidence interval and no p-value, ever.} The SMD
+is a descriptive diagnostic; attaching an interval to it
+reintroduces the test reasoning the balance literature asks
+the reader to drop. This is not a missing feature.
+\item \strong{Exactly two groups.} A \code{by} with three or more is
+refused rather than averaged over pairs: an average has no
+published reading, and it can sit under the usual threshold
+while one pair sits well over it.
+\item \strong{Complete cases on the observed groups.} A
+\code{drop_na = FALSE} "(Missing)" group is displayed and never
+enters the diagnostic, exactly as the test and the effect size
+behave.
+\item \strong{Independent of \code{p_value}.} Turning the SMD on turns
+nothing else off. The balance-table idiom is
+\verb{smd = TRUE, p_value = FALSE}; you have to write both.
+}
+
+Under \code{weights}, the means and variances are the weighted ones the
+\code{M} and \code{SD} columns already display -- the frequency convention
+of the \emph{Weights} section, from the same producer, so the column
+cannot contradict its neighbours. One consequence follows and is
+intended: a frequency weight is a number of copies, so the
+weighted SMD is \strong{not invariant to the scale of the weights}
+(multiplying every weight by ten moves it, as it moves the \code{SD}
+column). \code{rescale = TRUE} normalises the weights to sum to \emph{n},
+restores scale invariance, and is the form to use for sampling
+weights until the dedicated survey-design functions land.
+
+A cell is an en-dash when the diagnostic applies but cannot be
+estimated: both groups constant at different values (an infinite
+standardized distance, disclosed by a warning), or a group with
+too little data to have a variance (silent -- the \code{SD} cell beside
+it already says so). Two groups constant at the \emph{same} value are
+perfectly balanced and print \code{0.00}.
 }
 
 \section{Display conventions}{
@@ -316,7 +622,40 @@ packages per output engine are documented under \verb{@param align},
 
 Non-numeric columns are silently dropped (set \code{verbose = TRUE} to
 see which columns were excluded). When a constant column is
-passed, SD and CI are shown as \code{"--"} in the ASCII table.
+passed, its statistics are reported exactly: SD is \code{0.00} and the
+CI degenerates to \verb{[m, m]}. An en-dash cell appears only when a
+statistic is undefined (fewer than two valid observations).
+}
+
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
 }
 
 \examples{
@@ -341,6 +680,36 @@ table_continuous(
   select = c(bmi, wellbeing_score),
   by = education,
   statistic = TRUE
+)
+
+# --- Choosing the statistics --------------------------------------------
+
+# Median and interquartile range instead of mean and SD.
+table_continuous(
+  sochealth,
+  select = c(bmi, wellbeing_score),
+  show_columns = c("med_iqr", "n")
+)
+
+# Median with its exact (order-statistic) confidence interval.
+table_continuous(
+  sochealth,
+  select = bmi,
+  show_columns = c("med", "iqr", "med_ci", "n")
+)
+
+# One selection per variable. A skewed variable that a scoring
+# protocol requires in median and IQR (the IPAQ case) sits next to
+# variables kept in mean and SD; each row is tested the way it is
+# displayed, and the note says so.
+table_continuous(
+  sochealth,
+  select = c(bmi, life_sat_health, wellbeing_score),
+  by = sex,
+  show_columns = list(
+    life_sat_health = c("med_iqr", "n"),
+    .default = c("m", "sd", "n")
+  )
 )
 
 # --- Effect sizes -------------------------------------------------------
@@ -456,6 +825,11 @@ table_continuous(
 
 }
 \seealso{
+\code{\link[=table_outcome]{table_outcome()}} for the transposed shape -- ONE
+continuous outcome across the levels of SEVERAL groupings, one
+block of rows per grouping. Several outcomes across one grouping
+is this function; one outcome across one or more groupings is
+that one;
 \code{\link[=table_continuous_lm]{table_continuous_lm()}} for the model-based companion
 (heteroskedasticity-consistent SE, cluster-robust SE, weighted
 contrasts, fitted means);

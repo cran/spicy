@@ -14,6 +14,23 @@
 #' @keywords internal
 #' @export
 print.spicy_continuous_table <- function(x, ...) {
+  .continuous_console_render(x)
+}
+
+# Internal: the console rendering both continuous families share.
+#
+# `table_continuous_svy()` lays its rows out exactly as its
+# sibling does -- one row per variable, or one per (variable x
+# group) with a second stub column -- and carries the same
+# attributes, so the two print methods are one function. A second
+# copy would be a second place for the padding rule, the block
+# separators or the header resolution to drift.
+.continuous_console_render <- function(x) {
+  # This method re-formats from the raw values, so a journal style used
+  # to build the table has to be back in force here (see
+  # `.style_stamp()`); with no style it is a no-op.
+  .style_pushed <- .style_restore(x)
+  on.exit(.style_end(.style_pushed), add = TRUE)
   digits <- attr(x, "digits") %||% 2L
   effect_size_digits <- attr(x, "effect_size_digits") %||% 2L
   p_digits <- attr(x, "p_digits") %||% 3L
@@ -28,6 +45,7 @@ print.spicy_continuous_table <- function(x, ...) {
   show_ci <- attr(x, "show_ci") %||% TRUE
   show_effect_size <- isTRUE(attr(x, "show_effect_size"))
   show_effect_size_ci <- isTRUE(attr(x, "show_effect_size_ci"))
+  show_smd <- isTRUE(attr(x, "show_smd"))
 
   display_df <- build_display_df(
     x,
@@ -41,12 +59,13 @@ print.spicy_continuous_table <- function(x, ...) {
     show_n = show_n,
     show_ci = show_ci,
     show_effect_size = show_effect_size,
-    show_effect_size_ci = show_effect_size_ci
+    show_effect_size_ci = show_effect_size_ci,
+    show_smd = show_smd,
+    tokens_union = attr(x, "show_columns"),
+    tokens_by_var = attr(x, "show_columns_by_var")
   )
 
   has_group <- !is.null(group_var)
-  has_statistic <- "Test" %in% names(display_df)
-  has_p <- "p" %in% names(display_df)
   align_left <- if (has_group) c(1L, 2L) else 1L
   nc <- ncol(display_df)
   numeric_j <- setdiff(seq_len(nc), align_left)
@@ -63,7 +82,6 @@ print.spicy_continuous_table <- function(x, ...) {
   #   behaviour of `print.spicy_continuous_lm_table()`.
   # - "center": numeric cells in `align_center_cols`.
   # - "right": numeric cells in neither -> right-aligned by default.
-  # - "auto": legacy per-column rule (right for n/p, centre otherwise).
   if (identical(align, "decimal") && length(numeric_j) > 0L) {
     for (j in numeric_j) {
       display_df[[j]] <- decimal_align_strings(
@@ -74,40 +92,61 @@ print.spicy_continuous_table <- function(x, ...) {
     align_center <- numeric_j
   } else if (identical(align, "center")) {
     align_center <- numeric_j
-  } else if (identical(align, "right")) {
-    align_center <- integer(0)
   } else {
-    # "auto": legacy per-column rule.
-    right_cols <- which(names(display_df) == "n")
-    if (has_p) {
-      right_cols <- c(right_cols, which(names(display_df) == "p"))
-    }
-    align_center <- setdiff(numeric_j, right_cols)
+    # "right": numeric cells in neither bucket -> right-aligned default.
+    align_center <- integer(0)
   }
 
-  # Compute separator rows: first row of each variable block (except first)
-  sep_rows <- integer(0)
-  if (has_group && "Variable" %in% names(display_df)) {
-    vars <- display_df$Variable
-    for (i in seq_along(vars)) {
-      if (i > 1L && nzchar(vars[i])) {
-        sep_rows <- c(sep_rows, i)
-      }
-    }
-  }
+  # Separator rows: the first row of each variable block, except the
+  # first, read from the COMPUTE frame's block key -- `x$variable`, the
+  # column the typed view carries as `.variable`.
+  #
+  # The `has_group` guard is the console's POLICY, and it is all it is
+  # now: a one-way table has one row per variable, and a rule between
+  # every pair of rows is noise rather than structure. It used to
+  # double as a repair for the derivation, which read the deduplicated
+  # LABEL column and therefore answered "every row" on a frame
+  # `build_display_df()` had not blanked -- a coupling between two
+  # functions that no signature stated. Reading the key directly, the
+  # guard says only what the console wants.
+  #
+  # (The rich engines now follow the same policy: a one-way table draws
+  # no inter-variable rule anywhere -- decision 37 aligned them here.)
+  sep_rows <- if (has_group) .struct_run_sep_rows(x$variable) else integer(0)
 
-  title <- "Descriptive statistics"
+  title <- .continuous_title(attr(x, "group_label", exact = TRUE))
+
+  # The header a reader sees is the registry label, never the frozen
+  # column key (decision 13). No shape guard is needed, unlike the
+  # categorical console: `.continuous_labels()` maps `names(display_df)`
+  # to a vector of the same length by construction, so
+  # `spicy_print_table()`'s abort on a mismatched label vector is
+  # unreachable from here.
+  header_labels <- .continuous_labels(names(display_df), ci_level, decimal_mark)
 
   # Auto-select padding: use 0 (compact) when the default 2-char
   # padding would overflow the console.
   # Each column in build_ascii_table uses: 1 (gutter) + w[i] + 1
   # (gutter) chars, plus 1 char for the vertical separator after
   # column 1; `padding` is added to each w[i].
+  #
+  # Measured the way `ascii_table_widths()` measures, by display WIDTH
+  # rather than character count: `nchar()` counts a CJK glyph as one and
+  # the renderer lays it out as two, so a wide label made this decision
+  # under-measure the table and emit it wider than the console.
+  # `nchar(NA_character_)` is NA on top of that, which turned the
+  # comparison below into "missing value where TRUE/FALSE needed".
   padding <- 2L
   col_widths <- vapply(
     seq_along(display_df),
     function(i) {
-      max(nchar(c(names(display_df)[i], as.character(display_df[[i]]))))
+      max(
+        crayon::col_nchar(
+          c(header_labels[i], as.character(display_df[[i]])),
+          type = "width"
+        ),
+        na.rm = TRUE
+      )
     },
     numeric(1)
   )
@@ -117,21 +156,41 @@ print.spicy_continuous_table <- function(x, ...) {
     padding <- 0L
   }
 
+  # drop_na disclosure ("Missing values removed: ...") set by
+  # table_continuous(); NULL when nothing was removed.
+  missing_note <- attr(x, "missing_note")
+
   spicy_print_table(
     display_df,
     title = title,
-    note = NULL,
+    note = missing_note,
     padding = padding,
     first_column_line = TRUE,
     row_total_line = FALSE,
-    column_total_line = FALSE,
     bottom_line = FALSE,
     align_left_cols = align_left,
     align_center_cols = align_center,
-    group_sep_rows = sep_rows
+    group_sep_rows = sep_rows,
+    display_labels = header_labels
   )
 
   invisible(x)
+}
+
+# ---- Table title ----------------------------------------------------------
+
+# Internal: the title of a continuous summary table, from the label of
+# the grouping variable (`NULL` = ungrouped). Single source for the
+# console header and the caption every rendering engine sets, so the
+# two can never drift apart. The by table states its grouping variable
+# like its siblings ("Categorical table by <x>", "Continuous outcomes
+# by <x>") -- decision of 2026-08-13, dev/decisions_amal_2026-08.md.
+.continuous_title <- function(by_label = NULL) {
+  if (is.null(by_label) || !nzchar(by_label)) {
+    spicy_str("title_continuous")
+  } else {
+    spicy_fmt("title_continuous_by", by_label)
+  }
 }
 
 # ---- Coercion to plain data.frame / tibble --------------------------------
@@ -229,18 +288,27 @@ as_tibble.spicy_continuous_table <- function(x, ...) {
 #' and `label` the human-readable label.
 #'
 #' `glance()` returns one row per outcome with the omnibus group
-#' comparison (when `by` is used) and the requested effect size.
-#' Columns: `outcome`, `label`, `test_type`, `statistic`, `df`,
-#' `df.residual`, `p.value`, `es_type`, `es_value`, `es_ci_lower`,
-#' `es_ci_upper`, `n_total`. Without `by`, only `outcome`, `label`,
-#' and `n_total` are populated; the other columns are `NA`.
+#' comparison (when `by` is used), the requested effect size and the
+#' balance diagnostic. Columns: `outcome`, `label`, `test_type`,
+#' `statistic`, `df`, `df.residual`, `p.value`, `es_type`, `es_value`,
+#' `es_ci_lower`, `es_ci_upper`, `smd_type`, `smd_value`, `n_total`.
+#' Without `by`, only `outcome`, `label`, and `n_total` are populated;
+#' the other columns are `NA`. The schema is fixed: `smd_type` /
+#' `smd_value` are present whether or not `smd = TRUE`, like every
+#' other comparison column here, and are `NA` when the table carries
+#' no standardized mean difference. They sit before `n_total`, so
+#' index this frame by NAME rather than by position.
+#'
+#' `glance.spicy_categorical_table()` does **not** carry the SMD: each
+#' family documents its own broom contract, and the categorical one
+#' publishes the association measure alone. On a mixed balance table,
+#' read the categorical SMD from `output = "long"`.
 #'
 #' @param x A `spicy_continuous_table` returned by [table_continuous()].
 #' @param ... Currently ignored. Present for compatibility with the
 #'   [broom::tidy()] / [broom::glance()] generics.
 #'
-#' @return A `tbl_df` (when `tibble` is installed) or a plain
-#'   `data.frame`.
+#' @return A `tbl_df`.
 #'
 #' @seealso [as.data.frame.spicy_continuous_table()] for the raw
 #'   long-format access; [tidy.spicy_continuous_lm_table()] for the
@@ -298,6 +366,7 @@ glance.spicy_continuous_table <- function(x, ...) {
   has_group <- "group" %in% names(long)
   has_test <- "test_type" %in% names(long)
   has_es <- "es_value" %in% names(long)
+  has_smd <- "smd_value" %in% names(long)
 
   if (has_group) {
     # Sum n across groups for n_total; pick the test / ES from the
@@ -328,6 +397,21 @@ glance.spicy_continuous_table <- function(x, ...) {
     es_value = if (has_es) per_outcome$es_value else NA_real_,
     es_ci_lower = if (has_es) per_outcome$es_ci_lower else NA_real_,
     es_ci_upper = if (has_es) per_outcome$es_ci_upper else NA_real_,
+    # The balance diagnostic travels beside the effect size, never
+    # inside it: they are different denominators (Austin's mean of the
+    # two group variances, not the degrees-of-freedom pooled SD) and
+    # must never be read for one another.
+    #
+    # Present unconditionally, NA without `by` -- the rule EVERY
+    # comparison column of this function already follows (`test_type`,
+    # `p.value`, `es_type` are all NA on a one-way table, and the
+    # roxygen above states that as the contract). This is deliberately
+    # NOT the compute frame's rule, where a one-way frame carries no
+    # comparison column at all: a broom summary is a fixed one-row
+    # schema that consumers rbind, and making these two the only
+    # conditional pair here would break that for its own sake.
+    smd_type = if (has_smd) per_outcome$smd_type else NA_character_,
+    smd_value = if (has_smd) per_outcome$smd_value else NA_real_,
     n_total = per_outcome$n_total,
     stringsAsFactors = FALSE,
     check.names = FALSE

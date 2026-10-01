@@ -13,7 +13,8 @@ count_n(
   allow_coercion = TRUE,
   ignore_case = FALSE,
   regex = FALSE,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE
 )
 }
 \arguments{
@@ -22,20 +23,29 @@ count_n(
 automatically.}
 
 \item{select}{Columns to include. Defaults to \code{tidyselect::everything()}.
-Uses tidyselect helpers like \code{\link[tidyselect:starts_with]{tidyselect::starts_with()}}, etc.
+Uses tidyselect helpers like \code{\link[tidyselect:starts_with]{tidyselect::starts_with()}}, etc.; a
+character vector of names is validated with \code{\link[tidyselect:all_of]{tidyselect::all_of()}},
+so unknown names raise an error (as in \code{\link[=mean_n]{mean_n()}} and \code{\link[=sum_n]{sum_n()}}).
 If \code{regex = TRUE}, \code{select} is treated as a regex string.}
 
-\item{exclude}{Character vector of column names to exclude after selection.
-Defaults to \code{NULL} (no exclusion).}
+\item{exclude}{Columns to exclude after selection (names or positions,
+as accepted by \code{\link[tidyselect:any_of]{tidyselect::any_of()}}). Defaults to \code{NULL}
+(no exclusion).}
 
 \item{count}{Value(s) to count. Defaults to \code{NULL}. Ignored if \code{special} is used.
 Multiple values are allowed (e.g., \code{count = c(1, 2, 3)} or \code{count = c("yes", "no")}).
 R automatically coerces all values in \code{count} to a common type (e.g., \code{c(2, "2")} becomes \code{c("2", "2")}),
 so all values are expected to be of the same final type.
-If \code{allow_coercion = FALSE}, matching is type-safe using \code{identical()}, and the type of \code{count} must match that of the values in the data.}
+If \code{allow_coercion = FALSE}, matching is type-safe using \code{identical()}, and the type of \code{count} must match that of the values in the data.
+A zero-length \code{count} (e.g. an upstream filter that emptied it) raises a
+classed error rather than silently counting nothing, and so does a
+\code{count} made only of missing values (use \code{special = "NA"} / \code{"NaN"}).}
 
 \item{special}{Character vector of special values to count: \code{"NA"}, \code{"NaN"}, \code{"Inf"}, \code{"-Inf"}, or \code{"all"}.
 Defaults to \code{NULL}.
+Every entry is validated, including alongside \code{"all"}: any other
+value raises an error, and so does an empty vector
+(\code{special = character(0)} selects nothing to count).
 \code{"NA"} uses \code{is.na()}, and therefore includes both \code{NA} and \code{NaN} values.
 \code{"NaN"} uses \code{is.nan()} to match only actual NaN values.}
 
@@ -50,10 +60,22 @@ If \code{TRUE}, interprets \code{select} as a regular expression pattern.}
 
 \item{verbose}{Logical. If \code{FALSE} (the default), messages are suppressed.
 If \code{TRUE}, prints processing messages.}
+
+\item{user_na}{Logical. If \code{TRUE} (the default), \code{special = "NA"}
+counts declared missing values together with regular \code{NA} (the
+SPSS \code{MISSING} / \code{NMISS} convention). If \code{FALSE}, only genuine
+\code{NA} / \code{NaN} count as missing. The \verb{count =} path matches the
+underlying codes in both modes, so explicitly listed declared
+codes are always counted. See the "Declared missing values"
+section of \code{\link[=freq]{freq()}}.}
 }
 \value{
 A numeric vector of row-wise counts (unnamed), of length
-\code{nrow(data)}.
+\code{nrow(data)}. Missing values never match a regular \code{count} value,
+so an all-\code{NA} row counts \code{0} unless \code{special} targets missing
+values. If the selection resolves to zero usable columns, a
+classed warning (\code{spicy_no_selection}) is emitted and \code{NA} is
+returned for all rows, as in \code{\link[=mean_n]{mean_n()}} and \code{\link[=sum_n]{sum_n()}}.
 }
 \description{
 Counts, for each row of a \code{data.frame} or \code{matrix}, how many
@@ -87,6 +109,37 @@ lowercase string equality, so \code{"b"} and \code{"B"} match even when
 \section{Coercion of \code{count} itself}{
 R coerces mixed-type vectors at construction time: \code{count = c(2, "2")} becomes \code{c("2", "2")} before the function ever sees it.
 To get type-sensitive matching, keep \code{count} homogeneous.
+}
+
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
 }
 
 \examples{

@@ -4,13 +4,7 @@
 \alias{gamma_gk}
 \title{Goodman-Kruskal Gamma}
 \usage{
-gamma_gk(
-  x,
-  detail = FALSE,
-  conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
-)
+gamma_gk(x, detail = FALSE, conf_level = 0.95, digits = 3L)
 }
 \arguments{
 \item{x}{A contingency table (of class \code{table}).}
@@ -19,14 +13,14 @@ gamma_gk(
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -42,6 +36,9 @@ Gamma is computed as \eqn{\gamma = (C - D) / (C + D)}, where
 \eqn{C} and \eqn{D} are the numbers of concordant and
 discordant pairs. It ignores tied pairs, making it appropriate
 for ordinal variables with many ties.
+When the asymptotic standard error is zero (e.g. a perfect
+association), the Wald z-test is undefined and the p-value is
+\code{NA}, matching the other measures in the family.
 Standard error formulas follow the DescTools implementations
 (Signorell et al., 2024); see \code{\link[=cramer_v]{cramer_v()}} for full references.
 }
@@ -50,6 +47,16 @@ tab <- table(sochealth$education, sochealth$self_rated_health)
 gamma_gk(tab)
 gamma_gk(tab, detail = TRUE)
 
+}
+\references{
+Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+for cross classifications. \emph{Journal of the American Statistical
+Association}, 49(268), 732-764. \doi{10.2307/2281536}
+
+Brown, M. B., & Benedetti, J. K. (1977). Sampling behavior of
+tests for correlation in two-way contingency tables. \emph{Journal of
+the American Statistical Association}, 72(358), 309-315.
+\doi{10.1080/01621459.1977.10480995}
 }
 \seealso{
 \code{\link[=kendall_tau_b]{kendall_tau_b()}}, \code{\link[=kendall_tau_c]{kendall_tau_c()}}, \code{\link[=somers_d]{somers_d()}},

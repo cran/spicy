@@ -1,3 +1,362 @@
+# spicy 0.13.0
+
+`table_regression()` now covers more than thirty model classes and gains
+a univariable screen, the summary tables get survey-design twins, six
+journal styles and a French output arrive, and declared missing values
+are honored package-wide. The walk-throughs live as articles at
+<https://amaltawfik.github.io/spicy/>.
+
+## Breaking changes
+
+* Declared missing values (`na_values`, `na_range`, tagged NAs) now count
+  as missing in `freq()`, `cross_tab()`, the `table_*()` family, the
+  row-wise helpers, and `varlist()` / `code_book()`, so numbers change
+  for labelled survey data. The tables disclose the exclusion in a note.
+  `user_na = FALSE` restores the previous behavior.
+
+* `varlist()`, `vl()`, and `code_book()` use one missing definition for
+  `N_distinct`, `N_valid`, and `NAs` on labelled data.
+
+* `cross_tab()` counts observations at an explicit `NA` factor level as a
+  regular row or column. `freq()` excludes them from `n_valid` and the
+  valid percent.
+
+* `freq()` and `cross_tab()` replace `styled` with `output`.
+  `styled = FALSE` becomes `output = "data.frame"`, and `styled` now
+  errors with the replacement.
+
+* `cross_tab(output = "data.frame")` returns a plain `data.frame` without
+  metadata attributes. Read them from the default object, for example
+  `attr(cross_tab(...), "p_value")`.
+
+* `freq()` defaults to `rescale = FALSE`, matching `cross_tab()`. Use
+  `rescale = TRUE` for the previous behavior.
+
+* `freq()`, `table_categorical()`, `table_continuous()`, and
+  `table_continuous_lm()` no longer print when their result is assigned.
+  `freq()` drops its unused `...`, so unknown arguments error.
+
+* `options(OutDec)` no longer changes spicy's output. Every number
+  follows `decimal_mark` alone, or the style or language in force.
+
+* `table_categorical()` defaults to `drop_na = FALSE`, showing missing
+  values as a `"(Missing)"` level. Its `labels` must be a named vector,
+  and `p_digits` below 1 errors.
+
+* `table_categorical(output = "long")` names the association column
+  `effect_size` and adds `effect_size_type`. Replace
+  `out[["Cramer's V"]]` with `out$effect_size`.
+
+* `table_categorical(output = "flextable")` no longer writes a `.docx`
+  when `word_path` is supplied. Use `flextable::save_as_docx()`.
+
+* `table_continuous_lm(output = "data.frame")` names the effect-size
+  interval bounds `es_ci_lower` / `es_ci_upper`, like the `"long"`
+  output.
+
+* `standardized = "smart"` scales continuous inputs by 2 SD and leaves
+  binary inputs unscaled. The rule was applied inverted since 0.12.0,
+  so those betas change.
+
+* `table_regression(exponentiate = TRUE)` errors on links whose
+  exponentiated coefficient is not a ratio (probit, cauchit, inverse,
+  sqrt).
+
+* `keep` / `drop` no longer match the intercept row. `show_intercept`
+  alone controls it.
+
+* `align = "auto"` is removed. Use `"decimal"` (the default),
+  `"center"`, or `"right"`.
+
+* The `show_fit_stats` information criteria are lowercase tokens
+  (`"aic"`, `"aicc"`, `"bic"`). `show_fit_stats = character(0)` errors.
+  Use `FALSE` to suppress the block.
+
+* With several models, `show_columns = "all_b"` / `"all_ame"` drop the
+  CI columns. Request atomic tokens to keep them.
+
+* A robust `vcov` that cannot be computed is now an error, and a
+  `cluster` containing `NA` is refused. It used to warn and label the
+  classical variance robust.
+
+* `Weighted n` and `glance()`'s `weighted_nobs` are `NA` for an
+  unweighted `glm()`. They used to repeat `n`.
+
+* `as_structured()` describes each row in the body itself
+  (`body$.row_role`, `body$.indent`, `cell_status`). The 0.12.0
+  row-index vectors are removed, `version` is `3`, and a view built by
+  an older spicy is refused.
+
+* `tidy()` labels AME rows `estimate_type = "ame"` (was `"AME"`).
+
+* `count_n()` warns and returns `NA` when the selection resolves to no
+  usable column. `mean_n()` and `sum_n()` with `min_valid = 0` return
+  `NA` for rows with no valid values.
+
+* `copy_clipboard()` arguments use snake_case. `build_ascii_table()` is
+  no longer exported. Use `spicy_print_table()`.
+
+* Association measures with `detail = TRUE` always include an `se`
+  element. On degenerate tables, `gamma_gk()`, `kendall_tau_b()`,
+  `kendall_tau_c()`, and `uncertainty_coef()` return `NA` with a classed
+  warning instead of a spurious value. `conf_level` is validated
+  everywhere.
+
+* The package ships a single vignette, *Get started*. The walk-throughs
+  live as articles on the package site, at the same URLs, and
+  `vignette("<name>")` no longer finds them.
+
+## New features
+
+* `table_regression()` supports more than thirty model classes beyond
+  `lm` / `glm`: mixed effects (`lmer`, `glmer`, `glmmTMB`, `lme`, `gls`),
+  GEE, Bayesian (`stan_glm()`, `stan_glmer()`, `brm()`), survival
+  (`coxph`, `survreg`, `cph`, `flexsurvreg`), ordinal (`polr`, `clm`),
+  multinomial (`multinom`, `mlogit`), two-part counts (`zeroinfl`,
+  `hurdle`), `fixest`, `estimatr`, `ivreg`, `tobit`, `rq`, `rlm`,
+  `glm.nb`, `nls`, `gam`, `betareg`, `selection`, `rms`, and the
+  design-based `svyglm`, `svyolr`, and `svycoxph`.
+  `?table_regression_models` is the registry. A request a class cannot
+  honor is refused with a classed error, never rendered as an empty
+  column.
+
+* Each family renders with its own conventions. Mixed models report
+  their random effects as a block of rows with SE and CI, the ICC, and a
+  boundary-correct test of the random part. Ordinal models report their
+  thresholds. Two-part models report every component. `fixest` and
+  `estimatr` fits disclose their absorbed fixed effects as a
+  `Fixed effects:` block. Bayesian fits report posterior medians, MAD
+  SD, and credible intervals, with no p-values and a sampler-diagnostics
+  guard.
+
+* New `table_continuous_svy()` and `table_categorical_svy()` summarize a
+  `survey` design object, with every statistic computed by survey and
+  the design degrees of freedom throughout. Design-based regressions
+  (`svyglm()`, `svyolr()`, `svycoxph()`) report both counts and name
+  their variance estimator in the note.
+
+* New `table_outcome()` summarizes one continuous outcome across several
+  categorical variables, one block per grouping, with the group
+  comparison and an `Overall` row.
+
+* New `table_regression_uv()` builds univariable screening tables for
+  `lm`, `glm`, and `coxph` outcomes, one fit per predictor merged beside
+  the multivariable model, with a per-predictor `N` column.
+
+* New `inline()` cites one table cell in Quarto or R Markdown text. The
+  returned string is exactly the displayed cell, so a quoted number can
+  never drift from the table.
+
+* New `style` argument on the four table families, and
+  `options(spicy.style = )` for a whole document: `"jama"`, `"nejm"`,
+  `"lancet"`, `"annals"`, `"apa"`, and `"aer"`. A theme applies the
+  rules its journal publishes, as defaults, so any argument you pass
+  wins. `spicy_style()` builds a style by hand or from a theme.
+
+* `options(spicy.language = "fr")` prints table labels in French and
+  brings French typography with it: a decimal comma and a leading zero
+  on p-values (`0,003`). Machine outputs, column names, and messages
+  stay in English. `options(spicy.labels = )` overrides one label at a
+  time, and `spicy_labels()` lists them.
+
+* New `show_columns` families `"rmst"` and `"risk_diff"` for `coxph` and
+  `survreg` fits: covariate-adjusted differences in restricted mean
+  survival time and in cumulative incidence, by g-computation with
+  bootstrap inference, in single tables and in the univariable screen.
+
+* New `show_columns` token `"n_events"` shows event counts as `events/N`
+  beside the estimates, for binomial outcomes and `coxph` fits.
+
+* Heteroskedasticity- and cluster-robust `vcov` across the supported
+  classes, with each class's field-standard backend. `"CR1S"`
+  reproduces Stata's `regress, vce(cluster)` exactly. What no backend
+  supports is refused, never approximated.
+
+* `ci_method = "profile"` gives profile-likelihood CIs for `glm`,
+  `polr`, and `clm`. `ci_method = "boot_percentile"` reports percentile
+  CIs from the bootstrap replicates.
+
+* `nested = TRUE` works across the new classes with the correct test for
+  each, and refuses hierarchies that are not comparable.
+
+* AME columns are available for many more classes, per outcome category
+  for ordinal and multinomial models, and honor a robust `vcov`.
+  `broom::tidy()` gains `outcome_level` for those rows.
+
+* `table_categorical()` and `table_continuous()` gain `smd = TRUE`, a
+  standardized-mean-difference column, the balance diagnostic of a
+  Table 1.
+
+* `table_continuous()` gains `weights` and `rescale`, under a documented
+  convention that matches Stata's `[aweight]` and `survey::svyvar()`.
+  Group tests are refused under weights. `table_continuous_lm()` is the
+  tool for that.
+
+* `table_continuous()` gains `show_columns` with median tokens (`"med"`,
+  `"q1"`, `"q3"`, `"iqr"`, `"med_iqr"`, `"med_ci"`), per variable via a
+  named list. A variable shown as a median is tested as one.
+
+* `select` is optional in `table_categorical()`, and `table_continuous()`
+  gains `drop_na = FALSE`.
+
+* `as_structured()` reads the descriptive tables too, and carries
+  everything the printed table shows, with a per-row identity
+  (`.variable`, `.level`, `.row_role`) that survives stacking.
+
+* Seven new articles on the package site: mixed-effects, GEE,
+  multinomial, count and two-part, survival, ordinal regression tables,
+  and categorical predictors.
+
+## Minor improvements and bug fixes
+
+The first eight fixes change numbers that 0.12.0 reported.
+
+* `kendall_tau_b()` reported wrong standard errors, confidence
+  intervals, and p-values in every release from 0.6.0 through 0.12.0.
+  Point estimates were correct. `assoc_measures()` and `cross_tab()`
+  were affected too.
+
+* Binomial models fitted with a `cbind(successes, failures)` response
+  were refitted with squared weights by every internal refit. Bootstrap
+  and jackknife inference, the default McFadden and Nagelkerke R², and
+  `standardized = "refit"` were wrong for them. Fits with a 0/1, factor,
+  or proportion-plus-weights response were never affected.
+
+* Average marginal effects use the fit's prior weights, so AME values
+  change for weighted fits.
+
+* Partial effect sizes are true Type-II tests. In models with
+  interactions, main effects no longer depend on the factor coding.
+
+* `ci_method = "profile"` with a robust `vcov` defers to the `vcov` and
+  warns.
+
+* `table_categorical()` computes the ordinal association measures in
+  declared level order under `drop_na = FALSE`.
+
+* `table_continuous_lm()` reports correct estimates when `by` is an
+  ordered factor and correct `"balanced"` adjusted means with an
+  ordered-factor covariate. It pins treatment contrasts, so
+  `options(contrasts = )` no longer alters the results.
+
+* `cross_tab()` computes weighted totals from the unrounded table.
+
+* Under `decimal_mark = ","` every surface follows the mark. P-values
+  keep their leading zero (`0,018`), and the star legend, the change
+  statistics, and the association intervals read the comma.
+
+* `nested = TRUE` no longer reports a negative chi-square with a p-value
+  when the models are passed largest-first.
+
+* `cramer_v()`, `phi()`, and `contingency_coef()` return `NA` with a
+  classed warning on a zero margin, and
+  `somers_d(direction = "symmetric")` returns `0` on equal concordant
+  and discordant pairs.
+
+* The `tau_c` measure is labelled `"Stuart's Tau-c"` everywhere.
+
+* `freq()` keeps its label footer when `NA`-weight rows are dropped,
+  warns when distinct codes merge under one label, and sorts labelled
+  variables by code under `sort = "name+"`.
+
+* `cross_tab()` reports excluded missing values in the table note,
+  accepts logical weights like `freq()`, and no longer swallows the
+  warnings of its association measures.
+
+* `table_categorical()` displays labelled columns as `"[code] label"`
+  levels in every path, and keeps both the group and the margin when a
+  `by` level is named `"Total"`. Its machine outputs carry
+  full-precision values and the documented `Chi2` and `df` columns.
+
+* `table_categorical()`, `table_continuous()`, and
+  `table_continuous_lm()` resolve `by` data-first, like tidyselect. A
+  `by` with no level to tabulate is refused.
+
+* `table_continuous()` forms groups from a non-factor `by` in order of
+  first appearance, and degrades per variable when a test fails on
+  degenerate data.
+
+* `table_continuous()` and `table_continuous_lm()` label an interval
+  with its own coverage (`97.5% CI`, not `98% CI`).
+
+* `table_continuous_lm()` discloses robust and resampling SEs in the
+  note, treats a value-labelled `by` as categorical, and degrades
+  cleanly on degenerate fits.
+
+* `output = "gt"` tables keep their note when saved or printed
+  non-interactively. gt and flextable outputs render in Quarto and
+  R Markdown Word, PowerPoint, and PDF documents, where they silently
+  disappeared. New `as_flextable()` returns the underlying flextable.
+
+* `output = "gt"` escapes a `by` level or model name carrying a quote,
+  an angle bracket, or a backslash.
+
+* `stars = TRUE` marks the coefficients in every output, not just the
+  console.
+
+* A cell whose statistic applies but has no number shows the console's
+  en dash in every rich output, instead of a blank.
+
+* A `table_categorical(by = )` table carries its association note to
+  every output. The descriptive gt and tinytable outputs also draw the
+  title and the rule between variable blocks.
+
+* Factor levels are indented once, not twice, in the tinytable, Word,
+  and Excel outputs.
+
+* Tables without a confidence-interval column lose their empty header
+  strip, multi-line notes keep one disclosure per line, and Typst output
+  no longer forces a column gutter under grouped headers.
+
+* Footer lines cite a model by its displayed label, not `Model 1`.
+
+* `output = "excel"` writes the significance stars, blank cells instead
+  of `#N/A`, honors `align`, and sizes its columns to the text.
+
+* `output = "clipboard"` quotes cells that contain the delimiter, ships
+  plain text instead of Excel formulas, and errors clearly on a system
+  without a clipboard.
+
+* Console layout survives `NA` cells, empty cells, and wide characters
+  (CJK, emoji).
+
+* `table_regression(m1, m2)` without `list()` errors helpfully, and an
+  `NA` or colliding model name no longer crashes the table.
+
+* Factor rows follow `levels()` order instead of alphabetical, and
+  factors fit with non-default contrasts (successive differences,
+  sum-to-zero, Helmert) group under their parent variable.
+
+* A factor level containing `:` (`"Part-time: 50-89%"`) stays inside
+  its variable block. It used to be mistaken for an interaction term.
+
+* The statistic column header follows each model's reference
+  distribution (`z` or `t`).
+
+* Bootstrap, jackknife, and `standardized = "refit"` refits no longer
+  leak the caller's environment and work on `factor()` / `log()` /
+  `poly()` formulas.
+
+* `varlist()` and `code_book()` render `POSIXlt` columns and `difftime`
+  units, and show an explicit `NA` factor level as `<NA>`.
+
+* `count_n()` resolves `select` and `exclude` through the same
+  tidyselect path as `mean_n()` / `sum_n()`, and errors clearly on an
+  unusable `count` or `special`.
+
+* The tabulating and summarizing functions reject `bit64::integer64`
+  input with a classed error naming the fix.
+
+* Error messages quote values the same way on every platform, and the
+  enum arguments raise classed errors naming the valid values.
+
+* `copy_clipboard()` re-emits backend messages and warnings as real R
+  conditions.
+
+* An `estimatr` fit reports R² and adjusted R² by default like `lm`,
+  discloses its absorbed fixed effects, and labels its model type after
+  its `se_type`.
+
 # spicy 0.12.0
 
 ## New features
@@ -78,7 +437,7 @@
 
 ## Minor improvements
 
-* Console em-dash alignment: non-numeric placeholders (em-dash,
+* Console en-dash alignment: non-numeric placeholders (en-dash,
   "NA") sit at the decimal-mark column instead of the integer-
   part column (APA Manual 7 §7.13). Integer cells in mixed-
   precision columns (`n` row alongside `R²`) keep their right-

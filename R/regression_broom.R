@@ -23,7 +23,6 @@
 #     Satterthwaite-corrected df under cluster-robust vcov
 #     (Pustejovsky & Tipton 2018).
 
-
 #' Tidy / glance methods for `spicy_regression_table`
 #'
 #' Standard [broom::tidy()] / [broom::glance()] interfaces for an
@@ -32,13 +31,15 @@
 #' so the table can be consumed by any downstream tidyverse-stats
 #' pipeline.
 #'
-#' `tidy()` returns one row per `(model_id, term, estimate_type)`
-#' triplet, with `estimate_type` in
-#' `c("B", "beta", "AME", "partial_f2", "partial_eta2", "partial_omega2")`.
-#' Reference-row placeholders (factor reference levels) and
-#' singular coefficients (NA estimates) are dropped. Columns:
-#' `model_id, outcome, term, estimate_type, estimate, std.error,
-#' conf.low, conf.high, statistic, df, p.value, test_type,
+#' `tidy()` returns one row per `(model_id, term, estimate_type,
+#' outcome_level)` combination, with `estimate_type` in
+#' `c("B", "beta", "ame", "partial_f2", "partial_eta2", "partial_omega2")`.
+#' `outcome_level` names the response category of per-category rows
+#' (ordinal / multinomial average marginal effects) and is `NA` for
+#' single-outcome models. Reference-row placeholders (factor reference
+#' levels) and singular coefficients (NA estimates) are dropped. Columns:
+#' `model_id, outcome, outcome_level, term, estimate_type, estimate,
+#' std.error, conf.low, conf.high, statistic, df, p.value, test_type,
 #' is_intercept, factor_term, factor_level`.
 #'
 #' `glance()` returns one row per `(model_id, outcome)` with
@@ -52,8 +53,7 @@
 #' @param ... Currently ignored. Present for compatibility with the
 #'   [broom::tidy()] / [broom::glance()] generics.
 #'
-#' @return A `tbl_df` (when `tibble` is installed) or a plain
-#'   `data.frame`.
+#' @return A `tbl_df`.
 #'
 #' @seealso [as.data.frame.spicy_regression_table()] for the wide
 #'   raw view.
@@ -75,22 +75,33 @@ tidy.spicy_regression_table <- function(x, ...) {
   # rows for intercept-only or singular models).
   long <- long[!is.na(long$estimate), , drop = FALSE]
 
+  # Per-category rows (ordinal / multinomial AME) are otherwise
+  # INDISTINGUISHABLE in the long frame: four `age` AME rows share the same
+  # term and estimate_type, and nothing names the response category they
+  # belong to. Carry `outcome_level` so the frame is self-describing (NA for
+  # single-outcome models).
+  outcome_level <- if (!is.null(long$outcome_level)) {
+    as.character(long$outcome_level)
+  } else {
+    rep(NA_character_, nrow(long))
+  }
   out <- data.frame(
-    model_id      = long$model_id,
-    outcome       = long$outcome,
-    term          = long$term,
+    model_id = long$model_id,
+    outcome = long$outcome,
+    outcome_level = outcome_level,
+    term = long$term,
     estimate_type = long$estimate_type,
-    estimate      = long$estimate,
-    std.error     = long$se,
-    conf.low      = long$ci_low,
-    conf.high     = long$ci_high,
-    statistic     = long$statistic,
-    df            = long$df,
-    p.value       = long$p_value,
-    test_type     = long$test_type,
-    is_intercept  = long$is_intercept,
-    factor_term   = long$factor_term,
-    factor_level  = long$factor_level,
+    estimate = long$estimate,
+    std.error = long$se,
+    conf.low = long$ci_low,
+    conf.high = long$ci_high,
+    statistic = long$statistic,
+    df = long$df,
+    p.value = long$p_value,
+    test_type = long$test_type,
+    is_intercept = long$is_intercept,
+    factor_term = long$factor_term,
+    factor_level = long$factor_level,
     stringsAsFactors = FALSE
   )
   rownames(out) <- NULL
@@ -105,22 +116,24 @@ glance.spicy_regression_table <- function(x, ...) {
     return(maybe_as_tibble(empty_glance()))
   }
   out <- data.frame(
-    model_id       = fs$model_id,
-    outcome        = fs$outcome,
-    nobs           = as.integer(fs$nobs),
-    weighted_nobs  = fs$weighted_nobs,
-    r.squared      = fs$r2,
-    adj.r.squared  = fs$adj_r2,
-    omega2         = fs$omega2,
-    sigma          = fs$sigma,
-    rmse           = fs$rmse,
-    f2             = fs$f2,
-    AIC            = fs$AIC,
-    AICc           = fs$AICc,
-    BIC            = fs$BIC,
-    deviance       = fs$deviance,
+    model_id = fs$model_id,
+    outcome = fs$outcome,
+    nobs = as.integer(fs$nobs),
+    weighted_nobs = fs$weighted_nobs,
+    r.squared = fs$r2,
+    adj.r.squared = fs$adj_r2,
+    omega2 = fs$omega2,
+    sigma = fs$sigma,
+    rmse = fs$rmse,
+    f2 = fs$f2,
+    # broom's glance() convention keeps the UPPERCASE column names;
+    # the source columns follow the lowercase 0.13 token schema.
+    AIC = fs$aic,
+    AICc = fs$aicc,
+    BIC = fs$bic,
+    deviance = fs$deviance,
     # df.residual kept numeric -- see file header.
-    df.residual    = as.numeric(fs$df_residual),
+    df.residual = as.numeric(fs$df_residual),
     stringsAsFactors = FALSE
   )
   rownames(out) <- NULL
@@ -133,12 +146,15 @@ glance.spicy_regression_table <- function(x, ...) {
 #' Convert a `spicy_regression_table` to a plain data.frame / tibble
 #'
 #' Strips the `spicy_regression_table` / `spicy_table` classes and
-#' the `col_spec` rendering metadata, returning the wide character
-#' display as a plain `data.frame` (or `tbl_df` via `as_tibble()`).
-#' The `title` and `note` attributes are preserved.
+#' the internal analytic attributes (`spicy_long`, `spicy_fit_stats`),
+#' returning the wide character display as a plain `data.frame` (or
+#' `tbl_df` via `as_tibble()`). The `title`, `note`, provenance
+#' (`model_ids`, `outcome`), and rendering (`col_spec`) attributes are
+#' preserved.
 #'
-#' Equivalent to passing `output = "data.frame"` to
-#' [table_regression()].
+#' `as.data.frame()` is equivalent to passing `output = "data.frame"`
+#' to [table_regression()]: the two paths return identical objects
+#' (same cells, classes, and attributes).
 #'
 #' @param x A `spicy_regression_table` returned by
 #'   [table_regression()].
@@ -160,10 +176,11 @@ NULL
 #' @rdname as.data.frame.spicy_regression_table
 #' @exportS3Method base::as.data.frame
 as.data.frame.spicy_regression_table <- function(
-    x,
-    row.names = NULL,
-    optional = FALSE,
-    ...) {
+  x,
+  row.names = NULL,
+  optional = FALSE,
+  ...
+) {
   unclass_spicy_regression_table(x)
 }
 
@@ -179,12 +196,14 @@ as_tibble.spicy_regression_table <- function(x, ...) {
 # ---- Helpers -------------------------------------------------------------
 
 unclass_spicy_regression_table <- function(x) {
-  out <- as.data.frame.data.frame(x)        # avoid recursion
-  attr(out, "title")          <- attr(x, "title")
-  attr(out, "note")           <- attr(x, "note")
-  attr(out, "spicy_long")     <- NULL
+  out <- as.data.frame.data.frame(x) # avoid recursion
+  attr(out, "title") <- attr(x, "title")
+  attr(out, "note") <- attr(x, "note")
+  attr(out, "spicy_long") <- NULL
   attr(out, "spicy_fit_stats") <- NULL
-  attr(out, "col_spec")       <- NULL
+  # `col_spec` (and the other rendering attributes) are kept so the
+  # result is identical to `output = "data.frame"`, which carries them
+  # too -- the documented equivalence between the two paths.
   class(out) <- "data.frame"
   out
 }
@@ -198,42 +217,43 @@ maybe_as_tibble <- function(df) {
 
 empty_tidy_long <- function() {
   data.frame(
-    model_id      = character(0),
-    outcome       = character(0),
-    term          = character(0),
+    model_id = character(0),
+    outcome = character(0),
+    outcome_level = character(0),
+    term = character(0),
     estimate_type = character(0),
-    estimate      = numeric(0),
-    std.error     = numeric(0),
-    conf.low      = numeric(0),
-    conf.high     = numeric(0),
-    statistic     = numeric(0),
-    df            = numeric(0),
-    p.value       = numeric(0),
-    test_type     = character(0),
-    is_intercept  = logical(0),
-    factor_term   = character(0),
-    factor_level  = character(0),
+    estimate = numeric(0),
+    std.error = numeric(0),
+    conf.low = numeric(0),
+    conf.high = numeric(0),
+    statistic = numeric(0),
+    df = numeric(0),
+    p.value = numeric(0),
+    test_type = character(0),
+    is_intercept = logical(0),
+    factor_term = character(0),
+    factor_level = character(0),
     stringsAsFactors = FALSE
   )
 }
 
 empty_glance <- function() {
   data.frame(
-    model_id      = character(0),
-    outcome       = character(0),
-    nobs          = integer(0),
+    model_id = character(0),
+    outcome = character(0),
+    nobs = integer(0),
     weighted_nobs = numeric(0),
-    r.squared     = numeric(0),
+    r.squared = numeric(0),
     adj.r.squared = numeric(0),
-    omega2        = numeric(0),
-    sigma         = numeric(0),
-    rmse          = numeric(0),
-    f2            = numeric(0),
-    AIC           = numeric(0),
-    AICc          = numeric(0),
-    BIC           = numeric(0),
-    deviance      = numeric(0),
-    df.residual   = numeric(0),
+    omega2 = numeric(0),
+    sigma = numeric(0),
+    rmse = numeric(0),
+    f2 = numeric(0),
+    AIC = numeric(0),
+    AICc = numeric(0),
+    BIC = numeric(0),
+    deviance = numeric(0),
+    df.residual = numeric(0),
     stringsAsFactors = FALSE
   )
 }

@@ -1,8 +1,9 @@
 #' Continuous-outcome linear-model table
 #'
 #' @description
-#' Builds APA-style summary tables from a series of linear models for one
-#' or many continuous outcomes selected with tidyselect syntax.
+#' Builds publication-ready summary tables from a series of linear
+#' models for one or many continuous outcomes selected with tidyselect
+#' syntax.
 #'
 #' A single focal predictor is supplied with `by`; each selected numeric
 #' outcome is fit as `lm(outcome ~ by, ...)`, optionally extended with
@@ -38,6 +39,12 @@
 #'   - **factor** or **ordered factor**: treated as categorical. Level order
 #'     is preserved as declared; the **first level** is the reference for
 #'     the displayed contrast (R's default treatment-contrast convention).
+#'     An ordered factor is refit as an unordered factor with the same
+#'     level order, so the model uses treatment contrasts -- not the
+#'     polynomial contrasts (`contr.poly`) `lm()` would apply by default.
+#'     The ordering only determines the display order and the reference
+#'     level; per-level means, the displayed difference, and its CI are
+#'     identical to those of an unordered factor with the same levels.
 #'   - **character**: coerced to factor with `factor(by)`, which orders the
 #'     levels alphabetically. To control the reference level, supply `by`
 #'     as an explicit factor with the desired level ordering (e.g. via
@@ -45,6 +52,15 @@
 #'   - **logical**: coerced to factor with levels `"FALSE"`, `"TRUE"` (in
 #'     that order, since `FALSE < TRUE`). The reference level is `"FALSE"`,
 #'     so a binary contrast displays as `Delta (TRUE - FALSE)`.
+#'   - **haven labelled with value labels** (an SPSS / Stata import):
+#'     treated as categorical over the raw codes, in ascending code
+#'     order (the reference level is the lowest code; the model needs
+#'     a fixed level order). [table_continuous()] and
+#'     [table_categorical()] form the same groups from such a column
+#'     but display them in order of first appearance in the data, so
+#'     the group ORDER can differ between the sibling tables. A
+#'     labelled vector without value labels is treated as a continuous
+#'     regressor. Declared missing values follow `user_na` as usual.
 #'
 #'   Rows with `NA` in `by` are excluded from the analytic sample for each
 #'   outcome (NAs in `y` and `weights` are also excluded; see Details).
@@ -89,8 +105,13 @@
 #'     (covariates kept at their observed values), and the
 #'     predictions are averaged. Population-weighted by construction
 #'     -- the empirical joint distribution of covariates is the
-#'     reference. Best when the goal is "what is the predicted
-#'     mean in *this* population if everyone had `by = lvl`".
+#'     reference. Under `weights`, the averaging uses the case
+#'     weights (the Stata `margins` convention after a weighted
+#'     regression; equivalent to
+#'     `marginaleffects::avg_predictions(wts = )`), so the reference
+#'     distribution is the weighted one. Best when the goal is "what
+#'     is the predicted mean in *this* population if everyone had
+#'     `by = lvl`".
 #'   - `"balanced"` (matches [emmeans::emmeans()] default and the
 #'     SPSS UNIANOVA EMMEANS / SAS LSMEANS conventions): synthetic
 #'     grid of factor-covariate level combinations x numeric
@@ -104,10 +125,12 @@
 #'   `emmean = avg_row %*% beta` and inherit the spicy variance
 #'   pipeline (HC* / CR* / bootstrap / jackknife). They give the
 #'   same answer when there are no covariates, and also when all
-#'   covariates are numeric / logical (no factor levels to expand
-#'   over). The two estimands diverge only when at least one
-#'   factor / character covariate has non-uniform observed
-#'   proportions.
+#'   covariates are numeric (fixed at their means either way). The
+#'   two estimands diverge when a factor, character, or logical
+#'   covariate has non-uniform observed proportions: those are
+#'   levels to balance, and `"balanced"` weights them equally
+#'   (a logical is a two-level factor to `lm()`, balanced
+#'   FALSE/TRUE -- the `emmeans` convention).
 #' @param exclude Columns to exclude from `select`. Supports tidyselect syntax
 #'   and character vectors of column names.
 #' @param regex Logical. If `FALSE` (the default), uses tidyselect helpers. If
@@ -151,8 +174,12 @@
 #'     (Bell and McCaffrey 2002; Pustejovsky and Tipton 2018), with
 #'     Satterthwaite degrees of freedom for inference; the
 #'     fractional df is reported in the `df2` column and in the
-#'     `t(df)` / `F(df1, df2)` test header. `"CR1"` corresponds to
-#'     Stata's `, vce(cluster id)` default. Cluster-robust variants
+#'     `t(df)` / `F(df1, df2)` test header. `"CR1"` applies the
+#'     G/(G-1) correction only; Stata's `, vce(cluster id)` uses the
+#'     larger G(N-1)/((G-1)(N-p)) factor with t(G-1) inference
+#'     (clubSandwich's `"CR1S"`; exposed for `lm` fits in
+#'     [table_regression()], not here), so `"CR1"` does
+#'     not reproduce Stata. Cluster-robust variants
 #'     are dispatched to [clubSandwich::vcovCR()] and inference uses
 #'     [clubSandwich::coef_test()] / [clubSandwich::Wald_test()];
 #'     install `clubSandwich` to use them.
@@ -179,6 +206,8 @@
 #'   - `NULL` (default): no cluster structure.
 #'   - an unquoted column name in `data`.
 #'   - a single character column name in `data`.
+#'   - a one-sided formula naming a column in `data` (`~ region`), the
+#'     `sandwich` / `fixest` convention shared with [table_regression()].
 #'   - an atomic vector of length `nrow(data)` evaluated in the calling
 #'     environment (factor, character, integer, etc.).
 #'
@@ -190,6 +219,9 @@
 #'   [clubSandwich::vcovCR()] directly on the fitted model for that case.
 #' @param boot_n Integer. Number of bootstrap replicates used when
 #'   `vcov = "bootstrap"`. Defaults to `1000`. Ignored otherwise.
+#'   Must be at least `50` (values below that floor raise an error:
+#'   fewer replicates make the variance estimate too noisy to use);
+#'   non-integer values are truncated (e.g. `500.9` becomes `500`).
 #'   Larger values reduce Monte-Carlo error in the bootstrap variance;
 #'   typical values for inference are `500`-`2000`.
 #' @param contrast Contrast display for categorical predictors. One of:
@@ -238,7 +270,9 @@
 #'
 #'   **Under covariate adjustment** (`covariates` non-empty):
 #'   - `"f2"` and `"omega2"` become the **partial** *\eqn{f^2}{f^2}* / partial *\eqn{\omega^2}{omega^2}*,
-#'     derived from the partial *F* of `by` via [stats::drop1()] --
+#'     derived from the partial *F* of `by` (the Type-II test of `by`
+#'     after all covariates, equal to [stats::drop1()] in this
+#'     additive setting) --
 #'     the correctly-defined effect size when the model is adjusted.
 #'     For numeric `by`, partial *\eqn{f^2}{f^2}* equals the squared partial
 #'     correlation of `by` with the outcome, divided by `(1 - r^2_partial)`.
@@ -252,8 +286,8 @@
 #'   noncentral F for `"omega2"` / `"f2"`). The CI level is taken from
 #'   `ci_level`. In the long output (`output = "long"`), the bounds are always
 #'   present in `es_ci_lower` / `es_ci_upper` (numeric). In the wide raw
-#'   output (`output = "data.frame"`), the bounds appear as numeric columns
-#'   `effect_size_ci_lower` / `effect_size_ci_upper`. In the printed ASCII
+#'   output (`output = "data.frame"`), the bounds appear under the same
+#'   names, `es_ci_lower` / `es_ci_upper` (numeric). In the printed ASCII
 #'   table and rendered outputs (`"tinytable"`, `"gt"`, `"flextable"`,
 #'   `"word"`, `"excel"`, `"clipboard"`), the effect-size column shows the
 #'   value followed by the CI in brackets (e.g. `0.18 [0.07, 0.30]`). Defaults
@@ -278,7 +312,10 @@
 #' @param ci_level Confidence level for coefficient and model-based mean
 #'   intervals (default: `0.95`). Must be between 0 and 1 exclusive.
 #' @param digits Number of decimal places for descriptive values, regression
-#'   coefficients, and test statistics (default: `2`).
+#'   coefficients, and test statistics (default: `2`). Must be a single
+#'   non-negative number; non-integer values are truncated (e.g. `2.9`
+#'   becomes `2`). Same constraint for `fit_digits` and
+#'   `effect_size_digits`.
 #' @param fit_digits Number of decimal places for model-fit columns (`\eqn{R^2}{R^2}` or
 #'   adjusted `\eqn{R^2}{R^2}`) in wide and rendered outputs (default: `2`).
 #' @param effect_size_digits Number of decimal places for the effect-size
@@ -292,7 +329,9 @@
 #'   `<.0001`; `p_digits = 2` prints `.05` and `<.01`. Useful for
 #'   genomics / GWAS contexts where adjusted *p*-values can be very
 #'   small, or for journals using a coarser convention. Leading zeros
-#'   are always stripped, following APA convention.
+#'   are always stripped, following APA convention. Values below `1`
+#'   raise an error; non-integer values are truncated (e.g. `3.7`
+#'   becomes `3`).
 #' @param decimal_mark Character used as decimal separator. Either `"."`
 #'   (default) or `","`.
 #' @param align Horizontal alignment of numeric columns in the printed
@@ -301,25 +340,26 @@
 #'   left-aligned. One of:
 #'   - `"decimal"` (default): align numeric columns on the decimal
 #'     mark, the standard scientific-publication convention used by
-#'     SPSS, SAS, LaTeX `siunitx`, [gt::cols_align_decimal()] and
-#'     `tinytable::style_tt(align = "d")`. For engines without a
-#'     native decimal-alignment primitive (`flextable`, `word`,
-#'     `clipboard`, ASCII print), values are pre-padded with leading
-#'     and trailing spaces so the dots line up vertically; the body
-#'     of the `flextable`/`word` output additionally uses a monospace
-#'     font to make character widths uniform.
+#'     SPSS, SAS, and LaTeX `siunitx`. Numeric cells are pre-padded
+#'     with figure-spaces (U+2007, digit-width) so every string in a
+#'     column has the same width with the decimal mark at the same
+#'     internal position; centring those uniform-width strings then
+#'     stacks the decimal points vertically. The same pad-then-centre
+#'     strategy is applied on every rendering engine (`gt`,
+#'     `tinytable`, `flextable`, `word`, ASCII print) for a
+#'     homogeneous rendering, matching `table_regression()`. The
+#'     `clipboard` output is delimited text meant to be parsed rather
+#'     than read at a fixed width, so its cells travel unpadded (a
+#'     padded number pastes as text next to an unpadded number).
 #'   - `"center"`: center-align all numeric columns.
 #'   - `"right"`: right-align all numeric columns.
-#'   - `"auto"`: legacy per-column rule used in spicy < 0.11.0
-#'     (center for the descriptive / inferential columns; right for
-#'     `n`, `Weighted n`, and `p`).
 #'
 #'   The `excel` output uses the engine's default alignment in any
 #'   case: cell-string padding does not align decimals under
 #'   proportional fonts, and writing raw numbers with a numeric
 #'   format would require a separate refactor.
 #' @param output Output format. One of:
-#'   - `"default"`: a printed ASCII table, returned invisibly
+#'   - `"default"`: an ASCII table object, printed when the call is bare
 #'   - `"data.frame"`: a plain wide `data.frame`
 #'   - `"long"`: a raw long `data.frame`
 #'   - `"tinytable"` (requires `tinytable`)
@@ -329,24 +369,47 @@
 #'   - `"clipboard"` (requires `clipr`)
 #'   - `"word"` (requires `flextable` and `officer`)
 #' @param excel_path File path for `output = "excel"`.
-#' @param excel_sheet Sheet name for `output = "excel"` (default:
-#'   `"Linear models"`).
+#' @param excel_sheet Sheet name for `output = "excel"`. `NULL` (the
+#'   default) uses `"Linear models"`.
 #' @param clipboard_delim Delimiter for `output = "clipboard"` (default:
-#'   `"\t"`).
+#'   `"\t"`). A cell holding the delimiter itself, a double quote or a
+#'   line break is quoted RFC 4180-style, so the grid survives whatever
+#'   delimiter you choose.
 #' @param word_path File path for `output = "word"`.
 #' @param verbose Logical. If `TRUE`, prints messages about ignored
 #'   non-numeric selected outcomes (default: `FALSE`).
+#' @param user_na Logical. If `TRUE` (the default), declared missing
+#'   values in the outcomes, in `by`, and in `covariates` are treated
+#'   as missing and excluded from the fitted models (reflected in the
+#'   per-group `n`). If `FALSE`, the declared codes enter the fits as
+#'   ordinary values. See the "Declared missing values" section of
+#'   [freq()].
+#'
+#' @param style A journal style: a theme name (`"jama"`, `"nejm"`,
+#'   `"lancet"`, `"annals"`, `"apa"`, `"aer"`), a
+#'   [spicy_style()] object, or `NULL` (the default). A style only
+#'   changes DEFAULTS -- any argument you pass explicitly wins over it.
+#'   Set `options(spicy.style = )` for document-wide scope. A theme
+#'   covers numeric formatting conformity only, not full editorial
+#'   conformity; `?spicy_style` lists the exact rules each one encodes
+#'   and the official document they come from. An unknown name is an
+#'   error.
+#'
+#' @inheritSection freq Declared missing values
 #'
 #' @return Depends on `output`:
 #' \itemize{
-#'   \item `"default"`: prints a styled ASCII table and invisibly returns
-#'     the underlying long `data.frame` with class
-#'     `"spicy_continuous_lm_table"` / `"spicy_table"`.
+#'   \item `"default"`: the underlying long `data.frame` with class
+#'     `"spicy_continuous_lm_table"` / `"spicy_table"`. The object is
+#'     returned visibly, so a bare `table_continuous_lm(...)` call
+#'     auto-prints the styled ASCII table at the console while
+#'     `t <- table_continuous_lm(...)` stays silent (print `t` to
+#'     display the table).
 #'   \item `"data.frame"`: a plain wide `data.frame` with one row per
 #'     outcome and numeric columns for means (categorical `by`) or slope
 #'     (numeric `by`), optional contrast and CI, optional test statistic,
 #'     `p`, fit statistic (`\eqn{R^2}{R^2}` or adjusted `\eqn{R^2}{R^2}`), effect size, optional
-#'     `effect_size_ci_lower` / `effect_size_ci_upper` (when
+#'     `es_ci_lower` / `es_ci_upper` (when
 #'     `effect_size_ci = TRUE`), `n`, and `Weighted n`.
 #'   \item `"long"`: a raw `data.frame` with one block per outcome and 28
 #'     columns covering identification (`variable`, `label`,
@@ -364,6 +427,10 @@
 #'   \item `"excel"` / `"word"`: writes to disk and returns the file path.
 #'   \item `"clipboard"`: copies the wide table and returns it invisibly.
 #' }
+#'
+#' The Excel sheet carries the same title the console prints on its
+#' first row; the table itself starts on row 3, and the note lines sit
+#' below the body.
 #'
 #' If no numeric outcome columns remain after applying `select`, `exclude`,
 #' and `regex`, the function emits a warning and returns an empty
@@ -433,8 +500,9 @@
 #'
 #' **Under covariate adjustment** (`covariates` non-empty), `"f2"` and
 #' `"omega2"` become the partial *\eqn{f^2}{f^2}* / partial *\eqn{\omega^2}{omega^2}* of `by`, derived
-#' from the partial *F* via [stats::drop1()] restricted to the focal
-#' term. `"d"` and `"g"` raise a `spicy_unsupported` error: the pooled
+#' from the partial *F* restricted to the focal term (the Type-II
+#' test of `by` after all covariates, equal to [stats::drop1()] in
+#' this additive setting). `"d"` and `"g"` raise a `spicy_unsupported` error: the pooled
 #' standard deviation has no canonical extension under adjustment, so
 #' Cohen's *d* and Hedges' *g* are undefined for adjusted models. See
 #' `effect_size` for the full dispatch.
@@ -448,14 +516,22 @@
 #' \itemize{
 #'   \item `"d"`, `"g"`: noncentral *t* inversion (Steiger and Fouladi 1997;
 #'     Goulet-Pelletier and Cousineau 2018). Empirical coverage is nominal
-#'     across sample sizes (Cousineau and Goulet-Pelletier 2021), unlike the
+#'     across sample sizes (Fitts 2021), unlike the
 #'     older Hedges-Olkin normal approximation which is biased for small
 #'     samples. For Hedges' *g* the bounds inherit the *J* small-sample
 #'     correction.
 #'   \item `"omega2"`, `"f2"`: noncentral *F* inversion (Steiger 2004).
-#'     Bounds are converted from the noncentrality parameter using
+#'     Without covariates (model-level effect sizes), bounds are
+#'     converted from the noncentrality parameter using
 #'     `omega^2 = ncp / (ncp + N)` and `\eqn{f^2}{f^2} = ncp / N` respectively, with
-#'     `N = df1 + df2 + 1` (total sample size).
+#'     `N = df1 + df2 + 1` (total sample size). Under covariate
+#'     adjustment (partial effect sizes), the bounds use the partial
+#'     transforms instead: partial `\eqn{f^2}{f^2} = ncp / df2`, and for partial
+#'     `omega^2` the inversion runs at the *F*-value equivalent of the
+#'     omega-squared point estimate with bounds `ncp / (ncp + df2)` --
+#'     the [effectsize::omega_squared()] `partial = TRUE` convention,
+#'     which is narrower than the partial eta-squared CI because
+#'     omega-squared shrinks the point estimate.
 #' }
 #' For the weighted case, the CI uses raw (unweighted) group counts and
 #' `df.residual(fit) = n - p`, consistent with the WLS reporting convention
@@ -497,7 +573,11 @@
 #' modern recommended default; it generally produces fractional
 #' Satterthwaite degrees of freedom in `df2`, which the displayed
 #' `t(df)` / `F(df1, df2)` header renders to one decimal. `"CR1"`
-#' matches Stata's `, vce(cluster id)`. Effect sizes remain invariant
+#' applies the G/(G-1) correction only -- Stata's `, vce(cluster id)`
+#' uses the larger G(N-1)/((G-1)(N-p)) factor with t(G-1) inference
+#' (clubSandwich's `"CR1S"`; exposed for `lm` fits in
+#' [table_regression()], not here), so `"CR1"` does not
+#' reproduce Stata. Effect sizes remain invariant
 #' to `vcov` (including `CR*`); only the SE, CI, test statistic, and
 #' `df2` of the contrast change.
 #'
@@ -510,8 +590,10 @@
 #' leave-one-cluster-out jackknife). The number of bootstrap replicates
 #' is controlled by `boot_n` (default `1000`); replicates that fail to
 #' fit on rank-deficient resamples are dropped, with an explicit warning
-#' if more than half fail and a fallback to the classical OLS variance
-#' below 10 valid replicates. Inference for both estimators is
+#' if more than half fail. Fewer than 10 valid bootstrap replicates (or
+#' fewer than 2 jackknife leave-outs) raises `spicy_resampling_failed`
+#' rather than silently reporting a different variance estimator.
+#' Inference for both estimators is
 #' asymptotic (`z` for single-coefficient contrasts, `chi^2(q)` for the
 #' multi-coefficient global Wald test on `k > 2` categorical
 #' predictors), reflected in the displayed test header. Use the
@@ -561,6 +643,10 @@
 #' APA-style footer naming the covariates and the chosen estimand, e.g.
 #' `Note. Adjusted for age, education (proportional).`
 #'
+#' The rendering engines carry that same footer as a table note. On the
+#' `"tinytable"` route the note is set one size down;
+#' `options(spicy.note_style)` governs that (see [table_regression()]).
+#'
 #' Optional output engines require the corresponding suggested packages:
 #' \itemize{
 #'   \item \pkg{tinytable} for `output = "tinytable"`
@@ -592,12 +678,6 @@
 #'   *Statistical Power Analysis for the Behavioral Sciences*
 #'   (2nd ed.). Hillsdale, NJ: Lawrence Erlbaum.
 #'
-#' Cousineau, D., & Goulet-Pelletier, J.-C. (2021).
-#'   Expected and empirical coverages of different methods for generating
-#'   noncentral *t* confidence intervals for a standardized mean
-#'   difference. *Behavior Research Methods*, **53**, 2376--2394.
-#'   \doi{10.3758/s13428-021-01550-4}
-#'
 #' Cribari-Neto, F. (2004).
 #'   Asymptotic inference under heteroskedasticity of unknown form.
 #'   *Computational Statistics & Data Analysis*, **45**(2), 215--233.
@@ -625,6 +705,12 @@
 #'   stratified samples. *Journal of the American Statistical
 #'   Association*, **78**(383), 535--543.
 #'   \doi{10.1080/01621459.1983.10478006}
+#'
+#' Fitts, D. A. (2021).
+#'   Expected and empirical coverages of different methods for generating
+#'   noncentral *t* confidence intervals for a standardized mean
+#'   difference. *Behavior Research Methods*, **53**(6), 2412--2429.
+#'   \doi{10.3758/s13428-021-01550-4}
 #'
 #' Goulet-Pelletier, J.-C., & Cousineau, D. (2018).
 #'   A review of effect sizes and their confidence intervals, Part I:
@@ -777,13 +863,15 @@
 #'
 #' # Cluster-robust SE for repeated-measures data: the `sleep` dataset
 #' # has 10 subjects measured twice (one observation per group).
-#' table_continuous_lm(
-#'   sleep,
-#'   select = extra,
-#'   by = group,
-#'   cluster = ID,
-#'   vcov = "CR2"
-#' )
+#' if (requireNamespace("clubSandwich", quietly = TRUE)) {
+#'   table_continuous_lm(
+#'     sleep,
+#'     select = extra,
+#'     by = group,
+#'     cluster = ID,
+#'     vcov = "CR2"
+#'   )
+#' }
 #'
 #' # --- Covariate adjustment ----------------------------------------------
 #'
@@ -810,7 +898,7 @@
 #' )
 #'
 #' # Effect sizes adjust automatically: f2 / omega2 become partial
-#' # effect sizes via partial F (drop1) restricted to the focal `by`.
+#' # effect sizes via the partial F restricted to the focal `by`.
 #' # d / g are undefined under adjustment and raise spicy_unsupported.
 #' table_continuous_lm(
 #'   sochealth,
@@ -941,9 +1029,19 @@ table_continuous_lm <- function(
   weights = NULL,
   vcov = c(
     "classical",
-    "HC0", "HC1", "HC2", "HC3", "HC4", "HC4m", "HC5",
-    "CR0", "CR1", "CR2", "CR3",
-    "bootstrap", "jackknife"
+    "HC0",
+    "HC1",
+    "HC2",
+    "HC3",
+    "HC4",
+    "HC4m",
+    "HC5",
+    "CR0",
+    "CR1",
+    "CR2",
+    "CR3",
+    "bootstrap",
+    "jackknife"
   ),
   cluster = NULL,
   boot_n = 1000,
@@ -963,7 +1061,7 @@ table_continuous_lm <- function(
   effect_size_digits = 2,
   p_digits = 3,
   decimal_mark = ".",
-  align = c("decimal", "auto", "center", "right"),
+  align = c("decimal", "center", "right"),
   output = c(
     "default",
     "data.frame",
@@ -976,14 +1074,18 @@ table_continuous_lm <- function(
     "word"
   ),
   excel_path = NULL,
-  excel_sheet = "Linear models",
+  excel_sheet = NULL,
   clipboard_delim = "\t",
   word_path = NULL,
-  verbose = FALSE
+  verbose = FALSE,
+  user_na = TRUE,
+  style = NULL
 ) {
-  if (!is.data.frame(data)) {
-    spicy_abort("`data` must be a data.frame.", class = "spicy_invalid_data")
-  }
+  # A journal / locale style only moves DEFAULTS (see `?spicy_style`).
+  .style_pushed <- .style_begin(style, match.call(), environment())
+  on.exit(.style_end(.style_pushed), add = TRUE)
+
+  .check_data_frame(data, "table_continuous_lm")
   if (
     !is.numeric(ci_level) ||
       length(ci_level) != 1L ||
@@ -991,7 +1093,10 @@ table_continuous_lm <- function(
       ci_level <= 0 ||
       ci_level >= 1
   ) {
-    spicy_abort("`ci_level` must be a single number between 0 and 1.", class = "spicy_invalid_input")
+    spicy_abort(
+      "`ci_level` must be a single number between 0 and 1.",
+      class = "spicy_invalid_input"
+    )
   }
   if (
     !is.numeric(digits) ||
@@ -999,7 +1104,10 @@ table_continuous_lm <- function(
       is.na(digits) ||
       digits < 0
   ) {
-    spicy_abort("`digits` must be a single non-negative number.", class = "spicy_invalid_input")
+    spicy_abort(
+      "`digits` must be a single non-negative number.",
+      class = "spicy_invalid_input"
+    )
   }
   digits <- as.integer(digits)
   if (
@@ -1008,7 +1116,10 @@ table_continuous_lm <- function(
       is.na(fit_digits) ||
       fit_digits < 0
   ) {
-    spicy_abort("`fit_digits` must be a single non-negative number.", class = "spicy_invalid_input")
+    spicy_abort(
+      "`fit_digits` must be a single non-negative number.",
+      class = "spicy_invalid_input"
+    )
   }
   fit_digits <- as.integer(fit_digits)
   if (
@@ -1018,7 +1129,9 @@ table_continuous_lm <- function(
       effect_size_digits < 0
   ) {
     spicy_abort(
-      "`effect_size_digits` must be a single non-negative number.", class = "spicy_invalid_input")
+      "`effect_size_digits` must be a single non-negative number.",
+      class = "spicy_invalid_input"
+    )
   }
   effect_size_digits <- as.integer(effect_size_digits)
   if (
@@ -1028,7 +1141,9 @@ table_continuous_lm <- function(
       p_digits < 1
   ) {
     spicy_abort(
-      "`p_digits` must be a single positive integer (>= 1).", class = "spicy_invalid_input")
+      "`p_digits` must be a single integer >= 1 (typically 2-4).",
+      class = "spicy_invalid_input"
+    )
   }
   p_digits <- as.integer(p_digits)
   if (
@@ -1038,14 +1153,22 @@ table_continuous_lm <- function(
       boot_n < 50
   ) {
     spicy_abort(
-      "`boot_n` must be a single positive integer (>= 50).", class = "spicy_invalid_input")
+      "`boot_n` must be a single positive integer (>= 50).",
+      class = "spicy_invalid_input"
+    )
   }
   boot_n <- as.integer(boot_n)
-  if (!decimal_mark %in% c(".", ",")) {
-    spicy_abort('`decimal_mark` must be "." or ",".', class = "spicy_invalid_input")
+  if (!.is_single_char(decimal_mark)) {
+    spicy_abort(
+      '`decimal_mark` must be a single character (e.g. "." or ",").',
+      class = "spicy_invalid_input"
+    )
   }
   if (!is.null(labels) && (!is.character(labels) || is.null(names(labels)))) {
-    spicy_abort("`labels` must be a named character vector.", class = "spicy_invalid_input")
+    spicy_abort(
+      "`labels` must be a named character vector.",
+      class = "spicy_invalid_input"
+    )
   }
   for (.arg in c(
     "regex",
@@ -1055,28 +1178,96 @@ table_continuous_lm <- function(
     "show_n",
     "show_weighted_n",
     "ci",
-    "effect_size_ci"
+    "effect_size_ci",
+    "user_na"
   )) {
     .val <- get(.arg)
     if (!is.logical(.val) || length(.val) != 1L || is.na(.val)) {
-      spicy_abort(sprintf("`%s` must be TRUE/FALSE.", .arg), class = "spicy_invalid_input")
+      spicy_abort(
+        sprintf("`%s` must be TRUE/FALSE.", .arg),
+        class = "spicy_invalid_input"
+      )
     }
   }
 
-  output <- match.arg(output)
-  vcov <- match.arg(vcov)
-  contrast <- match.arg(contrast)
-  effect_size <- match.arg(effect_size)
-  r2 <- match.arg(r2)
-  align <- match.arg(align)
-  adjustment <- match.arg(adjustment)
+  output <- spicy_match_arg(output)
+  # Decision 16: NULL resolves to the family's registry sheet name,
+  # keeping the usage line of the Rd clean of a display string.
+  if (is.null(excel_sheet)) {
+    excel_sheet <- spicy_str("excel_sheet_continuous_lm")
+  }
+  vcov <- spicy_match_arg(vcov)
+  contrast <- spicy_match_arg(contrast)
+  effect_size <- spicy_match_arg(effect_size)
+  r2 <- spicy_match_arg(r2)
+  align <- spicy_match_arg(align)
+  adjustment <- spicy_match_arg(adjustment)
+
+  # Declared missing values (see the "Declared missing values" section
+  # of ?freq): with `user_na = TRUE` declared codes become regular NA
+  # before any model is fitted -- `complete.cases()` and `lm()` do not
+  # dispatch haven's `is.na()`, so the conversion must happen up
+  # front. With `user_na = FALSE` the declaration is dropped and the
+  # codes enter the fits as ordinary values.
+  resolve_user_na <- function(v) {
+    if (isTRUE(user_na)) .user_na_to_na(v) else .user_na_zap(v)
+  }
 
   by_quo <- rlang::enquo(by)
   by_name <- resolve_single_column_selection(by_quo, data, "by")
-  by_vector <- data[[by_name]]
+  # bit64::integer64 passes is_supported_lm_predictor() (is.numeric()
+  # is TRUE on the raw int64 payload) but lm() then fits garbage
+  # denormal doubles and every estimate row comes back blank. Refuse
+  # loudly before any model sees it.
+  .check_integer64_columns(data, by_name, "table_continuous_lm")
+  by_vector <- resolve_user_na(data[[by_name]])
+  # A haven labelled vector with value labels is the categorical
+  # signal of an SPSS / Stata import, and the sibling tables
+  # (table_continuous(), table_categorical()) already group by such
+  # columns. Convert it to a factor over the raw codes so it takes
+  # the categorical path instead of silently fitting a slope on the
+  # codes. Levels are in ascending CODE order (factor() default; the
+  # model needs a fixed order and the lowest code is the natural
+  # reference), whereas the sibling tables display the same groups in
+  # order of first appearance -- same grouping, potentially different
+  # display order. A labelled vector without value labels stays
+  # continuous. `resolve_user_na()` has already applied the `user_na`
+  # contract, so declared-missing codes are NA (default) or ordinary
+  # values (user_na = FALSE) here.
+  if (
+    inherits(by_vector, "haven_labelled") &&
+      length(attr(by_vector, "labels", exact = TRUE)) > 0L
+  ) {
+    by_codes <- unclass(by_vector)
+    attributes(by_codes) <- NULL
+    by_vector <- factor(by_codes)
+  }
   if (!is_supported_lm_predictor(by_vector)) {
     spicy_abort(
-      "`by` must be numeric, logical, character, or factor.", class = "spicy_invalid_input")
+      "`by` must be numeric, logical, character, or factor.",
+      class = "spicy_invalid_input"
+    )
+  }
+  # A categorical `by` needs at least two observed groups: with a
+  # single observed level there is nothing to compare and every fit
+  # would degenerate to an all-NA row. Fail up front with the reason
+  # instead of printing that row silently (audit phase 2, finding 32).
+  if (!is.numeric(by_vector)) {
+    n_observed_by <- length(unique(by_vector[!is.na(by_vector)]))
+    if (n_observed_by < 2L) {
+      spicy_abort(
+        c(
+          sprintf(
+            "`by` (`%s`) has %d observed non-missing level%s; a group comparison needs at least two.",
+            by_name,
+            n_observed_by,
+            if (n_observed_by == 1L) "" else "s"
+          ),
+          "i" = "Check the grouping column, or use a `by` with at least two observed groups."
+        ),
+        class = "spicy_invalid_data"
+      )
+    }
   }
 
   if (effect_size %in% c("d", "g")) {
@@ -1090,13 +1281,17 @@ table_continuous_lm <- function(
             "predictor with exactly two non-empty levels."
           ),
           effect_size
-        ), class = "spicy_invalid_input")
+        ),
+        class = "spicy_invalid_input"
+      )
     }
   }
 
   if (isTRUE(effect_size_ci) && identical(effect_size, "none")) {
     spicy_warn(
-      "`effect_size_ci` is ignored when `effect_size = \"none\"`.", class = "spicy_ignored_arg")
+      "`effect_size_ci` is ignored when `effect_size = \"none\"`.",
+      class = "spicy_ignored_arg"
+    )
     effect_size_ci <- FALSE
   }
 
@@ -1104,23 +1299,55 @@ table_continuous_lm <- function(
   weights_name <- detect_weights_column_name(weights_quo, data)
   weights_vec <- resolve_weights_argument(weights_quo, data, "weights")
   if (!is.null(weights_vec)) {
-    if (any(!is.finite(weights_vec), na.rm = TRUE)) {
-      spicy_abort("`weights` must contain only finite values.", class = "spicy_invalid_input")
+    # NA weights are legal: the documented contract excludes those
+    # rows from the analytic sample (alongside NA in `y` / `by`) and
+    # discloses them in the table note. Only genuinely non-finite
+    # values (Inf, -Inf, NaN) are rejected -- `!is.finite(NA)` is TRUE,
+    # so the finiteness check must not sweep NA along with them
+    # (audit phase 2, finding 14).
+    if (any(is.infinite(weights_vec) | is.nan(weights_vec))) {
+      spicy_abort(
+        "`weights` must contain only finite values.",
+        class = "spicy_invalid_input"
+      )
     }
     if (any(weights_vec < 0, na.rm = TRUE)) {
-      spicy_abort("`weights` must be non-negative.", class = "spicy_invalid_input")
+      spicy_abort(
+        "`weights` must be non-negative.",
+        class = "spicy_invalid_input"
+      )
     }
     if (all(is.na(weights_vec) | weights_vec == 0)) {
-      spicy_abort("`weights` must contain at least one positive value.", class = "spicy_invalid_input")
+      spicy_abort(
+        "`weights` must contain at least one positive value.",
+        class = "spicy_invalid_input"
+      )
     }
   }
   if (isTRUE(show_weighted_n) && is.null(weights_vec)) {
     spicy_warn(
-      "`show_weighted_n` is ignored when `weights` is not supplied.", class = "spicy_ignored_arg")
+      "`show_weighted_n` is ignored when `weights` is not supplied.",
+      class = "spicy_ignored_arg"
+    )
     show_weighted_n <- FALSE
   }
 
   cluster_quo <- rlang::enquo(cluster)
+  # Accept the one-sided-formula idiom `cluster = ~g` (the sandwich /
+  # fixest convention) by translating it to the column name before
+  # resolution. Anything else (bare column, string, raw vector) flows
+  # to the shared resolver unchanged; a formula that does not name a
+  # single column in `data` also falls through and is rejected there.
+  cluster_expr <- rlang::quo_get_expr(cluster_quo)
+  if (rlang::is_call(cluster_expr, "~", n = 1L)) {
+    cluster_var <- all.vars(cluster_expr)
+    if (length(cluster_var) == 1L && cluster_var %in% names(data)) {
+      cluster_quo <- rlang::new_quosure(
+        cluster_var,
+        env = rlang::quo_get_env(cluster_quo)
+      )
+    }
+  }
   cluster_name <- detect_weights_column_name(cluster_quo, data)
   cluster_vec <- resolve_cluster_argument(cluster_quo, data, "cluster")
 
@@ -1136,7 +1363,9 @@ table_continuous_lm <- function(
           "(an atomic vector or a single column name in `data`)."
         ),
         vcov
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
   if (!cluster_allowed && !is.null(cluster_vec)) {
     spicy_abort(
@@ -1147,7 +1376,9 @@ table_continuous_lm <- function(
           "\"bootstrap\", or \"jackknife\". Got `vcov = \"%s\"`."
         ),
         vcov
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
   if (is_cr_vcov && !requireNamespace("clubSandwich", quietly = TRUE)) {
     spicy_abort(
@@ -1157,12 +1388,18 @@ table_continuous_lm <- function(
           "Install it with install.packages(\"clubSandwich\")."
         ),
         vcov
-      ), class = "spicy_invalid_input")
+      ),
+      class = "spicy_invalid_input"
+    )
   }
-  if (!is.null(cluster_vec) &&
-        length(unique(stats::na.omit(cluster_vec))) < 2L) {
+  if (
+    !is.null(cluster_vec) &&
+      length(unique(stats::na.omit(cluster_vec))) < 2L
+  ) {
     spicy_abort(
-      "`cluster` must contain at least two distinct non-missing values.", class = "spicy_invalid_input")
+      "`cluster` must contain at least two distinct non-missing values.",
+      class = "spicy_invalid_input"
+    )
   }
 
   available_names <- names(data)
@@ -1171,7 +1408,12 @@ table_continuous_lm <- function(
     data,
     "exclude"
   )
-  excluded_names <- unique(c(excluded_names, by_name, weights_name, cluster_name))
+  excluded_names <- unique(c(
+    excluded_names,
+    by_name,
+    weights_name,
+    cluster_name
+  ))
 
   if (isTRUE(regex)) {
     select_val <- tryCatch(
@@ -1182,7 +1424,9 @@ table_continuous_lm <- function(
       !is.character(select_val) || length(select_val) != 1L || is.na(select_val)
     ) {
       spicy_abort(
-        "When `regex = TRUE`, `select` must be a single regex pattern.", class = "spicy_invalid_input")
+        "When `regex = TRUE`, `select` must be a single regex pattern.",
+        class = "spicy_invalid_input"
+      )
     }
     selected_names <- grep(select_val, available_names, value = TRUE)
   } else {
@@ -1190,7 +1434,10 @@ table_continuous_lm <- function(
     selected_pos <- tryCatch(
       tidyselect::eval_select(select_quo, data),
       error = function(e) {
-        spicy_abort("`select` must select columns in `data`.", class = "spicy_invalid_input")
+        spicy_abort(
+          "`select` must select columns in `data`.",
+          class = "spicy_invalid_input"
+        )
       }
     )
     selected_names <- names(selected_pos)
@@ -1225,6 +1472,14 @@ table_continuous_lm <- function(
   )
   numeric_outcomes <- setdiff(numeric_outcomes, covariates_names)
 
+  # Same integer64 contract as the `by` guard above, applied to the
+  # outcome and covariate columns entering the fits.
+  .check_integer64_columns(
+    data,
+    c(numeric_outcomes, covariates_names),
+    "table_continuous_lm"
+  )
+
   # Cohen's d / Hedges' g are undefined under covariate adjustment.
   # Reject up front so the user gets a clean error rather than a
   # silent dispatch to an inappropriate formula.
@@ -1242,37 +1497,29 @@ table_continuous_lm <- function(
   }
 
   if (length(numeric_outcomes) == 0L) {
-    spicy_warn("No numeric outcome columns selected.", class = "spicy_no_selection")
+    spicy_warn(
+      "No numeric outcome columns selected.",
+      class = "spicy_no_selection"
+    )
     return(data.frame())
   }
 
   covariates_df <- if (length(covariates_names) > 0L) {
-    data[, covariates_names, drop = FALSE]
+    cdf <- data[, covariates_names, drop = FALSE]
+    cdf[] <- lapply(cdf, resolve_user_na)
+    cdf
   } else {
     NULL
   }
 
-  outcome_labels <- vapply(
-    numeric_outcomes,
-    function(nm) {
-      if (!is.null(labels) && nm %in% names(labels)) {
-        return(labels[[nm]])
-      }
-      lab <- attr(data[[nm]], "label", exact = TRUE)
-      if (is.null(lab) || !nzchar(lab)) nm else lab
-    },
-    character(1)
-  )
-  by_label <- attr(data[[by_name]], "label", exact = TRUE)
-  if (is.null(by_label) || !nzchar(by_label)) {
-    by_label <- by_name
-  }
+  outcome_labels <- resolve_variable_labels(data, numeric_outcomes, labels)
+  by_label <- resolve_variable_labels(data, by_name)
 
   rows <- lapply(
     seq_along(numeric_outcomes),
     function(i) {
       fit_outcome_lm_rows(
-        y = data[[numeric_outcomes[i]]],
+        y = resolve_user_na(data[[numeric_outcomes[i]]]),
         predictor = by_vector,
         covariates = covariates_df,
         weights = weights_vec,
@@ -1298,9 +1545,15 @@ table_continuous_lm <- function(
   attr(result, "effect_size_digits") <- effect_size_digits
   attr(result, "p_digits") <- p_digits
   attr(result, "decimal_mark") <- decimal_mark
+  # See `.style_stamp()`: this table re-formats at print time, so the
+  # argument-less style levers travel with it.
+  result <- .style_stamp(result)
   attr(result, "by_var") <- by_name
   attr(result, "by_label") <- by_label
   attr(result, "vcov_type") <- vcov
+  # Cluster variable NAME (for the SE-estimator note); NA when the
+  # cluster was supplied as a raw vector with no recoverable name.
+  attr(result, "cluster_name") <- cluster_name %||% NA_character_
   attr(result, "contrast") <- contrast
   attr(result, "covariates") <- covariates_names
   attr(result, "adjustment") <- if (length(covariates_names) > 0L) {
@@ -1319,9 +1572,103 @@ table_continuous_lm <- function(
   attr(result, "show_ci") <- ci
   attr(result, "align") <- align
 
+  # Truthfulness ledger (the family convention of table_continuous()
+  # / table_categorical()): what left the analytic sample is disclosed
+  # in the table note. Per-variable NA counts (outcomes and
+  # covariates, regular vs declared missing -- the same split
+  # table_continuous() reports; decision 14, 2026-08-15: the `n`
+  # column shows the effect but not the cause), then rows dropped for
+  # a missing `by` value or a missing weight.
+  na_dropped <- integer(0)
+  user_na_dropped <- integer(0)
+  for (.nm in c(numeric_outcomes, covariates_names)) {
+    .col <- data[[.nm]]
+    .n_user <- if (isTRUE(user_na)) sum(.user_na_mask(.col)) else 0L
+    if (.n_user > 0L) {
+      user_na_dropped[[.nm]] <- .n_user
+    }
+    .nd <- sum(is.na(resolve_user_na(.col))) - .n_user
+    if (.nd > 0L) {
+      na_dropped[[.nm]] <- .nd
+    }
+  }
+  missing_parts <- character(0)
+  if (length(na_dropped)) {
+    missing_parts <- c(
+      missing_parts,
+      paste0(
+        spicy_str("note_missing_removed"),
+        paste(
+          spicy_fmt("note_missing_item", names(na_dropped), na_dropped),
+          collapse = ", "
+        ),
+        "."
+      )
+    )
+  }
+  if (length(user_na_dropped)) {
+    missing_parts <- c(
+      missing_parts,
+      paste0(
+        spicy_str("note_declared_missing_removed"),
+        paste(
+          spicy_fmt(
+            "note_missing_item",
+            names(user_na_dropped),
+            user_na_dropped
+          ),
+          collapse = ", "
+        ),
+        "."
+      )
+    )
+  }
+  n_na_by <- sum(is.na(by_vector))
+  if (n_na_by > 0L) {
+    missing_parts <- c(
+      missing_parts,
+      spicy_fmt("note_rows_missing_by_removed", by_name, n_na_by)
+    )
+  }
+  if (!is.null(weights_vec)) {
+    n_na_weights <- sum(is.na(weights_vec))
+    if (n_na_weights > 0L) {
+      missing_parts <- c(
+        missing_parts,
+        spicy_fmt(
+          "note_rows_missing_weights",
+          weights_name %||% spicy_str("note_weights_fallback"),
+          n_na_weights
+        )
+      )
+    }
+  }
+  if (length(missing_parts) > 0L) {
+    attr(result, "missing_note") <- paste(missing_parts, collapse = " ")
+  }
+
   if (identical(output, "long")) {
     return(result)
   }
+
+  # The ordered columns of this table -- frozen key, displayed header,
+  # semantic token -- resolved ONCE and handed to every consumer below.
+  # `col_meta$display_label` cannot be the carrier: the typed view is
+  # built only for `output = "default"`, and the exporters receive the
+  # display frame alone.
+  spec <- .lm_column_spec(
+    result,
+    ci_level = ci_level,
+    show_statistic = statistic,
+    show_p_value = p_value,
+    show_n = show_n,
+    show_weighted_n = show_weighted_n,
+    effect_size = effect_size,
+    effect_size_ci = effect_size_ci,
+    r2_type = r2,
+    ci = ci,
+    decimal_mark = decimal_mark
+  )
 
   wide_raw <- build_wide_raw_continuous_lm(
     result,
@@ -1333,7 +1680,8 @@ table_continuous_lm <- function(
     effect_size_ci = effect_size_ci,
     r2_type = r2,
     ci = ci,
-    ci_level = ci_level
+    ci_level = ci_level,
+    spec = spec
   )
   if (identical(output, "data.frame")) {
     return(wide_raw)
@@ -1354,17 +1702,40 @@ table_continuous_lm <- function(
     effect_size = effect_size,
     effect_size_ci = effect_size_ci,
     r2_type = r2,
-    ci = ci
+    ci = ci,
+    spec = spec
   )
 
   if (identical(output, "default")) {
+    # Typed view for `as_structured()`: `wide_raw` and `wide_df` are
+    # the raw and displayed frames already built above, so the typed
+    # body and the printed body come from one computation each.
+    attr(result, "structured") <- .build_continuous_lm_structured(
+      result = result,
+      wide_raw = wide_raw,
+      wide_display = wide_df,
+      digits = digits,
+      fit_digits = fit_digits,
+      effect_size_digits = effect_size_digits,
+      p_digits = p_digits,
+      decimal_mark = decimal_mark,
+      ci_level = ci_level,
+      show_statistic = statistic,
+      effect_size = effect_size,
+      effect_size_ci = effect_size_ci,
+      r2_type = r2,
+      spec = spec
+    )
     class(result) <- c(
       "spicy_continuous_lm_table",
       "spicy_table",
       class(result)
     )
-    print(result)
-    return(invisible(result))
+    # Return VISIBLY and let standard auto-print dispatch to
+    # print.spicy_continuous_lm_table(): a bare table_continuous_lm(...)
+    # call still displays the table, while `t <- table_continuous_lm(...)`
+    # is silent (the freq() / cross_tab() model).
+    return(result)
   }
 
   export_continuous_lm_table(
@@ -1376,7 +1747,10 @@ table_continuous_lm <- function(
     excel_path = excel_path,
     excel_sheet = excel_sheet,
     clipboard_delim = clipboard_delim,
-    word_path = word_path
+    word_path = word_path,
+    note = .tclm_note_text(result),
+    title = .continuous_lm_title(by_label),
+    labels = .lm_spec_labels(spec)
   )
 }
 
@@ -1397,6 +1771,16 @@ fit_outcome_lm_rows <- function(
   adjustment = c("proportional", "balanced")
 ) {
   adjustment <- match.arg(adjustment)
+  # Level template for a categorical predictor, captured BEFORE the
+  # per-outcome complete-case filtering: when filtering leaves fewer
+  # than two observed groups for one outcome, its all-NA rows reuse
+  # these levels so the wide `M (<level>)` header matches the other
+  # outcomes (no spurious `M (NA)` column).
+  by_levels <- if (is.numeric(predictor)) {
+    NULL
+  } else {
+    levels(droplevels(coerce_lm_factor(predictor)))
+  }
   keep <- !is.na(y) & !is.na(predictor)
   if (!is.null(weights)) {
     keep <- keep & !is.na(weights)
@@ -1416,6 +1800,19 @@ fit_outcome_lm_rows <- function(
     NULL
   } else {
     covariates[keep, , drop = FALSE]
+  }
+  if (!is.null(covariates) && ncol(covariates) > 0L) {
+    # Drop declared-but-unobserved factor levels BEFORE the fit:
+    # lm() drops them from the coefficients anyway (model.frame's
+    # drop.unused.levels), but the emmean prediction grids expand
+    # the original level set, so the design would gain columns the
+    # fit has no coefficients for (audit phase 2, finding 22). The
+    # `ordered` class survives droplevels(), so contrast coding is
+    # unaffected. align_design_to_coef() remains the last-resort
+    # guard for any residual mismatch.
+    covariates[] <- lapply(covariates, function(col) {
+      if (is.factor(col)) droplevels(col) else col
+    })
   }
 
   if (is.numeric(predictor)) {
@@ -1451,8 +1848,66 @@ fit_outcome_lm_rows <- function(
     ci_level = ci_level,
     effect_size = effect_size,
     boot_n = boot_n,
-    adjustment = adjustment
+    adjustment = adjustment,
+    by_levels = by_levels
   )
+}
+
+# Internal: quote non-syntactic covariate names for
+# stats::reformulate() so a column like "co var" survives formula
+# construction instead of raising a raw parse error (audit phase 2,
+# finding 28). Syntactic names pass through unquoted, so coefficient
+# names are unchanged for them.
+backtick_nonsyntactic <- function(nms) {
+  needs <- make.names(nms) != nms
+  nms[needs] <- sprintf("`%s`", nms[needs])
+  nms
+}
+
+# Internal: a saturated fit (zero residual df, e.g. one observation
+# per group) has no residual variance: every SE, CI, test statistic
+# and p-value is NaN, and the t/z fallback used to label the row with
+# a misleading "z" test. Blank the inferential columns to NA -- the
+# point estimates (means, differences, slopes) are still exact and
+# stay -- and disclose why with a classed warning (audit phase 2,
+# finding 32). NaN must never be displayed as if it were a computed
+# result.
+degrade_saturated_lm_rows <- function(out, fit, outcome_name) {
+  df_resid <- stats::df.residual(fit)
+  if (is.finite(df_resid) && df_resid > 0) {
+    return(out)
+  }
+  spicy_warn(
+    c(
+      sprintf(
+        "The model for `%s` has zero residual degrees of freedom (too few observations per group); SEs, CIs, test statistics, and p-values are NA.",
+        outcome_name
+      ),
+      "i" = "Inference needs at least one residual degree of freedom (e.g. two observations in some group)."
+    ),
+    class = "spicy_undefined_stat"
+  )
+  na_cols <- c(
+    "emmean_se",
+    "emmean_ci_lower",
+    "emmean_ci_upper",
+    "estimate_se",
+    "estimate_ci_lower",
+    "estimate_ci_upper",
+    "statistic",
+    "df2",
+    "p.value",
+    "es_value",
+    "es_ci_lower",
+    "es_ci_upper",
+    "adj_r2"
+  )
+  for (nm in na_cols) {
+    out[[nm]] <- NA_real_
+  }
+  out$test_type <- NA_character_
+  out$df1 <- NA_integer_
+  out
 }
 
 fit_numeric_predictor_lm_rows <- function(
@@ -1470,6 +1925,25 @@ fit_numeric_predictor_lm_rows <- function(
   boot_n = 1000L
 ) {
   if (length(y) < 2L || stats::sd(x, na.rm = TRUE) == 0) {
+    # Per-outcome degradation (mirrors the categorical branch): a
+    # slope cannot be estimated for THIS outcome, so return an all-NA
+    # row with a classed warning naming the outcome instead of a
+    # silent blank line (audit phase 2, finding 32).
+    spicy_warn(
+      c(
+        sprintf(
+          "The model for `%s` could not be fit: %s after removing incomplete rows; its cells are NA.",
+          outcome_name,
+          if (length(y) < 2L) {
+            "fewer than two complete observations remain"
+          } else {
+            "`by` is constant on the remaining observations"
+          }
+        ),
+        "i" = "Rows with missing values in the outcome, `by`, `weights`, `cluster`, or covariates are excluded per outcome."
+      ),
+      class = "spicy_undefined_stat"
+    )
     return(make_empty_lm_rows(
       outcome_name,
       outcome_label,
@@ -1484,7 +1958,11 @@ fit_numeric_predictor_lm_rows <- function(
   } else {
     data.frame(y = y, x = x)
   }
-  rhs_terms <- if (has_covs) c("x", names(covariates)) else "x"
+  rhs_terms <- if (has_covs) {
+    c("x", backtick_nonsyntactic(names(covariates)))
+  } else {
+    "x"
+  }
   formula <- stats::reformulate(rhs_terms, response = "y")
 
   fit <- if (is.null(weights)) {
@@ -1493,7 +1971,7 @@ fit_numeric_predictor_lm_rows <- function(
     stats::lm(formula, data = model_df, weights = weights)
   }
 
-  vc <- compute_lm_vcov(
+  vc <- compute_model_vcov(
     fit,
     vcov_type,
     cluster = cluster,
@@ -1513,7 +1991,7 @@ fit_numeric_predictor_lm_rows <- function(
   # intercept). When covariates are present they come AFTER x in the
   # design matrix because `reformulate(c("x", cov_names))` orders
   # terms left-to-right, so position 2 still picks out x.
-  inf <- compute_lm_coef_inference(
+  inf <- compute_coef_inference(
     fit,
     coef_idx = 2L,
     vc = vc,
@@ -1524,7 +2002,7 @@ fit_numeric_predictor_lm_rows <- function(
 
   es_ci <- compute_es_ci_lm(fit, effect_size, ci_level, focal_term = focal_term)
 
-  data.frame(
+  out <- data.frame(
     variable = outcome_name,
     label = outcome_label,
     predictor_type = "continuous",
@@ -1553,8 +2031,13 @@ fit_numeric_predictor_lm_rows <- function(
     adj_r2 = model_stats$adj_r2,
     n = length(y),
     weighted_n = if (is.null(weights)) NA_real_ else sum(weights),
+    # Valid bootstrap replicate count (NA outside vcov = "bootstrap"):
+    # surfaces in the table note, mirroring table_regression's
+    # "bootstrap (N replicates)" disclosure.
+    boot_n_valid = as.integer(attr(vc, "boot_n_valid") %||% NA_integer_),
     stringsAsFactors = FALSE
   )
+  degrade_saturated_lm_rows(out, fit, outcome_name)
 }
 
 fit_categorical_predictor_lm_rows <- function(
@@ -1571,16 +2054,55 @@ fit_categorical_predictor_lm_rows <- function(
   ci_level,
   effect_size = "none",
   boot_n = 1000L,
-  adjustment = c("proportional", "balanced")
+  adjustment = c("proportional", "balanced"),
+  by_levels = NULL
 ) {
   adjustment <- match.arg(adjustment)
   x <- droplevels(coerce_lm_factor(x))
+  # The documented contract for categorical `by` is R's default
+  # treatment-contrast convention: first level = reference, per-level
+  # means, and Delta = level - reference. An ordered factor would
+  # instead be fitted with polynomial contrasts (contr.poly), while
+  # the prediction grids below rebuild `x` as a plain factor --
+  # design columns and coefficients would silently diverge (audit
+  # phase 2, findings 11/19/20). Refit as an unordered factor with
+  # the same level order so the fit itself matches the documented
+  # convention in both the covariate-free and the covariate-adjusted
+  # branches.
+  if (is.ordered(x)) {
+    x <- factor(x, levels = levels(x), ordered = FALSE)
+  }
   if (length(y) < 2L || nlevels(x) < 2L) {
+    # Per-outcome degradation: table_continuous_lm() already rejects a
+    # `by` with fewer than two observed levels overall, so reaching
+    # this branch means THIS outcome's complete-case filtering (NA in
+    # y, weights, cluster, or covariates) removed every observation of
+    # all but (at most) one group. Degrade loudly -- a classed warning
+    # naming the outcome -- and return all-NA rows keyed to the
+    # regular `by` levels so the wide header stays clean (audit phase
+    # 2, finding 32).
+    spicy_warn(
+      c(
+        sprintf(
+          "The model for `%s` could not be fit: %d observed non-missing group%s left after removing incomplete rows, and a group comparison needs at least two; its cells are NA.",
+          outcome_name,
+          nlevels(x),
+          if (nlevels(x) == 1L) " is" else "s are"
+        ),
+        "i" = "Rows with missing values in the outcome, `by`, `weights`, `cluster`, or covariates are excluded per outcome."
+      ),
+      class = "spicy_undefined_stat"
+    )
+    empty_levels <- by_levels %||% levels(x)
+    if (length(empty_levels) == 0L) {
+      empty_levels <- NA_character_
+    }
     return(make_empty_lm_rows(
       outcome_name,
       outcome_label,
       "categorical",
-      predictor_label = predictor_label
+      predictor_label = predictor_label,
+      levels = empty_levels
     ))
   }
 
@@ -1590,16 +2112,41 @@ fit_categorical_predictor_lm_rows <- function(
   } else {
     data.frame(y = y, x = x)
   }
-  rhs_terms <- if (has_covs) c("x", names(covariates)) else "x"
+  rhs_terms <- if (has_covs) {
+    c("x", backtick_nonsyntactic(names(covariates)))
+  } else {
+    "x"
+  }
   formula <- stats::reformulate(rhs_terms, response = "y")
 
+  # Pin the focal factor to EXPLICIT treatment contrasts. lm() takes
+  # the coding of an unordered factor from the session-wide
+  # `options(contrasts = )`, so an afex-style session
+  # (`options(contrasts = c("contr.sum", "contr.poly"))`) would
+  # silently fit sum-coded dummies named "x1", "x2", ... -- breaking
+  # the by-name coefficient lookup below and the documented
+  # treatment-contrast convention (reference = first level). The
+  # local `contrasts` argument guarantees dummies named "x<level>"
+  # whatever the session options are. Covariate factors keep the
+  # session coding: the reported quantities (emmeans, focal Wald F,
+  # R^2) are invariant to covariate coding, and the prediction grids
+  # reuse `fit$contrasts` so design and coefficients always agree.
   fit <- if (is.null(weights)) {
-    stats::lm(formula, data = model_df)
+    stats::lm(
+      formula,
+      data = model_df,
+      contrasts = list(x = "contr.treatment")
+    )
   } else {
-    stats::lm(formula, data = model_df, weights = weights)
+    stats::lm(
+      formula,
+      data = model_df,
+      weights = weights,
+      contrasts = list(x = "contr.treatment")
+    )
   }
 
-  vc <- compute_lm_vcov(
+  vc <- compute_model_vcov(
     fit,
     vcov_type,
     cluster = cluster,
@@ -1637,10 +2184,16 @@ fit_categorical_predictor_lm_rows <- function(
   levs <- levels(x)
   if (!has_covs) {
     newdata <- data.frame(x = factor(levs, levels = levs))
+    # `contrasts.arg = fit$contrasts` pins the grid to the coding the
+    # model was actually fitted with, and the columns are then aligned
+    # to the coefficient vector BY NAME -- a positional product would
+    # silently mismatch if the codings ever diverged (audit phase 2).
     design <- stats::model.matrix(
       stats::delete.response(stats::terms(fit)),
-      newdata
+      newdata,
+      contrasts.arg = fit$contrasts
     )
+    design <- align_design_to_coef(design, cf)
     emmean <- as.vector(design %*% cf)
     emmean_se <- sqrt(rowSums((design %*% vc) * design))
   } else {
@@ -1664,12 +2217,20 @@ fit_categorical_predictor_lm_rows <- function(
   # producing an omnibus F that mixes the focal effect with covariate
   # nuisance -- wrong. Restrict to coefficients whose term assignment
   # equals the position of `x` in the model's term list.
-  x_coef_idx <- which(stats::model.matrix(fit) |>
-    attr("assign") == which(attr(stats::terms(fit), "term.labels") == "x"))
+  x_coef_idx <- which(
+    stats::model.matrix(fit) |>
+      attr("assign") ==
+      which(attr(stats::terms(fit), "term.labels") == "x")
+  )
   if (length(x_coef_idx) == 0L) {
+    # nocov start: defensive fallback. The model formula always includes
+    # the focal term "x" (see `rhs_terms`/`reformulate` above) and
+    # `nlevels(x) >= 2` is guaranteed by the early return, so "x" always
+    # owns at least one design-matrix column -- x_coef_idx is never empty.
     x_coef_idx <- seq_along(cf)[-1]
+    # nocov end
   }
-  wald <- compute_lm_wald_test(
+  wald <- compute_wald_test(
     fit,
     coef_idx_set = x_coef_idx,
     vc = vc,
@@ -1718,18 +2279,48 @@ fit_categorical_predictor_lm_rows <- function(
     r2 = c(model_stats$r2, rep(NA_real_, length(levs) - 1L)),
     adj_r2 = c(model_stats$adj_r2, rep(NA_real_, length(levs) - 1L)),
     n = rep(length(y), length(levs)),
-    weighted_n = rep(if (is.null(weights)) NA_real_ else sum(weights), length(levs)),
+    weighted_n = rep(
+      if (is.null(weights)) NA_real_ else sum(weights),
+      length(levs)
+    ),
+    boot_n_valid = rep(
+      as.integer(attr(vc, "boot_n_valid") %||% NA_integer_),
+      length(levs)
+    ),
     stringsAsFactors = FALSE
   )
 
   if (isTRUE(show_reference)) {
     # Per-level contrast (binary case): use the same single-coef
     # inference helper as for numeric predictors so CR mode picks
-    # up Satterthwaite df automatically.
+    # up Satterthwaite df automatically. Under treatment coding the
+    # focal dummies are named "x<level>"; look each coefficient up
+    # BY NAME -- positional indexing is exactly the silent
+    # misalignment behind the ordered-`by` audit findings (a
+    # contr.poly ".L" coefficient read as the displayed difference).
     for (i in seq_len(nlevels(x) - 1L)) {
-      coef_idx <- i + 1L
+      coef_idx <- match(paste0("x", levs[i + 1L]), names(cf))
+      if (is.na(coef_idx)) {
+        # nocov start: defensive. The fit is constructed with an
+        # explicit `contrasts = list(x = "contr.treatment")` above,
+        # so its dummies are named "x<level>" regardless of the
+        # session's global `options(contrasts = )` (being an
+        # unordered factor alone would NOT suffice: lm() reads the
+        # global option for unordered factors too).
+        spicy_abort(
+          c(
+            sprintf(
+              "Internal invariant failed: coefficient `%s` not found in the fitted model.",
+              paste0("x", levs[i + 1L])
+            ),
+            "i" = "Please report this at https://github.com/amaltawfik/spicy/issues."
+          ),
+          class = "spicy_internal_invariant"
+        )
+        # nocov end
+      }
       row_idx <- i + 1L
-      inf <- compute_lm_coef_inference(
+      inf <- compute_coef_inference(
         fit,
         coef_idx = coef_idx,
         vc = vc,
@@ -1750,22 +2341,29 @@ fit_categorical_predictor_lm_rows <- function(
     }
   }
 
-  out
+  degrade_saturated_lm_rows(out, fit, outcome_name)
 }
 
+# `levels`: the display levels of a categorical `by` (one all-NA row
+# per level). They keep the degenerate outcome's rows aligned with the
+# `M (<level>)` columns the other outcomes render -- a single
+# `level = NA` row would grow a spurious `M (NA)` column in the wide
+# header. The default single NA row is for continuous predictors,
+# whose wide layout has no per-level columns.
 make_empty_lm_rows <- function(
   outcome_name,
   outcome_label,
   predictor_type,
-  predictor_label = NA_character_
+  predictor_label = NA_character_,
+  levels = NA_character_
 ) {
   data.frame(
     variable = outcome_name,
     label = outcome_label,
     predictor_type = predictor_type,
     predictor_label = predictor_label,
-    level = NA_character_,
-    reference = NA_character_,
+    level = as.character(levels),
+    reference = if (anyNA(levels)) NA_character_ else levels[[1L]],
     estimate_type = NA_character_,
     emmean = NA_real_,
     emmean_se = NA_real_,
@@ -1788,6 +2386,7 @@ make_empty_lm_rows <- function(
     adj_r2 = NA_real_,
     n = NA_integer_,
     weighted_n = NA_real_,
+    boot_n_valid = NA_integer_,
     stringsAsFactors = FALSE
   )
 }

@@ -20,10 +20,12 @@ cross_tab(
   simulate_p = FALSE,
   simulate_B = 2000,
   digits = NULL,
-  styled = TRUE,
+  output = c("default", "data.frame"),
   show_n = TRUE,
   decimal_mark = ".",
-  p_digits = 3L
+  p_digits = 3L,
+  user_na = TRUE,
+  styled
 )
 }
 \arguments{
@@ -39,7 +41,8 @@ unset (use \code{\link[=freq]{freq()}} for one-way tables).}
 \item{by}{Optional grouping variable or expression. Can be a single variable
 or a combination of multiple variables (e.g. \code{interaction(vs, am)}).}
 
-\item{weights}{Optional numeric weights.}
+\item{weights}{Optional numeric weights. A logical vector is also
+accepted and coerced to 1/0 (include / exclude).}
 
 \item{rescale}{Logical. If \code{FALSE} (the default), weights are used as-is.
 If \code{TRUE}, rescales weights so total weighted N matches raw N.}
@@ -68,44 +71,78 @@ If \code{TRUE}, uses Monte Carlo simulation.}
 \item{simulate_B}{Integer. Number of replicates for Monte Carlo simulation.
 Defaults to \code{2000}.}
 
-\item{digits}{Number of decimals for cell values. Defaults to
-\code{NULL}, which is resolved to \code{1} when \code{percent != "none"} and
-\code{0} when \code{percent = "none"} (counts are always integers).}
+\item{digits}{Number of decimals for cell values: a single
+non-negative integer. Defaults to \code{NULL}, which is resolved to
+\code{1} when \code{percent != "none"} and \code{0} when \code{percent = "none"}
+(counts are integers unless fractional weights are used; raise
+\code{digits} to display fractional weighted counts exactly). Same
+role as \code{digits} in \code{\link[=freq]{freq()}}, which formats percentages only and
+therefore uses a fixed default of \code{1}. Displayed values round
+ties half to even (the R / IEC 60559 convention, shared with
+Stata), so an exact tie like 6.25 prints as \code{6.2} where SPSS
+would print \code{6.3}.}
 
-\item{styled}{Logical. If \code{TRUE} (the default), returns a \code{spicy_cross_table} object
-(for formatted printing). If \code{FALSE}, returns a plain \code{data.frame}.}
+\item{output}{Output format. \code{"default"} (the default) returns a
+\code{spicy_cross_table} object (for formatted printing);
+\code{"data.frame"} returns a plain \code{data.frame}. The values match the
+\code{output} argument of the \verb{table_*()} family; the rendered engines
+that family also accepts (\code{"tinytable"}, \code{"gt"}, \code{"flextable"},
+...) are not available in \code{cross_tab()}.}
 
 \item{show_n}{Logical. If \code{TRUE} (the default), adds marginal N totals when
 \code{percent != "none"}.}
 
 \item{decimal_mark}{Character used as the decimal mark in printed
 numeric values (cells, chi-squared, association estimate, CI
-bounds, p-value). Defaults to \code{"."}. Set to \code{","} for European
-formatting; matches the \code{decimal_mark} argument of the
-\verb{table_*()} family.}
+bounds, p-value, table note). Either \code{"."} or \code{","}. The default
+follows the language: \code{options(spicy.language = "fr")} gives the
+comma here and in \code{\link[=freq]{freq()}}, exactly as it does in the reporting
+\verb{table_*()} family. An argument you type wins, so
+\code{decimal_mark = "."} under a French language gives French words
+and a decimal point. Under a comma the p-value keeps its leading
+zero (\verb{p = 0,659}), the form French typography requires. The
+resolved mark is frozen on the object when it is built, like every
+other formatting argument: a table built under a French language
+still prints its commas when it is printed later with the language
+option cleared.}
 
 \item{p_digits}{Integer number of decimals used to format the
 p-value (and to determine the small-\code{p} threshold below which
 \verb{< .001} notation is used). Defaults to \code{3} (the APA standard);
 matches the \code{p_digits} argument of the \verb{table_*()} family.}
+
+\item{user_na}{Logical. If \code{TRUE} (the default), declared missing
+values in \code{x}, \code{y}, or \code{by} are treated as missing: they are
+excluded from the table and its statistics like \code{NA}, and the
+exclusion is disclosed in the table note (\verb{Declared missing values removed: ...}). If \code{FALSE}, the declared codes tabulate
+as categories (and, in \code{by}, define groups). See the "Declared
+missing values" section of \code{\link[=freq]{freq()}}.}
+
+\item{styled}{Defunct. \code{styled = TRUE} is now \code{output = "default"}
+(the default) and \code{styled = FALSE} is now \code{output = "data.frame"};
+supplying \code{styled} is an error.}
 }
 \value{
-Depends on \code{styled} and \code{by}:
+Depends on \code{output} and \code{by}:
 \itemize{
-\item \code{styled = TRUE}, no \code{by}: a \code{spicy_cross_table} object
+\item \code{output = "default"}, no \code{by}: a \code{spicy_cross_table} object
 (a \code{data.frame} carrying rendering metadata as attributes:
 \code{title}, \code{digits}, \code{decimal_mark}, \code{n_row_idx}, \code{n_col_name},
 and the inferential block when \code{include_stats = TRUE}).
 Printing dispatches to \code{\link[=print.spicy_cross_table]{print.spicy_cross_table()}}.
-\item \code{styled = TRUE}, \code{by} supplied: a \code{spicy_cross_table_list},
-i.e. a named list of \code{spicy_cross_table} objects (one element
-per group level, named by that level). Printing dispatches to
+\item \code{output = "default"}, \code{by} supplied: a
+\code{spicy_cross_table_list}, i.e. a named list of
+\code{spicy_cross_table} objects (one element per group level, named
+by that level). Printing dispatches to
 \code{\link[=print.spicy_cross_table_list]{print.spicy_cross_table_list()}} which renders each table in
 turn separated by a blank line.
-\item \code{styled = FALSE}: the same payload returned as a plain
-\code{data.frame} (or named list of \code{data.frame}s with \code{by}),
-stripped of the \verb{spicy_*} classes for downstream programmatic
-use.
+\item \code{output = "data.frame"}: the same payload returned as a
+plain \code{data.frame} (or named list of \code{data.frame}s with \code{by}),
+stripped of the \verb{spicy_*} classes and of every metadata
+attribute (\code{title}, \code{note}, \code{n_total}, \code{chi2}, \code{p_value},
+\verb{assoc_*}, ...). For programmatic access to the statistics,
+read the attributes of the default object, e.g.
+\code{attr(cross_tab(...), "p_value")}.
 }
 
 Cell columns are the levels of \code{y}; rows are the levels of \code{x}.
@@ -138,10 +175,13 @@ Equivalent to setting \code{simulate_p = TRUE} in every call.
 \item \strong{\code{options(spicy.rescale = TRUE)}}
 Automatically rescales weights so that total weighted N equals the raw N.
 Equivalent to setting \code{rescale = TRUE} in each call.
+Also read by \code{\link[=freq]{freq()}}, so one option governs both tabulators.
 }
 
-These options are convenient for users who wish to enforce consistent behavior
-across multiple calls to \code{cross_tab()} and other spicy table functions.
+These options are convenient for users who wish to enforce consistent
+behavior across multiple calls: \code{spicy.percent} and \code{spicy.simulate_p}
+apply to \code{cross_tab()}, and \code{spicy.rescale} applies to both
+\code{cross_tab()} and \code{freq()}.
 They can be disabled or reset by setting them to \code{NULL}:
 \code{options(spicy.percent = NULL, spicy.simulate_p = NULL, spicy.rescale = NULL)}.
 
@@ -150,6 +190,37 @@ Example:
 \if{html}{\out{<div class="sourceCode r">}}\preformatted{options(spicy.simulate_p = TRUE, spicy.rescale = TRUE)
 cross_tab(sochealth, smoking, education, weights = weight)
 }\if{html}{\out{</div>}}
+}
+
+\section{Declared missing values}{
+
+
+Survey files imported with \strong{haven} often carry \emph{declared missing
+values}: codes such as \verb{8 = Don't know} or \code{9 = Refused} that the
+source file marks as missing while keeping them distinct from a
+plain \code{NA}. Two kinds of declaration exist: \code{na_values} / \code{na_range}
+metadata on \code{\link[haven:labelled_spss]{haven::labelled_spss()}} vectors, and tagged missing
+values created by \code{\link[haven:tagged_na]{haven::tagged_na()}} (the Stata \code{.a}, \code{.b}, ...
+convention).
+
+spicy honors the declaration by default (\code{user_na = TRUE}):
+declared missing values are excluded from every statistic exactly
+like \code{NA} -- valid percentages, means, chi-squared tests,
+association measures, row-wise summaries, and group definitions --
+but they are not erased from display. \code{\link[=freq]{freq()}} lists each observed
+declared value as its own row of the Missing block, with its value
+label; \code{\link[=cross_tab]{cross_tab()}}, \code{\link[=table_categorical]{table_categorical()}}, and
+\code{\link[=table_continuous]{table_continuous()}} disclose the exclusion in the table note
+(\verb{Declared missing values removed: x (2).}); \code{\link[=varlist]{varlist()}} and
+\code{\link[=code_book]{code_book()}} count them as missing in \code{N_valid} / \code{NAs} /
+\code{N_distinct} while still listing the declared codes in \code{Values}.
+
+Every function involved offers the same escape hatch: set
+\code{user_na = FALSE} to ignore the declaration and treat the declared
+codes as valid values (the behavior of spicy before 0.13.0).
+Tagged missing values are genuine \code{NA}s either way; for them,
+\code{user_na = FALSE} only collapses the per-tag breakdown back into
+the regular \code{NA} count.
 }
 
 \examples{

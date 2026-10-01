@@ -9,8 +9,7 @@ lambda_gk(
   direction = c("symmetric", "row", "column"),
   detail = FALSE,
   conf_level = 0.95,
-  digits = 3L,
-  .include_se = FALSE
+  digits = 3L
 )
 }
 \arguments{
@@ -24,14 +23,14 @@ or \code{"column"} (row predicts column).}
 as a numeric scalar. If \code{TRUE}, return a named numeric vector
 including confidence interval and p-value.}
 
-\item{conf_level}{A number between 0 and 1 giving the confidence
-level (default \code{0.95}). Only used when \code{detail = TRUE}. Set
-to \code{NULL} to omit the confidence interval.}
+\item{conf_level}{A single number strictly between 0 and 1 giving
+the confidence level (default \code{0.95}). Only used when
+\code{detail = TRUE}. Set to \code{NULL} to omit the confidence interval.
+Any other value -- including percentages such as \code{95} -- raises
+a classed error (\code{spicy_invalid_input}).}
 
 \item{digits}{Number of decimal places used when printing the
 result (default \code{3}). Only affects the \code{detail = TRUE} output.}
-
-\item{.include_se}{Internal parameter; do not use.}
 }
 \value{
 Same structure as \code{\link[=cramer_v]{cramer_v()}}: a scalar when
@@ -49,6 +48,14 @@ variable. It ranges from 0 (no reduction) to 1 (perfect
 prediction). Lambda can equal zero even when variables
 are associated if the modal category dominates in every
 column (or row).
+
+The default \code{direction = "symmetric"} follows the SPSS and
+DescTools convention: symmetric lambda is a standard,
+well-defined variant with its own asymptotic standard error.
+\code{\link[=somers_d]{somers_d()}} deliberately differs (its default is \code{"row"})
+because its symmetric form is a derived quantity without an
+analytic SE; see its documentation.
+
 Standard error formulas follow the DescTools implementations
 (Signorell et al., 2024); see \code{\link[=cramer_v]{cramer_v()}} for full references.
 }
@@ -58,6 +65,11 @@ lambda_gk(tab)
 lambda_gk(tab, direction = "row")
 lambda_gk(tab, direction = "column", detail = TRUE)
 
+}
+\references{
+Goodman, L. A., & Kruskal, W. H. (1954). Measures of association
+for cross classifications. \emph{Journal of the American Statistical
+Association}, 49(268), 732-764. \doi{10.2307/2281536}
 }
 \seealso{
 \code{\link[=goodman_kruskal_tau]{goodman_kruskal_tau()}}, \code{\link[=uncertainty_coef]{uncertainty_coef()}},

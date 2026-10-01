@@ -90,14 +90,14 @@
     Output
       Frequency table: c(1, 2, 2, 3, 3, 3, NA)
       
-       Category   │ Values      Freq.    Percent    Valid Percent 
-      ────────────┼───────────────────────────────────────────────
-       Valid      │ 1               1       14.3               NA 
-                  │ 2               2       28.6               NA 
-                  │ 3               3       42.9               NA 
-       Missing    │ NA              1       14.3                  
-      ────────────┼───────────────────────────────────────────────
-       Total      │                 7      100.0            100.0 
+       Category   │ Values      Freq.    Percent 
+      ────────────┼──────────────────────────────
+       Valid      │ 1               1       14.3 
+                  │ 2               2       28.6 
+                  │ 3               3       42.9 
+       Missing    │ NA              1       14.3 
+      ────────────┼──────────────────────────────
+       Total      │                 7      100.0 
       
       Class: numeric
       Data: c(1, 2, 2, 3, 3, 3, NA)
@@ -229,7 +229,7 @@
     Code
       table_continuous(df, select = "age", by = sex)
     Output
-      Descriptive statistics
+      Descriptive statistics by sex
       
        Variable │ Group    M     SD    Min    Max   95% CI LL  95% CI UL  n   p   
       ──────────┼─────────────────────────────────────────────────────────────────
@@ -301,11 +301,11 @@
       assoc_measures(tab)
     Output
       Measure                            Estimate     SE  CI lower  CI upper     p 
-      Cramer's V                            0.154     --     0.000     0.340  .304 
-      Contingency Coefficient               0.152     --        --        --  .304 
+      Cramer's V                            0.154      –     0.000     0.340  .304 
+      Contingency Coefficient               0.152      –         –         –  .304 
       Lambda symmetric                      0.050  0.037     0.000     0.123  .179 
       Lambda R|C                            0.100  0.073     0.000     0.244  .174 
-      Lambda C|R                            0.000  0.000     0.000     0.000    -- 
+      Lambda C|R                            0.000  0.000     0.000     0.000     – 
       Goodman-Kruskal's Tau R|C             0.024  0.030     0.000     0.082  .424 
       Goodman-Kruskal's Tau C|R             0.008  0.011     0.000     0.030  .454 
       Uncertainty Coefficient symmetric     0.014  0.018     0.000     0.050  .430 
@@ -313,7 +313,7 @@
       Uncertainty Coefficient C|R           0.012  0.015     0.000     0.042  .429 
       Goodman-Kruskal Gamma                 0.082  0.172    -0.255     0.419  .634 
       Kendall's Tau-b                       0.045  0.096    -0.142     0.233  .635 
-      Kendall's Tau-c                       0.050  0.105    -0.156     0.256  .635 
+      Stuart's Tau-c                        0.050  0.105    -0.156     0.256  .635 
       Somers' D R|C                         0.041  0.087    -0.129     0.212  .635 
       Somers' D C|R                         0.050  0.105    -0.156     0.256  .635 
 
@@ -322,6 +322,6 @@
     Code
       cramer_v(tab, detail = TRUE)
     Output
-      Estimate  CI lower  CI upper     p
-         0.154     0.000     0.340  .304
+      Estimate  SE  CI lower  CI upper     p
+         0.154   –     0.000     0.340  .304
 

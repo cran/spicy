@@ -5,9 +5,11 @@
 #' options for weighting, sorting, handling *labelled* data, defining custom
 #' missing values, and displaying cumulative percentages.
 #'
-#' When `styled = TRUE`, the function prints a spicy-formatted ASCII table
-#' using [print.spicy_freq_table()] and [spicy_print_table()]; otherwise, it
-#' returns a `data.frame` containing frequencies and proportions.
+#' With `output = "default"`, the function returns a
+#' `spicy_freq_table` object that auto-prints as a spicy-formatted ASCII
+#' table via [print.spicy_freq_table()] and [spicy_print_table()]; with
+#' `output = "data.frame"`, it returns a plain `data.frame` containing
+#' frequencies and proportions.
 #'
 #' @details
 #' Designed to mimic common frequency procedures from SPSS or Stata
@@ -34,12 +36,19 @@
 #'   vectors, `data` is ignored with a warning.
 #' @param x A variable from `data` (unquoted).
 #' @param weights Optional numeric vector of weights (same length as `x`).
+#'   A logical vector is also accepted and coerced to 1/0
+#'   (include / exclude).
 #'   The variable may be referenced as a bare name when it belongs to `data`,
 #'   or as a qualified expression like `other$w` (evaluated in the calling
 #'   environment), which always takes precedence over `data` lookup.
 #'   Observations with `NA` weights are dropped from the table with a
 #'   warning; see `Details`.
-#' @param digits Number of decimal digits to display for percentages (default: `1`).
+#' @param digits Number of decimal digits to display for percentages
+#'   (default: `1`). Same role as `digits` in [cross_tab()], where the
+#'   `NULL` default resolves to the same `1` decimal whenever
+#'   percentages are shown. Displayed values round ties half to even
+#'   (the R / IEC 60559 convention, shared with Stata), so an exact
+#'   tie like 6.25 prints as `6.2` where SPSS would print `6.3`.
 #' @param valid Logical. If `TRUE` (default), display valid percentages
 #'   (excluding missing values).
 #' @param cum Logical. If `FALSE` (the default), cumulative percentages are omitted.
@@ -50,6 +59,12 @@
 #'   * `"-"` - decreasing frequency
 #'   * `"name+"` - alphabetical A-Z
 #'   * `"name-"` - alphabetical Z-A
+#'
+#'   For labelled variables displayed with their codes
+#'   (`labelled_levels` `"prefixed"` or `"values"`), `"name+"` /
+#'   `"name-"` sort by the underlying code (so `[10]` follows `[2]`,
+#'   as in SPSS), not by the display string. With
+#'   `labelled_levels = "labels"`, labels sort alphabetically.
 #' @param na_val Atomic vector of numeric or character values to be treated as missing (`NA`).
 #'
 #' For *labelled* variables (from **haven** or **labelled**), this argument
@@ -68,25 +83,78 @@
 #'   * `"values"` or `"v"` - show only numeric codes
 #' @param factor_levels Character. Controls how factor and labelled values
 #'   are displayed in the frequency table. `"observed"` (the default;
-#'   matches Stata's `tab`) shows only levels present in the data.
-#'   `"all"` (matches SPSS `FREQUENCIES` and [code_book()]'s default)
-#'   keeps every declared level, including unused ones, which appear
-#'   with `n = 0`.
-#' @param rescale Logical. If `TRUE` (default), rescale weights so that their
-#'   total equals the unweighted sample size (`length(weights)`). See
-#'   `Details` for the interaction with `NA` weights.
+#'   matches Stata's `tab` and SPSS `FREQUENCIES`, which both list
+#'   only values present in the data) shows only levels present in
+#'   the data. `"all"` ([code_book()]'s default) keeps every declared
+#'   level, including unused ones, which appear with `n = 0`.
+#' @param rescale Logical. If `FALSE` (the default), weights are used
+#'   as-is. If `TRUE`, rescale weights so that their total equals the
+#'   unweighted sample size (`length(weights)`). When the argument is
+#'   not supplied, the default can be set globally with
+#'   `options(spicy.rescale = TRUE)`, which is read by both `freq()`
+#'   and [cross_tab()]. See `Details` for the interaction with `NA`
+#'   weights.
 #' @param decimal_mark Character used as the decimal mark in printed
-#'   percentages. Either `"."` (the default) or `","`. Matches the
-#'   `decimal_mark` argument of [cross_tab()] and the three
-#'   `table_*()` helpers, so European-locale users get a consistent
-#'   experience across the package.
-#' @param styled Logical. If `TRUE` (default), print the formatted spicy table.
-#'   If `FALSE`, return a plain `data.frame` with frequency values.
-#' @param ... Additional arguments passed to [print.spicy_freq_table()].
+#'   percentages. Either `"."` or `","`. The default follows the
+#'   language: `options(spicy.language = "fr")` gives the comma here
+#'   and in [cross_tab()], exactly as it does in the reporting
+#'   `table_*()` families. An argument you type wins, so
+#'   `decimal_mark = "."` under a French language gives French words
+#'   and a decimal point. The resolved mark is frozen on the object
+#'   when it is built: a table built under a French language still
+#'   prints its commas when it is printed later with the language
+#'   option cleared. Its words are not -- `freq()` resolves its labels
+#'   at print time -- so that table prints English headings over French
+#'   numbers.
+#' @param output Output format. `"default"` (the default) returns a
+#'   `spicy_freq_table` object that auto-prints as a formatted spicy
+#'   table; `"data.frame"` returns a plain `data.frame` with frequency
+#'   values. The values match the `output` argument of the `table_*()`
+#'   family; the rendered engines that family also accepts
+#'   (`"tinytable"`, `"gt"`, `"flextable"`, ...) are not available in
+#'   `freq()`.
+#' @param user_na Logical. If `TRUE` (the default), declared missing
+#'   values are treated as missing: each observed declared value
+#'   becomes its own row of the Missing block (with its value label),
+#'   and valid percentages exclude those observations. If `FALSE`,
+#'   the declaration is ignored and the declared codes tabulate as
+#'   valid categories. See the "Declared missing values" section.
+#' @param styled Defunct. `styled = TRUE` is now `output = "default"`
+#'   (the default) and `styled = FALSE` is now `output = "data.frame"`;
+#'   supplying `styled` is an error.
+#'
+#' @section Declared missing values:
+#'
+#' Survey files imported with **haven** often carry *declared missing
+#' values*: codes such as `8 = Don't know` or `9 = Refused` that the
+#' source file marks as missing while keeping them distinct from a
+#' plain `NA`. Two kinds of declaration exist: `na_values` / `na_range`
+#' metadata on [haven::labelled_spss()] vectors, and tagged missing
+#' values created by [haven::tagged_na()] (the Stata `.a`, `.b`, ...
+#' convention).
+#'
+#' spicy honors the declaration by default (`user_na = TRUE`):
+#' declared missing values are excluded from every statistic exactly
+#' like `NA` -- valid percentages, means, chi-squared tests,
+#' association measures, row-wise summaries, and group definitions --
+#' but they are not erased from display. [freq()] lists each observed
+#' declared value as its own row of the Missing block, with its value
+#' label; [cross_tab()], [table_categorical()], and
+#' [table_continuous()] disclose the exclusion in the table note
+#' (`Declared missing values removed: x (2).`); [varlist()] and
+#' [code_book()] count them as missing in `N_valid` / `NAs` /
+#' `N_distinct` while still listing the declared codes in `Values`.
+#'
+#' Every function involved offers the same escape hatch: set
+#' `user_na = FALSE` to ignore the declaration and treat the declared
+#' codes as valid values (the behavior of spicy before 0.13.0).
+#' Tagged missing values are genuine `NA`s either way; for them,
+#' `user_na = FALSE` only collapses the per-tag breakdown back into
+#' the regular `NA` count.
 #'
 #' @return
-#' With `styled = FALSE`, a plain `data.frame` with no extra attributes
-#' and columns:
+#' With `output = "data.frame"`, a plain `data.frame` with no extra
+#' attributes and columns:
 #' \itemize{
 #'   \item \code{value} - unique values or factor levels
 #'   \item \code{n} - frequency count (weighted if applicable)
@@ -95,12 +163,13 @@
 #'   \item \code{cum_prop}, \code{cum_valid_prop} - cumulative percentages (if `cum = TRUE`)
 #' }
 #'
-#' With `styled = TRUE` (default), prints the formatted table to the
-#' console and invisibly returns a `spicy_freq_table` object: the same
+#' With `output = "default"` (the default), a `spicy_freq_table` object: the same
 #' `data.frame` carrying rendering metadata as attributes (`digits`,
 #' `data_name`, `var_name`, `var_label`, `class_name`, `n_total`,
 #' `n_valid`, `weighted`, `rescaled`, `weight_var`) used by
-#' [print.spicy_freq_table()].
+#' [print.spicy_freq_table()]. The object is returned visibly, so a
+#' bare `freq(...)` call auto-prints at the console while
+#' `f <- freq(...)` stays silent (print `f` to display the table).
 #'
 #' @examples
 #' # Frequency table with labelled ordered factor
@@ -132,8 +201,9 @@
 #' # Display values only, sorted descending
 #' freq(x_lbl, labelled_levels = "values", sort = "-")
 #'
-#' # Show all declared factor levels, including unused ones (SPSS-style).
-#' # The default "observed" mirrors Stata's `tab` and drops unused levels.
+#' # Show all declared factor levels, including unused ones (n = 0).
+#' # The default "observed" mirrors Stata's `tab` and SPSS FREQUENCIES,
+#' # which both drop unused levels.
 #' f <- factor(c("Yes", "No", "Yes"), levels = c("Yes", "No", "Maybe"))
 #' freq(f, factor_levels = "all")
 #'
@@ -143,11 +213,11 @@
 #'   weight = c(12, 8, 10, 15, 7, 9)
 #' )
 #'
-#' # Weighted frequencies (normalized)
-#' freq(df, sex, weights = weight, rescale = TRUE)
+#' # Weighted frequencies (raw weighted counts, the default)
+#' freq(df, sex, weights = weight)
 #'
-#' # Weighted frequencies (without rescaling)
-#' freq(df, sex, weights = weight, rescale = FALSE)
+#' # Weighted frequencies rescaled so the total matches the sample size
+#' freq(df, sex, weights = weight, rescale = TRUE)
 #'
 #' # Base R style, with weights and cumulative percentages
 #' freq(df$sex, weights = df$weight, cum = TRUE)
@@ -158,8 +228,8 @@
 #' # European decimal mark (matches `cross_tab()` and the `table_*()` family)
 #' freq(sochealth, education, decimal_mark = ",")
 #'
-#' # Non-styled return (for programmatic use)
-#' f <- freq(df, sex, styled = FALSE)
+#' # Plain data.frame return (for programmatic use)
+#' f <- freq(df, sex, output = "data.frame")
 #' head(f)
 #'
 #' @seealso
@@ -182,13 +252,27 @@ freq <- function(
   na_val = NULL,
   labelled_levels = c("prefixed", "labels", "values"),
   factor_levels = c("observed", "all"),
-  rescale = TRUE,
+  rescale = FALSE,
   decimal_mark = ".",
-  styled = TRUE,
-  ...
+  output = c("default", "data.frame"),
+  user_na = TRUE,
+  styled
 ) {
-  labelled_levels <- match.arg(labelled_levels)
+  # Migration guard first, so old `styled =` calls get the actionable
+  # replacement message before any other validation can fire.
+  if (!missing(styled)) {
+    abort_styled_defunct("freq")
+  }
+  output <- match_tabulation_output(output, "freq")
+
+  labelled_levels <- spicy_match_arg(labelled_levels)
   factor_levels <- match_varlist_factor_levels(factor_levels)
+
+  # Global options (same hook as cross_tab(), so a single
+  # `options(spicy.rescale = TRUE)` governs both tabulators).
+  if (missing(rescale)) {
+    rescale <- getOption("spicy.rescale", FALSE)
+  }
 
   # B2: tighten `digits` to a non-negative integer (the rest of the
   # spicy 0.11.0 family does the same). Coerces silently if the user
@@ -206,6 +290,20 @@ freq <- function(
     )
   }
   digits <- as.integer(digits)
+
+  # The language's typographic locale supplies the DEFAULT decimal
+  # mark, so one `options(spicy.language = "fr")` reaches the
+  # exploration pair too. Resolution: an argument you type > the
+  # locale > `"."`. The `missing()` hook is the same one `rescale`
+  # uses above, and it means an explicit `decimal_mark = "."` under a
+  # French language still gives you a point. The validation below then
+  # applies to the resolved value, unchanged.
+  if (missing(decimal_mark)) {
+    loc <- .style_locale_defaults()
+    if (!is.null(loc$decimal_mark)) {
+      decimal_mark <- loc$decimal_mark
+    }
+  }
 
   if (
     !is.character(decimal_mark) ||
@@ -225,7 +323,7 @@ freq <- function(
       !sort %in% c("", "+", "-", "name+", "name-")
   ) {
     spicy_abort(
-      "Invalid value for 'sort'. Use '+', '-', 'name+', or 'name-'.",
+      "Invalid value for 'sort'. Use '' (no sorting), '+', '-', 'name+', or 'name-'.",
       class = "spicy_invalid_input"
     )
   }
@@ -233,7 +331,7 @@ freq <- function(
   validate_varlist_logical(valid, "valid")
   validate_varlist_logical(cum, "cum")
   validate_varlist_logical(rescale, "rescale")
-  validate_varlist_logical(styled, "styled")
+  validate_varlist_logical(user_na, "user_na")
 
   is_df <- is.data.frame(data)
   if (is_df && missing(x)) {
@@ -253,13 +351,20 @@ freq <- function(
     x <- data
   } else {
     spicy_warn(
-      "Both `data` and `x` are vectors; `data` is ignored.", class = "spicy_ignored_arg")
+      "Both `data` and `x` are vectors; `data` is ignored.",
+      class = "spicy_ignored_arg"
+    )
     # `x` is what gets analyzed here -- mirror the `!is_df && missing(x)`
     # branch above so the printed footer (`Data: ...`) does not surface
     # the name of the vector that was just declared "ignored".
     var_name <- deparse(substitute(x))
     data_name <- var_name
   }
+
+  # bit64::integer64 passes is.numeric() but its payload is raw int64
+  # bit patterns: table() / tapply() / sum() would silently tabulate
+  # garbage. Reject loudly with the conversion named.
+  .check_integer64(x, "`x`")
 
   x_original <- x
 
@@ -314,6 +419,10 @@ freq <- function(
   }
 
   if (!is.null(weights)) {
+    # integer64 weights would pass the is.numeric() guard below and
+    # then be bit-reinterpreted by sum() / tapply() into denormal
+    # garbage; reject them before the numeric check.
+    .check_integer64(weights, "`weights`")
     # Type guard up front: without it, a character weight vector
     # passes the comparisons via lexicographic coercion and only
     # crashes later at the `is.finite` check, with a misleading
@@ -351,14 +460,19 @@ freq <- function(
           "%d NA value%s in `weights`; those observations are excluded from the table and from rescaling.",
           n_na,
           if (n_na > 1L) "s" else ""
-        ), class = "spicy_dropped_na")
+        ),
+        class = "spicy_dropped_na"
+      )
       # Drop NA-weighted rows up front so they never reach `table()` /
       # `tapply()` (where they would otherwise be retained with weight
       # zero and inflate the rescale denominator). This matches the
-      # `cross_tab()` 0.11.0 behaviour.
+      # `cross_tab()` 0.11.0 behaviour. `x_original` stays full-length:
+      # it is only read for its `label` / class attributes below, and
+      # base `[` subsetting would strip the `label` attribute from a
+      # plain atomic vector (the haven pattern of a variable label
+      # without value labels), losing the printed Label footer.
       keep <- !is.na(weights)
       x <- x[keep]
-      x_original <- x_original[keep]
       weights <- weights[keep]
     }
 
@@ -377,17 +491,86 @@ freq <- function(
   if (labelled::is.labelled(x)) {
     if (!is.null(na_val) && !is.numeric(na_val)) {
       spicy_warn(
-        "For labelled variables, 'na_val' should match the underlying numeric value (e.g., 1), not the label.", class = "spicy_ignored_arg")
+        "For labelled variables, 'na_val' should match the underlying numeric value (e.g., 1), not the label.",
+        class = "spicy_ignored_arg"
+      )
     }
 
     if (!is.null(na_val)) {
       x_values <- unclass(x)
       x[x_values %in% na_val] <- NA
     }
-
-    x <- labelled::to_factor(x, levels = labelled_levels, nolabel_to_na = FALSE)
   } else {
     if (!is.null(na_val)) x[x %in% na_val] <- NA
+  }
+
+  # Declared missing values (see the "Declared missing values"
+  # section): with `user_na = TRUE` the observations carrying declared
+  # codes / tagged NAs leave the valid table here and come back below
+  # as per-value rows of the Missing block; `n_user_total` re-enters
+  # the Total / Missing bookkeeping so the totals stay exact. With
+  # `user_na = FALSE`, the declaration is dropped and the codes
+  # tabulate as valid categories.
+  user_rows <- NULL
+  n_user_total <- 0L
+  if (user_na && .has_user_na(x)) {
+    user_mask <- .user_na_mask(x)
+    if (any(user_mask)) {
+      user_rows <- .user_na_info(
+        x[user_mask],
+        weights = weights[user_mask],
+        labelled_levels = labelled_levels
+      )
+      # Keep the unweighted totals integer (the historical attribute
+      # type); weighted totals are doubles either way.
+      n_user_total <- if (is.null(weights)) {
+        as.integer(sum(user_rows$n))
+      } else {
+        sum(user_rows$n)
+      }
+      x <- x[!user_mask]
+      if (!is.null(weights)) {
+        weights <- weights[!user_mask]
+      }
+    }
+    x <- .user_na_to_na(x)
+  } else if (!user_na) {
+    x <- .user_na_zap(x)
+  }
+
+  x_is_labelled <- labelled::is.labelled(x)
+  if (x_is_labelled) {
+    # With `labelled_levels = "labels"` the conversion below keys rows
+    # on the label text alone, so distinct codes sharing a label are
+    # pooled into a single row (factor levels must be unique; SPSS
+    # keeps one row per code). The merge cannot be avoided without
+    # mangling the labels -- disclose it loudly instead, naming the
+    # merged codes, once per variable.
+    if (labelled_levels == "labels") {
+      labs <- attr(x, "labels", exact = TRUE)
+      dup_labels <- unique(names(labs)[duplicated(names(labs))])
+      if (length(dup_labels) > 0L) {
+        merged <- vapply(
+          dup_labels,
+          function(nm) {
+            codes <- unname(unclass(labs))[names(labs) == nm]
+            sprintf("'%s' (codes %s)", nm, paste(codes, collapse = ", "))
+          },
+          character(1)
+        )
+        spicy_warn(
+          c(
+            sprintf(
+              "`labelled_levels = \"labels\"`: distinct codes sharing a label are merged into a single row: %s.",
+              paste(merged, collapse = "; ")
+            ),
+            "i" = "Use `labelled_levels = \"prefixed\"` (the default) to keep one row per code."
+          ),
+          class = "spicy_caveat"
+        )
+      }
+    }
+    x <- labelled::to_factor(x, levels = labelled_levels, nolabel_to_na = FALSE)
   }
 
   if (is.factor(x)) {
@@ -402,8 +585,29 @@ freq <- function(
     x <- factor(x)
   }
 
+  # Observations at an explicit NA level (addNA(), factor(exclude =
+  # NULL), forcats::fct_na_value_to_level()) sit at a level whose name
+  # is NA: is.na(x) is FALSE for them, but the printed table
+  # classifies those rows as Missing. as.character() maps the NA level
+  # back to NA, so the valid-percent denominator agrees with the
+  # display classification (and with SPSS, which excludes a missing
+  # category from Valid Percent).
+  missing_mask <- if (is.factor(x) && anyNA(levels(x))) {
+    is.na(as.character(x))
+  } else {
+    is.na(x)
+  }
   n_total <- if (is.null(weights)) length(x) else sum(weights)
-  n_missing <- if (is.null(weights)) sum(is.na(x)) else sum(weights[is.na(x)])
+  n_missing <- if (is.null(weights)) {
+    sum(missing_mask)
+  } else {
+    sum(weights[missing_mask])
+  }
+  # Declared-missing observations removed above still belong to the
+  # Total and Missing counts (SPSS-style bookkeeping: Valid excludes
+  # them, Total does not).
+  n_total <- n_total + n_user_total
+  n_missing <- n_missing + n_user_total
   n_valid <- n_total - n_missing
 
   if (n_total == 0) {
@@ -437,7 +641,9 @@ freq <- function(
     df$valid_prop <- df$n / n_valid
     df$valid_prop[is.na(df$value)] <- NA
   } else {
-    df$valid_prop <- NA
+    # `rep()` keeps the assignment valid when the table has zero valid
+    # rows (e.g. every observation is a declared missing value).
+    df$valid_prop <- rep(NA, nrow(df))
   }
 
   # --- Sort
@@ -446,8 +652,21 @@ freq <- function(
   # guard keeps the call site small.
   if (sort != "" && nrow(df) > 1L) {
     decreasing <- sort %in% c("-", "name-")
-    sort_col <- if (sort %in% c("+", "-")) "n" else "value"
-    df <- df[order(df[[sort_col]], decreasing = decreasing, method = "radix"), ]
+    sort_keys <- if (sort %in% c("+", "-")) {
+      df$n
+    } else if (x_is_labelled && labelled_levels %in% c("prefixed", "values")) {
+      # Name-sorting a labelled variable displayed with its codes
+      # ("prefixed" / "values"): sort by the underlying code -- the
+      # level order `labelled::to_factor()` produces -- not by the
+      # display string, whose C-collation would rank "[10] Ten" before
+      # "[2] Two" (SPSS AVALUE sorts by value too). With
+      # `labelled_levels = "labels"` no code is visible, so the
+      # alphabetical display-string sort below applies.
+      match(df$value, levels(x))
+    } else {
+      df$value
+    }
+    df <- df[order(sort_keys, decreasing = decreasing, method = "radix"), ]
   }
 
   # Move missing-value rows to the end so cumulative columns match the
@@ -463,6 +682,29 @@ freq <- function(
     rownames(df) <- NULL
   }
 
+  # Insert the declared-missing rows between the valid rows and the
+  # system-NA row: they belong to the Missing block (their labels stay
+  # visible, their valid percent is NA) and never participate in the
+  # user-requested `sort`, mirroring the fixed position of the NA row.
+  user_row_idx <- integer(0)
+  if (!is.null(user_rows) && nrow(user_rows) > 0L) {
+    user_df <- data.frame(
+      value = user_rows$value,
+      n = user_rows$n,
+      prop = user_rows$n / n_total,
+      valid_prop = NA_real_,
+      stringsAsFactors = FALSE
+    )
+    na_rows <- is.na(df$value)
+    df <- rbind(
+      df[!na_rows, , drop = FALSE],
+      user_df,
+      df[na_rows, , drop = FALSE]
+    )
+    rownames(df) <- NULL
+    user_row_idx <- sum(!na_rows) + seq_len(nrow(user_df))
+  }
+
   if (cum) {
     df$cum_prop <- cumsum(df$prop)
     if (valid) {
@@ -474,14 +716,14 @@ freq <- function(
       df$cum_valid_prop <- df$valid_prop
       df$cum_valid_prop[valid_idx] <- cumsum(df$valid_prop[valid_idx])
     } else {
-      df$cum_valid_prop <- NA
+      df$cum_valid_prop <- rep(NA, nrow(df))
     }
   }
 
-  if (!styled) {
+  if (output == "data.frame") {
     # Return a genuinely plain data.frame: no spicy print-method attributes
-    # clinging to it. Users who want the metadata can keep `styled = TRUE`
-    # (default) and inspect the invisibly returned `spicy_freq_table`.
+    # clinging to it. Users who want the metadata can keep the default
+    # `output = "default"` and inspect the returned `spicy_freq_table`.
     return(df)
   }
 
@@ -493,12 +735,18 @@ freq <- function(
   attr(df, "class_name") <- paste(class(x_original), collapse = ", ")
   attr(df, "n_total") <- n_total
   attr(df, "n_valid") <- n_valid
+  # Row indices of the declared-missing rows (empty when none): read
+  # by print.spicy_freq_table() to route them into the Missing block
+  # even though their `value` labels are not NA.
+  attr(df, "user_na_rows") <- user_row_idx
   attr(df, "weighted") <- !is.null(weights)
   attr(df, "rescaled") <- rescale
   attr(df, "weight_var") <- weight_name
 
   class(df) <- c("spicy_freq_table", "spicy_table", class(df))
 
-  print(df, ...)
-  invisible(df)
+  # Return VISIBLY and let standard auto-print dispatch to
+  # print.spicy_freq_table(): a bare freq(...) call still displays the
+  # table, while `f <- freq(...)` is silent (the cross_tab() model).
+  df
 }
